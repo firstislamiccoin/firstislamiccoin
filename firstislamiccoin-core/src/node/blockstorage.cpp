@@ -124,7 +124,7 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
 
-                // peercoin/codexacoin related block index fields
+                // peercoin/firstislamiccoin related block index fields
                 pindexNew->nFlags         = diskindex.nFlags;
                 pindexNew->nStakeModifier = diskindex.nStakeModifier;
 
@@ -727,7 +727,7 @@ bool BlockManager::FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigne
     if (!fKnown) {
         bool out_of_space;
         size_t bytes_allocated = BlockFileSeq().Allocate(pos, nAddSize, out_of_space);
-        // CodexaCoin: unused variable intentionally, used for setting out_of_space value
+        // FirstIslamicCoin: unused variable intentionally, used for setting out_of_space value
         static_cast<void>(bytes_allocated);
         if (out_of_space) {
             m_opts.notifications.fatalError("Disk space is too low!", _("Disk space is too low!"));
@@ -751,7 +751,7 @@ bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFileP
 
     bool out_of_space;
     size_t bytes_allocated = UndoFileSeq().Allocate(pos, nAddSize, out_of_space);
-    // CodexaCoin: unused variable intentionally, used for setting out_of_space value
+    // FirstIslamicCoin: unused variable intentionally, used for setting out_of_space value
     static_cast<void>(bytes_allocated);
     if (out_of_space) {
         return FatalError(m_opts.notifications, state, "Disk space is too low!", _("Disk space is too low!"));

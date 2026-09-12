@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a redistributable CodexaCoin-Core-macOS.dmg from a native macOS
+# Build a redistributable FirstIslamicCoin-Core-macOS.dmg from a native macOS
 # build. Requires a completed `./configure --with-gui=yes && make` first
 # (see doc/build-osx.md) and Qt's `macdeployqt` on PATH (installed
 # alongside `qt@5` via Homebrew).
@@ -16,9 +16,9 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 REPO_ROOT="$PWD"
-APP_NAME="CodexaCoin-Qt.app"
-DMG_NAME="CodexaCoin-Core-macOS.dmg"
-VOLNAME="CodexaCoin Core"
+APP_NAME="FirstIslamicCoin-Qt.app"
+DMG_NAME="FirstIslamicCoin-Core-macOS.dmg"
+VOLNAME="FirstIslamicCoin Core"
 
 if ! command -v macdeployqt >/dev/null 2>&1; then
     echo "macdeployqt not found on PATH. Install Qt5 (brew install qt@5) and" >&2
@@ -32,14 +32,14 @@ make \
     "$APP_NAME/Contents/Resources/empty.lproj" \
     "$APP_NAME/Contents/Resources/bitcoin.icns" \
     "$APP_NAME/Contents/Info.plist" \
-    "$APP_NAME/Contents/MacOS/CodexaCoin-Qt" \
+    "$APP_NAME/Contents/MacOS/FirstIslamicCoin-Qt" \
     "$APP_NAME/Contents/Resources/Base.lproj/InfoPlist.strings"
 
 echo "=== Bundling Qt frameworks (macdeployqt) ==="
 macdeployqt "$APP_NAME"
 
 echo "=== Verifying the bundle no longer depends on external Qt/Homebrew paths ==="
-if otool -L "$APP_NAME/Contents/MacOS/CodexaCoin-Qt" | grep -q "/usr/local/opt/qt@5"; then
+if otool -L "$APP_NAME/Contents/MacOS/FirstIslamicCoin-Qt" | grep -q "/usr/local/opt/qt@5"; then
     echo "ERROR: bundle still references external Qt frameworks; macdeployqt did not fully bundle them." >&2
     exit 1
 fi

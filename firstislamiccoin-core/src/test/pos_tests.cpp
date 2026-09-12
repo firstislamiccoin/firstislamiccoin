@@ -1,11 +1,11 @@
-// Copyright (c) 2026 The CodexaCoin developers
+// Copyright (c) 2026 The FirstIslamicCoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 // Statistical check that PoS kernel eligibility (CheckStakeKernelHash) is
 // amount-only and independent of coin age.
 //
-// FirstIslamicCoin: this suite also held CodexaCoin's coin-age reward cases
+// FirstIslamicCoin: this suite also held upstream CAC's coin-age reward cases
 // (ComputeCoinAgeReward). That formula no longer exists; the fixed reward that
 // replaced it is covered by fic_reward_tests.cpp.
 

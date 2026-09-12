@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 The CodexaCoin developers
+# Copyright (c) 2026 The FirstIslamicCoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test reorg handling across regtest's PoW window / PoS boundary.

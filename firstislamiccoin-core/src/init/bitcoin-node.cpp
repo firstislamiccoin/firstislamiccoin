@@ -16,7 +16,7 @@
 
 namespace init {
 namespace {
-const char* EXE_NAME = "codexacoin-node";
+const char* EXE_NAME = "firstislamiccoin-node";
 
 class BitcoinNodeInit : public interfaces::Init
 {

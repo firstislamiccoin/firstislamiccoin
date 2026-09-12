@@ -323,7 +323,7 @@ public:
 
     int64_t GetMedianTimePast() const
     {
-        // CodexaCoin: use GetBlockTime() since ProtocolV2
+        // FirstIslamicCoin: use GetBlockTime() since ProtocolV2
         if (Params().GetConsensus().IsProtocolV2(GetBlockTime()))
             return GetBlockTime();
         else {

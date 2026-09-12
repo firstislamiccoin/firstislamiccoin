@@ -165,7 +165,7 @@ void ScriptToUniv(const CScript& script, UniValue& out, bool include_hex, bool i
 
     std::vector<std::vector<unsigned char>> solns;
     const TxoutType type{Solver(script, solns)};
-    // CodexaCoin: We need to see the encoded pubkey address.
+    // FirstIslamicCoin: We need to see the encoded pubkey address.
     // This is essentially a reversal of Bitcoin PR #16725
     if (include_address && ExtractDestination(script, address)) /*&& type != TxoutType::PUBKEY)*/ {
         out.pushKV("address", EncodeDestination(address));

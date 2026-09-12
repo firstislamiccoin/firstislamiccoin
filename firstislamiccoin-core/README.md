@@ -1,95 +1,86 @@
-CodexaCoin Core
-=====================================
-[![build](https://github.com/codexacoin/codexacoin-core/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/codexacoin/codexacoin-core/actions/workflows/build.yml)
+FirstIslamicCoin Core
+=====================
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/codexacoin/codexacoin-core)
+![FirstIslamicCoin](fic_logo.png)
 
-https://codexacoin.example
+https://firstislamiccoin.com
 
-What is CodexaCoin?
-----------------
+What is FirstIslamicCoin?
+-------------------------
 
-CodexaCoin is a decentralised digital currency with near-instant transaction speeds and negligible transaction fees built upon Proof of Stake 3.1 (PoSV3, BPoS) as introduced by the CodexaCoin development team.
+FirstIslamicCoin (FIC) is a proof-of-stake digital currency. People who hold
+FIC keep a node online and take turns producing blocks; whoever produces a
+block receives **a fixed 10 FIC plus that block's transaction fees**. The
+reward does not depend on how much is staked or for how long — a larger stake
+only wins blocks more often — so there is no rate of return on a balance
+anywhere in the protocol.
 
-What is CodexaCoin Core?
-----------------
+The design choices behind this, and the open questions it raises, are explained
+in plain English in [`docs/shariah-compliance.md`](../docs/shariah-compliance.md).
+That document is not a fatwa; no Shariah board has reviewed FIC yet.
 
-CodexaCoin Core is the name of open source software which enables use of the CodexaCoin protocol.
-It connects to the CodexaCoin peer-to-peer network to download and fully
-validate blocks and transactions. It also includes a wallet and graphical user
-interface, which can be optionally built.
+What is FirstIslamicCoin Core?
+------------------------------
 
-For more information, as well as an immediately usable, binary version of
-the CodexaCoin Core software, see https://codexacoin.example.
+FirstIslamicCoin Core is the reference node software: `firstislamiccoind`,
+`firstislamiccoin-cli`, `firstislamiccoin-tx`, `firstislamiccoin-wallet` and the
+`firstislamiccoin-qt` desktop wallet. It connects to the FirstIslamicCoin
+peer-to-peer network, fully validates blocks and transactions, and can stake.
 
-License
--------
+It is derived from Bitcoin Core by way of Blackcoin More and CAC. What changed
+from CAC, and why, is in [`docs/CHANGELOG-FIC.md`](../docs/CHANGELOG-FIC.md).
 
-CodexaCoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/licenses/MIT.
+**Status: pre-launch.** There is no mainnet yet. The mainnet genesis block pays
+its premine to a placeholder pending the genesis key ceremony, and the node
+refuses to run mainnet until it is replaced.
 
-Development Process
+Network at a glance
 -------------------
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested. [Tags](https://github.com/codexacoin/codexacoin-core/tags) are created
-regularly to indicate new official, stable release versions of CodexaCoin Core.
+| | Mainnet | Testnet | Regtest |
+|---|---|---|---|
+| Block reward | 10 FIC + fees | 10 tFIC + fees | 10 + fees |
+| Target block spacing | 64 s | 64 s | 1 s |
+| Coin maturity / minimum stake age | 500 blocks | 50 blocks | 10 blocks |
+| P2P / RPC port | 19770 / 19771 | 29770 / 29771 | 39770 / 39771 |
+| Addresses | `F…`, `C…`, `fic1…` | `m…`/`n…`, `tfic1…` | `m…`/`n…`, `rfic1…` |
+| Proof of work after genesis | none | none | window for tests; `-lastpowblock=0` for none |
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+Supply is 14,000,000,000 FIC in the genesis block plus 10 FIC per block. Every
+constant is in [`docs/tokenomics.md`](../docs/tokenomics.md); the genesis blocks
+are described in [`docs/genesis.md`](../docs/genesis.md).
 
-The best place to get started is to join the CodexaCoin community chat: TODO — placeholder, no community server exists yet.
+Building
+--------
+
+See `doc/build-unix.md`, `doc/build-osx.md` and `doc/build-windows.md`. In short,
+on Linux:
+
+```bash
+./autogen.sh
+./configure --with-sqlite=yes --without-bdb
+make -j"$(nproc)"
+```
 
 Testing
 -------
 
-Testing and code review might be the bottleneck for development. Please help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+Unit tests run with `make check`; FIC's own consensus tests are the
+`fic_reward_tests`, `fic_genesis_tests` and `pos_tests` suites.
 
-### Automated Testing
+Functional tests run with `test/functional/test_runner.py`. FIC's own are
+`feature_fic_genesis_premine.py`, `feature_fic_fixed_reward.py` and
+`feature_pos_reorg.py`.
 
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled in configure) with: `make check`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
+To check a running node's supply against the consensus rules end to end:
 
-There are also [regression and integration tests](/test), written
-in Python.
-These tests can be run (if the [test dependencies](/test) are installed) with: `test/functional/test_runner.py`
+```bash
+scripts/audit_premine_supply.py --rpcport 39771
+```
 
-The CI (Continuous Integration) systems make sure that every pull request is built for Windows, Linux, and macOS,
-and that unit/sanity tests are run automatically.
-
-### Manual Quality Assurance (QA) Testing
-
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
-
-Translations
-------------
-
-Changes to translations as well as new translations can be submitted to
-[CodexaCoin Core's Transifex page](https://www.transifex.com/CodexaCoinQT/CodexaCoinMore/).
-
-Translations might be periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
-
-Branches
+License
 -------
 
-### develop
-The develop branch is typically used by developers as the main branch for integrating new features and changes into the codebase.
-Pull requests should always be made to this branch (except for critical fixes), and might possibly break the code.
-The develop branch is considered an unstable branch, as it is constantly updated with new code, and it may contain bugs or unfinished features. It is not guaranteed to work properly on any system.
-
-### master
-The master branch gets latest updates from the stable branch.
-However, it may contain experimental features and should be used with caution.
-
-### 26.x
-The release branch for CodexaCoin Core 26.x. It is intended to contain stable and functional code that has been thoroughly tested and reviewed.
-
-### 28.x
-The release branch for CodexaCoin Core 28.x. Contains functional but highly experimental code.
+FirstIslamicCoin Core is released under the terms of the MIT license, and keeps
+the copyright notices of every project it derives from. See [COPYING](COPYING)
+or https://opensource.org/licenses/MIT.

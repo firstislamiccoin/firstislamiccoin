@@ -76,12 +76,12 @@
     </message>
     <message>
         <location line="+6"/>
-        <source>These are your CodexaCoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
+        <source>These are your FirstIslamicCoin addresses for sending payments. Always check the amount and the receiving address before sending coins.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+5"/>
-        <source>These are your CodexaCoin addresses for receiving payments. Use the &apos;Create new receiving address&apos; button in the receive tab to create new addresses.
+        <source>These are your FirstIslamicCoin addresses for receiving payments. Use the &apos;Create new receiving address&apos; button in the receive tab to create new addresses.
 Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -220,7 +220,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+7"/>
-        <source>Remember that encrypting your wallet cannot fully protect your codexacoins from being stolen by malware infecting your computer.</source>
+        <source>Remember that encrypting your wallet cannot fully protect your firstislamiccoins from being stolen by malware infecting your computer.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -241,7 +241,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+48"/>
-        <source>Warning: If you encrypt your wallet and lose your passphrase, you will &lt;b&gt;LOSE ALL OF YOUR CODEXACOINS&lt;/b&gt;!</source>
+        <source>Warning: If you encrypt your wallet and lose your passphrase, you will &lt;b&gt;LOSE ALL OF YOUR FIRSTISLAMICCOINS&lt;/b&gt;!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -378,7 +378,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+14"/>
-        <source>Request payments (generates QR codes and codexacoin: URIs)</source>
+        <source>Request payments (generates QR codes and firstislamiccoin: URIs)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -428,27 +428,27 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+17"/>
-        <source>Sign messages with your CodexaCoin addresses to prove you own them</source>
+        <source>Sign messages with your FirstIslamicCoin addresses to prove you own them</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>Verify messages to ensure they were signed with specified CodexaCoin addresses</source>
+        <source>Verify messages to ensure they were signed with specified FirstIslamicCoin addresses</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>Load Partially Signed CodexaCoin Transaction</source>
+        <source>Load Partially Signed FirstIslamicCoin Transaction</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>Load Partially Signed CodexaCoin Transaction from clipboard</source>
+        <source>Load Partially Signed FirstIslamicCoin Transaction from clipboard</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+14"/>
-        <source>Open a codexacoin: URI</source>
+        <source>Open a firstislamiccoin: URI</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -458,7 +458,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="+17"/>
-        <source>Show the %1 help message to get a list with possible CodexaCoin command-line options</source>
+        <source>Show the %1 help message to get a list with possible FirstIslamicCoin command-line options</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -473,7 +473,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message numerus="yes">
         <location line="+415"/>
-        <source>%n active connection(s) to CodexaCoin network.</source>
+        <source>%n active connection(s) to FirstIslamicCoin network.</source>
         <extracomment>A substring of the tooltip.</extracomment>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -681,7 +681,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="-887"/>
-        <source>Send coins to a CodexaCoin address</source>
+        <source>Send coins to a FirstIslamicCoin address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1406,7 +1406,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location line="-10"/>
-        <source>The entered address &quot;%1&quot; is not a valid CodexaCoin address.</source>
+        <source>The entered address &quot;%1&quot; is not a valid FirstIslamicCoin address.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1500,7 +1500,7 @@ Signing is only possible with addresses of the type &apos;legacy&apos;.</source>
     </message>
     <message>
         <location filename="../intro.cpp" line="+18"/>
-        <source>CodexaCoin</source>
+        <source>FirstIslamicCoin</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
@@ -1647,12 +1647,12 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="-102"/>
-        <source>Recent transactions may not yet be visible, and therefore your wallet&apos;s balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the codexacoin network, as detailed below.</source>
+        <source>Recent transactions may not yet be visible, and therefore your wallet&apos;s balance might be incorrect. This information will be correct once your wallet has finished synchronizing with the firstislamiccoin network, as detailed below.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+19"/>
-        <source>Attempting to spend codexacoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
+        <source>Attempting to spend firstislamiccoins that are affected by not-yet-displayed transactions will not be accepted by the network.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1700,7 +1700,7 @@ The migration process will create a backup of the wallet before migrating. This 
     <name>OpenURIDialog</name>
     <message>
         <location filename="../forms/openuridialog.ui" line="+14"/>
-        <source>Open CodexaCoin URI</source>
+        <source>Open FirstIslamicCoin URI</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1710,7 +1710,7 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="+7"/>
-        <source>codexacoin:</source>
+        <source>firstislamiccoin:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1789,17 +1789,17 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="+32"/>
-        <source>Automatically open the codexacoin client port on the router. This only works when your router supports UPnP and it is enabled.</source>
+        <source>Automatically open the firstislamiccoin client port on the router. This only works when your router supports UPnP and it is enabled.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+10"/>
-        <source>Automatically open the CodexaCoin client port on the router. This only works when your router supports NAT-PMP and it is enabled. The external port could be random.</source>
+        <source>Automatically open the FirstIslamicCoin client port on the router. This only works when your router supports NAT-PMP and it is enabled. The external port could be random.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+20"/>
-        <source>Connect to the CodexaCoin network through a SOCKS5 proxy.</source>
+        <source>Connect to the FirstIslamicCoin network through a SOCKS5 proxy.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2024,7 +2024,7 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="+25"/>
-        <source>Connect to the CodexaCoin network through a separate SOCKS5 proxy for Tor onion services.</source>
+        <source>Connect to the FirstIslamicCoin network through a separate SOCKS5 proxy for Tor onion services.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2270,7 +2270,7 @@ The migration process will create a backup of the wallet before migrating. This 
     <message>
         <location line="+16"/>
         <location line="+435"/>
-        <source>The displayed information may be out of date. Your wallet automatically synchronizes with the CodexaCoin network after a connection is established, but this process has not completed yet.</source>
+        <source>The displayed information may be out of date. Your wallet automatically synchronizes with the FirstIslamicCoin network after a connection is established, but this process has not completed yet.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2290,7 +2290,7 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="+10"/>
-        <source>Total donations to the CodexaCoin team</source>
+        <source>Total donations to the FirstIslamicCoin team</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2527,17 +2527,17 @@ The migration process will create a backup of the wallet before migrating. This 
     </message>
     <message>
         <location line="+1"/>
-        <source>Cannot start codexacoin: click-to-pay handler</source>
+        <source>Cannot start firstislamiccoin: click-to-pay handler</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+48"/>
-        <source>&apos;codexacoin://&apos; is not a valid URI. Use &apos;codexacoin:&apos; instead.</source>
+        <source>&apos;firstislamiccoin://&apos; is not a valid URI. Use &apos;firstislamiccoin:&apos; instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+30"/>
-        <source>URI cannot be parsed! This can be caused by an invalid CodexaCoin address or malformed URI parameters.</source>
+        <source>URI cannot be parsed! This can be caused by an invalid FirstIslamicCoin address or malformed URI parameters.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2646,7 +2646,7 @@ If you are receiving this error you should request the merchant provide a BIP21 
     </message>
     <message>
         <location filename="../guiutil.cpp" line="+133"/>
-        <source>Enter a CodexaCoin address (e.g. %1)</source>
+        <source>Enter a FirstIslamicCoin address (e.g. %1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -3621,7 +3621,7 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="-143"/>
-        <source>An optional message to attach to the payment request, which will be displayed when the request is opened. Note: The message will not be sent with the payment over the CodexaCoin network.</source>
+        <source>An optional message to attach to the payment request, which will be displayed when the request is opened. Note: The message will not be sent with the payment over the FirstIslamicCoin network.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4029,13 +4029,13 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+14"/>
-        <source>Please, review your transaction proposal. This will produce a Partially Signed CodexaCoin Transaction (PSBT) which you can save or copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.</source>
+        <source>Please, review your transaction proposal. This will produce a Partially Signed FirstIslamicCoin Transaction (PSBT) which you can save or copy and then sign with e.g. an offline %1 wallet, or a PSBT-compatible hardware wallet.</source>
         <extracomment>Text to inform a user attempting to create a transaction of their current options. At this stage, a user can only create a PSBT. This string is displayed when private keys are disabled and an external signer is not available.</extracomment>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+5"/>
-        <source>Please, review your transaction. You can create and send this transaction or create a Partially Signed CodexaCoin Transaction (PSBT), which you can save or copy and then sign with, e.g., an offline %1 wallet, or a PSBT-compatible hardware wallet.</source>
+        <source>Please, review your transaction. You can create and send this transaction or create a Partially Signed FirstIslamicCoin Transaction (PSBT), which you can save or copy and then sign with, e.g., an offline %1 wallet, or a PSBT-compatible hardware wallet.</source>
         <extracomment>Text to inform a user attempting to create a transaction of their current options. At this stage, a user can send their transaction or create a PSBT. This string is displayed when both private keys and PSBT controls are enabled.</extracomment>
         <translation type="unfinished"></translation>
     </message>
@@ -4181,7 +4181,7 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+132"/>
-        <source>Warning: Invalid CodexaCoin address</source>
+        <source>Warning: Invalid FirstIslamicCoin address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4219,7 +4219,7 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+18"/>
-        <source>The CodexaCoin address to send the payment to</source>
+        <source>The FirstIslamicCoin address to send the payment to</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4259,12 +4259,12 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+7"/>
-        <source>The fee will be deducted from the amount being sent. The recipient will receive less codexacoins than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
+        <source>The fee will be deducted from the amount being sent. The recipient will receive less firstislamiccoins than you enter in the amount field. If multiple recipients are selected, the fee is split equally.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+29"/>
-        <source>A message that was attached to the codexacoin: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the CodexaCoin network.</source>
+        <source>A message that was attached to the firstislamiccoin: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the FirstIslamicCoin network.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4329,12 +4329,12 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+6"/>
-        <source>You can sign messages/agreements with your addresses to prove you can receive codexacoins sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully-detailed statements you agree to.</source>
+        <source>You can sign messages/agreements with your addresses to prove you can receive firstislamiccoins sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully-detailed statements you agree to.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+18"/>
-        <source>The CodexaCoin address to sign the message with</source>
+        <source>The FirstIslamicCoin address to sign the message with</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -4377,17 +4377,17 @@ For more information on using this console, type %6.
     </message>
     <message>
         <location line="+21"/>
-        <source>Sign the message to prove you own this CodexaCoin address</source>
+        <source>Sign the message to prove you own this FirstIslamicCoin address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+106"/>
-        <source>The CodexaCoin address the message was signed with</source>
+        <source>The FirstIslamicCoin address the message was signed with</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+51"/>
-        <source>Verify the message to ensure it was signed with the specified CodexaCoin address</source>
+        <source>Verify the message to ensure it was signed with the specified FirstIslamicCoin address</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -5497,7 +5497,7 @@ Go to File &gt; Open Wallet to load a wallet.
     </message>
     <message>
         <location line="-13"/>
-        <source>%s corrupt. Try using the wallet tool codexacoin-wallet to salvage or restoring a backup.</source>
+        <source>%s corrupt. Try using the wallet tool firstislamiccoin-wallet to salvage or restoring a backup.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -5522,7 +5522,7 @@ Go to File &gt; Open Wallet to load a wallet.
     </message>
     <message>
         <location line="+7"/>
-        <source>Error: Dumpfile version is not supported. This version of codexacoin-wallet only supports version 1 dumpfiles. Got dumpfile with version %s</source>
+        <source>Error: Dumpfile version is not supported. This version of firstislamiccoin-wallet only supports version 1 dumpfiles. Got dumpfile with version %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -99,7 +99,7 @@ private:
     bool Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip);
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     virtual bool AllowPrune() const = 0;
     */
 

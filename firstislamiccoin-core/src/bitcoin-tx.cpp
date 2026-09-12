@@ -101,14 +101,14 @@ static int AppInitRawTx(int argc, char* argv[])
 
     if (argc < 2 || HelpRequested(gArgs) || gArgs.IsArgSet("-version")) {
         // First part of help message is specific to this utility
-        std::string strUsage = PACKAGE_NAME " codexacoin-tx utility version " + FormatFullVersion() + "\n";
+        std::string strUsage = PACKAGE_NAME " firstislamiccoin-tx utility version " + FormatFullVersion() + "\n";
 
         if (gArgs.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo());
         } else {
             strUsage += "\n"
-                "Usage:  codexacoin-tx [options] <hex-tx> [commands]  Update hex-encoded codexacoin transaction\n"
-                "or:     codexacoin-tx [options] -create [commands]   Create hex-encoded codexacoin transaction\n"
+                "Usage:  firstislamiccoin-tx [options] <hex-tx> [commands]  Update hex-encoded firstislamiccoin transaction\n"
+                "or:     firstislamiccoin-tx [options] -create [commands]   Create hex-encoded firstislamiccoin transaction\n"
                 "\n";
             strUsage += gArgs.GetHelpMessage();
         }

@@ -160,7 +160,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::WALLETDB, "walletdb"},
     {BCLog::RPC, "rpc"},
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     {BCLog::ESTIMATEFEE, "estimatefee"},
     */
     {BCLog::ADDRMAN, "addrman"},
@@ -169,7 +169,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::CMPCTBLOCK, "cmpctblock"},
     {BCLog::RAND, "rand"},
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     {BCLog::PRUNE, "prune"},
     */
     {BCLog::PROXY, "proxy"},
@@ -251,7 +251,7 @@ std::string LogCategoryToStr(BCLog::LogFlags category)
     case BCLog::LogFlags::RPC:
         return "rpc";
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     case BCLog::LogFlags::ESTIMATEFEE:
         return "estimatefee";
     */
@@ -266,7 +266,7 @@ std::string LogCategoryToStr(BCLog::LogFlags category)
     case BCLog::LogFlags::RAND:
         return "rand";
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     case BCLog::LogFlags::PRUNE:
         return "prune";
     */

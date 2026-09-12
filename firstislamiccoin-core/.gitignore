@@ -151,39 +151,39 @@ dist/
 
 /ci/scratch/
 
-# CodexaCoin specifics
+# FirstIslamicCoin specifics
 
 #binaries
-src/codexacoin
-src/codexacoind
-src/codexacoin-cli
-src/codexacoin-gui
-src/codexacoin-node
-src/codexacoin-tx
-src/codexacoin-util
-src/codexacoin-chainstate
-src/codexacoin-wallet
-src/test/test_codexacoin
-src/qt/test/test_codexacoin-qt
+src/firstislamiccoin
+src/firstislamiccoind
+src/firstislamiccoin-cli
+src/firstislamiccoin-gui
+src/firstislamiccoin-node
+src/firstislamiccoin-tx
+src/firstislamiccoin-util
+src/firstislamiccoin-chainstate
+src/firstislamiccoin-wallet
+src/test/test_firstislamiccoin
+src/qt/test/test_firstislamiccoin-qt
 
 # autoreconf
-src/qt/codexacoin-qt.config
-src/qt/codexacoin-qt.creator
-src/qt/codexacoin-qt.creator.user
-src/qt/codexacoin-qt.files
-src/qt/codexacoin-qt.includes
+src/qt/firstislamiccoin-qt.config
+src/qt/firstislamiccoin-qt.creator
+src/qt/firstislamiccoin-qt.creator.user
+src/qt/firstislamiccoin-qt.files
+src/qt/firstislamiccoin-qt.includes
 
 # Compilation and Qt preprocessor part
-src/qt/codexacoin-qt
-CodexaCoin-Qt.app
+src/qt/firstislamiccoin-qt
+FirstIslamicCoin-Qt.app
 
 # Phase 3: packaged desktop build artifacts (built by contrib/*/build_*.sh, never committed)
 *.dmg
 *.deb
-CodexaCoin-Core-*
+FirstIslamicCoin-Core-*
 
 # Unit-tests
-codexacoin-qt_test
+firstislamiccoin-qt_test
 
 # Output from running db62 installation
 db62/

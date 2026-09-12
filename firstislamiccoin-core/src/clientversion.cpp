@@ -13,10 +13,10 @@
 
 /**
  * Name of client reported in the 'version' message. Report the same name
- * for both codexacoind and codexacoin-qt, to make it harder for attackers to
+ * for both firstislamiccoind and firstislamiccoin-qt, to make it harder for attackers to
  * target servers or GUI users specifically.
  */
-const std::string CLIENT_NAME("CodexaCoin Core");
+const std::string CLIENT_NAME("FirstIslamicCoin Core");
 
 
 #ifdef HAVE_BUILD_INFO
@@ -94,13 +94,13 @@ std::string CopyrightHolders(const std::string& strPrefix)
         strPrefix + "The Bitcoin Core developers" +
         "\n" + strPrefix + "The Blackcoin developers" +
         "\n" + strPrefix + "The Blackcoin More developers" +
-        "\n" + strPrefix + "The CodexaCoin developers";
+        "\n" + strPrefix + "The FirstIslamicCoin developers";
     return strCopyrightHolders;
 }
 
 std::string LicenseInfo()
 {
-    const std::string URL_SOURCE_CODE = "<https://github.com/codexacoin/codexacoin-core>";
+    const std::string URL_SOURCE_CODE = "<https://github.com/FirstIslamicCoin/firstislamiccoin-core>";
 
     return strprintf(_("Copyright (C) 2009-%i The Bitcoin Core Developers").translated, COPYRIGHT_YEAR) +
            "\n" +
@@ -108,7 +108,7 @@ std::string LicenseInfo()
            "\n" +
            strprintf(_("Copyright (C) 2018-2025 The Blackcoin More Developers").translated) +
            "\n" +
-           strprintf(_("Copyright (C) 2026-%i The CodexaCoin Developers").translated, COPYRIGHT_YEAR) +
+           strprintf(_("Copyright (C) 2026-%i The FirstIslamicCoin Developers").translated, COPYRIGHT_YEAR) +
            "\n" +
            "\n" +
            strprintf(_("Please contribute if you find %s useful. "

@@ -306,7 +306,7 @@ protected:
 
     mutable int64_t lastRollingFeeUpdate GUARDED_BY(cs){GetTime()};
     mutable bool blockSinceLastRollingFeeBump GUARDED_BY(cs){false};
-    // CodexaCoin
+    // FirstIslamicCoin
     // mutable double rollingMinimumFeeRate GUARDED_BY(cs){0}; //!< minimum fee to get into the pool, decreases exponentially
     mutable Epoch m_epoch GUARDED_BY(cs){};
 
@@ -320,7 +320,7 @@ protected:
     bool m_load_tried GUARDED_BY(cs){false};
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     CFeeRate GetMinFee(size_t sizelimit) const;
     */
 
@@ -438,7 +438,7 @@ public:
 
     const int64_t m_max_size_bytes;
     const std::chrono::seconds m_expiry;
-    // CodexaCoin
+    // FirstIslamicCoin
     // const CFeeRate m_incremental_relay_feerate;
     const CFeeRate m_min_relay_feerate;
     const CFeeRate m_dust_relay_feerate;
@@ -625,7 +625,7 @@ public:
      *  would otherwise be half of this, it is set to 0 instead.
      */
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     CFeeRate GetMinFee() const {
         return GetMinFee(m_max_size_bytes);
     }

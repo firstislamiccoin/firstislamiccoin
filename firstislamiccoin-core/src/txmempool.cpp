@@ -402,11 +402,11 @@ void CTxMemPoolEntry::UpdateAncestorState(int32_t modifySize, CAmount modifyFee,
 
 CTxMemPool::CTxMemPool(const Options& opts)
     : m_check_ratio{opts.check_ratio},
-      // CodexaCoin
+      // FirstIslamicCoin
       // minerPolicyEstimator{opts.estimator},
       m_max_size_bytes{opts.max_size_bytes},
       m_expiry{opts.expiry},
-      // CodexaCoin
+      // FirstIslamicCoin
       // m_incremental_relay_feerate{opts.incremental_relay_feerate},
       m_min_relay_feerate{opts.min_relay_feerate},
       m_dust_relay_feerate{opts.dust_relay_feerate},
@@ -478,7 +478,7 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
     nTransactionsUpdated++;
     totalTxSize += entry.GetTxSize();
     m_total_fee += entry.GetFee();
-    // CodexaCoin
+    // FirstIslamicCoin
     /*
     if (minerPolicyEstimator) {
         minerPolicyEstimator->processTransaction(entry, validFeeEstimate);
@@ -537,7 +537,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
     cachedInnerUsage -= memusage::DynamicUsage(it->GetMemPoolParentsConst()) + memusage::DynamicUsage(it->GetMemPoolChildrenConst());
     mapTx.erase(it);
     nTransactionsUpdated++;
-    // CodexaCoin
+    // FirstIslamicCoin
     // if (minerPolicyEstimator) {minerPolicyEstimator->removeTx(hash, false);}
 }
 
@@ -653,7 +653,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
         if (i != mapTx.end())
             entries.push_back(&*i);
     }
-    // CodexaCoin
+    // FirstIslamicCoin
     // Before the txs in the new block have been removed from the mempool, update policy estimates
     // if (minerPolicyEstimator) {minerPolicyEstimator->processBlock(nBlockHeight, entries);}
     for (const auto& tx : vtx)
@@ -668,7 +668,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
         ClearPrioritisation(tx->GetHash());
     }
     lastRollingFeeUpdate = GetTime();
-    // CodexaCoin
+    // FirstIslamicCoin
     // blockSinceLastRollingFeeBump = true;
 }
 
@@ -1119,7 +1119,7 @@ void CTxMemPool::UpdateParent(txiter entry, txiter parent, bool add)
 }
 
 /*
-// CodexaCoin
+// FirstIslamicCoin
 CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
     LOCK(cs);
     if (!blockSinceLastRollingFeeBump || rollingMinimumFeeRate == 0)
@@ -1157,7 +1157,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
     AssertLockHeld(cs);
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     unsigned nTxnRemoved = 0;
     CFeeRate maxFeeRateRemoved(0);
     */
@@ -1170,7 +1170,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
         // equal to txn which were removed with no block in between.
         CFeeRate removed(it->GetModFeesWithDescendants(), it->GetSizeWithDescendants());
         /*
-        // CodexaCoin
+        // FirstIslamicCoin
         removed += m_incremental_relay_feerate;
         trackPackageRemoved(removed);
         maxFeeRateRemoved = std::max(maxFeeRateRemoved, removed);
@@ -1179,7 +1179,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
         setEntries stage;
         CalculateDescendants(mapTx.project<0>(it), stage);
         /*
-        // CodexaCoin
+        // FirstIslamicCoin
         nTxnRemoved += stage.size();
         */
 
@@ -1201,7 +1201,7 @@ void CTxMemPool::TrimToSize(size_t sizelimit, std::vector<COutPoint>* pvNoSpends
     }
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     if (maxFeeRateRemoved > CFeeRate(0)) {
         LogPrint(BCLog::MEMPOOL, "Removed %u txn, rolling minimum fee bumped to %s\n", nTxnRemoved, maxFeeRateRemoved.ToString());
     }

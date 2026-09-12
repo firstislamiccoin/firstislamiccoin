@@ -16,7 +16,7 @@ using node::NodeContext;
 
 CTxMemPool::Options MemPoolOptionsForTest(const NodeContext& node)
 {
-    // CodexaCoin
+    // FirstIslamicCoin
     CTxMemPool::Options mempool_opts{};
     /*
     CTxMemPool::Options mempool_opts{

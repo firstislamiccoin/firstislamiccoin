@@ -83,7 +83,7 @@ static constexpr int STALE_RELAY_AGE_LIMIT = 30 * 24 * 60 * 60;
 */
 /// Age after which a stale block will no longer be served if requested as
 /// protection against fingerprinting.
-/// For CodexaCoin, set to 10 hours, denominated in seconds.
+/// For FirstIslamicCoin, set to 10 hours, denominated in seconds.
 /// (should be close to nMaxReorganizationDepth * nTargetSpacing)
 static constexpr int STALE_RELAY_AGE_LIMIT = 10 * 60 * 60;
 /// Age after which a block is considered historical for purposes of rate
@@ -142,7 +142,7 @@ static const unsigned int MAX_BLOCKS_TO_ANNOUNCE = 8;
 /** Maximum number of unconnecting headers announcements before DoS score */
 static const int MAX_NUM_UNCONNECTING_HEADERS_MSGS = 10;
 /** Minimum blocks required to signal NODE_NETWORK_LIMITED */
-// CodexaCoin: change to reflect 2 days at 64s block time
+// FirstIslamicCoin: change to reflect 2 days at 64s block time
 static const unsigned int NODE_NETWORK_LIMITED_MIN_BLOCKS = 2700;
 /** Average delay between local address broadcasts */
 static constexpr auto AVG_LOCAL_ADDRESS_BROADCAST_INTERVAL{24h};
@@ -1658,7 +1658,7 @@ bool PeerManagerImpl::ProcessNetBlock(const std::shared_ptr<const CBlock> pblock
         }
     }
 
-    // CodexaCoin ToDo: revert after nodes upgrade to current version
+    // FirstIslamicCoin ToDo: revert after nodes upgrade to current version
     // /*
     // Set nFlags in case of proof of stake block received from an old node
     std::shared_ptr<CBlock> pblock_mutable = std::const_pointer_cast<CBlock>(pblock);
@@ -2061,7 +2061,7 @@ std::optional<std::string> PeerManagerImpl::FetchBlock(NodeId peer_id, const CBl
     if (peer == nullptr) return "Peer does not exist";
 
     /*
-    // CodexaCoin: Do not ignore pre-segwit peers for now
+    // FirstIslamicCoin: Do not ignore pre-segwit peers for now
     // Ignore pre-segwit peers
     if (!CanServeWitnesses(*peer)) return "Pre-SegWit peer";
     */
@@ -2509,7 +2509,7 @@ void PeerManagerImpl::ProcessGetBlockData(CNode& pfrom, Peer& peer, const CInv& 
     if (a_recent_block && a_recent_block->GetHash() == pindex->GetBlockHash()) {
         pblock = a_recent_block;
     /*
-    // CodexaCoin: do not read raw blocks from disk as the disk format is actually different
+    // FirstIslamicCoin: do not read raw blocks from disk as the disk format is actually different
     } else if (inv.IsMsgWitnessBlk()) {
         // Fast-path: in this case it is possible to serve the block directly from disk,
         // as the network format matches the format on disk

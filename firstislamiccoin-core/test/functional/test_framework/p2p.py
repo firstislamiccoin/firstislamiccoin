@@ -89,7 +89,7 @@ MIN_P2P_VERSION_SUPPORTED = 60001
 P2P_VERSION = 70016
 # The services that this test framework offers in its `version` message
 '''
-# CodexaCoin
+# FirstIslamicCoin
 # NODE_NETWORK | NODE_WITNESS
 '''
 P2P_SERVICES = NODE_NETWORK

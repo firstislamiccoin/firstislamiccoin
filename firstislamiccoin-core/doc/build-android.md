@@ -1,7 +1,7 @@
 ANDROID BUILD NOTES
 ======================
 
-This guide describes how to build and package the `codexacoin-qt` GUI for Android on Linux and macOS.
+This guide describes how to build and package the `firstislamiccoin-qt` GUI for Android on Linux and macOS.
 
 
 ## Dependencies

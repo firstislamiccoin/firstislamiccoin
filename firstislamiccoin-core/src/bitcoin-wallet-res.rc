@@ -14,14 +14,14 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
-            VALUE "CompanyName",        "CodexaCoin"
-            VALUE "FileDescription",    "codexacoin-wallet (CLI tool for " PACKAGE_NAME " wallets)"
+            VALUE "CompanyName",        "FirstIslamicCoin"
+            VALUE "FileDescription",    "firstislamiccoin-wallet (CLI tool for " PACKAGE_NAME " wallets)"
             VALUE "FileVersion",        PACKAGE_VERSION
-            VALUE "InternalName",       "codexacoin-wallet"
+            VALUE "InternalName",       "firstislamiccoin-wallet"
             VALUE "LegalCopyright",     COPYRIGHT_STR
             VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
-            VALUE "OriginalFilename",   "codexacoin-wallet.exe"
-            VALUE "ProductName",        "codexacoin-wallet"
+            VALUE "OriginalFilename",   "firstislamiccoin-wallet.exe"
+            VALUE "ProductName",        "firstislamiccoin-wallet"
             VALUE "ProductVersion",     PACKAGE_VERSION
         END
     END

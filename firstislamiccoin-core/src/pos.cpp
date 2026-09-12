@@ -223,7 +223,7 @@ void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevo
     cache.insert({prevout, c});
 }
 
-// FirstIslamicCoin: replaces CodexaCoin's coin-age-proportional reward
+// FirstIslamicCoin: replaces upstream CAC's coin-age-proportional reward
 // (ComputeCoinAgeReward / GetCoinstakeMaxReward). The reward is now a fixed
 // amount per block, so the arithmetic that scaled it by value x age -- and the
 // 60-day cap and 128-bit overflow handling that came with it -- is gone.

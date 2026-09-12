@@ -10,7 +10,7 @@ serializes that coinbase exactly as src/kernel/chainparams.cpp's
 CreateGenesisBlock() does, brute-forces nNonce against the scrypt PoW hash,
 and prints the values to paste into chainparams.cpp.
 
-Serialization is not taken on trust: --self-test rebuilds CodexaCoin's live
+Serialization is not taken on trust: --self-test rebuilds upstream CAC's live
 genesis blocks from their published parameters and checks every hash, which
 exercises the coinbase, merkle root, header hash (SHA256d) and PoW hash
 (scrypt) code paths. The node itself also assert()s the resulting hashes at
@@ -155,7 +155,7 @@ def mine(prefix: bytes, target: int, workers: int) -> int:
 def self_test() -> None:
     """Rebuild known genesis blocks from their published parameters and check every hash.
 
-    CodexaCoin's genesis output has an EMPTY scriptPubKey: its
+    Upstream CAC's genesis output has an EMPTY scriptPubKey: its
     CreateGenesisBlock() built a P2PK script but never assigned it to the
     output. Blackcoin's has an empty output too, and a version-1 header, whose
     GetHash() is the scrypt PoW hash -- so that case exercises scrypt directly.
@@ -191,7 +191,7 @@ def self_test() -> None:
 
     if not ok:
         sys.exit("self-test failed: serialization does not match the node")
-    print("self-test passed: serialization matches CodexaCoin's and Blackcoin's genesis blocks")
+    print("self-test passed: serialization matches upstream CAC's and Blackcoin's genesis blocks")
 
 
 def main() -> None:

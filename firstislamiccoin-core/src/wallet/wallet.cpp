@@ -1508,7 +1508,7 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
         }
     }
 
-    // CodexaCoin - Call to abandon orphaned coinstakes after handling disconnections
+    // FirstIslamicCoin - Call to abandon orphaned coinstakes after handling disconnections
     AbandonOrphanedCoinstakes();
 }
 
@@ -1957,7 +1957,7 @@ void CWallet::AbandonOrphanedCoinstakes()
 {
 	LOCK(cs_wallet);
 
-    // CodexaCoin: m_last_block_processed_height can be < 0
+    // FirstIslamicCoin: m_last_block_processed_height can be < 0
     // when loading the wallet during a reindex. Do nothing in that
     // case.
     if (m_last_block_processed_height < 0) {
@@ -3144,7 +3144,7 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
             // Wallet is assumed to be from another chain, if genesis block in the active
             // chain differs from the genesis block known to the wallet.
             if (chain.getBlockHash(0) != locator.vHave.back()) {
-                error = Untranslated("Wallet files should not be reused across chains. Restart codexacoind with -walletcrosschain to override.");
+                error = Untranslated("Wallet files should not be reused across chains. Restart firstislamiccoind with -walletcrosschain to override.");
                 return false;
             }
         }

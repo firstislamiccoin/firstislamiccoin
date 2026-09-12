@@ -41,7 +41,7 @@ private:
     [[nodiscard]] bool ReverseBlock(const CBlock& block, const CBlockIndex* pindex);
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     bool AllowPrune() const override { return true; }
     */
 

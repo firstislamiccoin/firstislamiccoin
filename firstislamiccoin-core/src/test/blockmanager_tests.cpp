@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(blockmanager_find_block_pos)
     BOOST_CHECK_EQUAL(actual.nPos, BLOCK_SERIALIZATION_HEADER_SIZE + ::GetSerializeSize(TX_WITH_WITNESS(params->GenesisBlock())) + BLOCK_SERIALIZATION_HEADER_SIZE);
 }
 
-// CodexaCoin
+// FirstIslamicCoin
 /*
 BOOST_FIXTURE_TEST_CASE(blockmanager_scan_unlink_already_pruned_files, TestChain100Setup)
 {

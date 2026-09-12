@@ -20,7 +20,7 @@ public:
     {
         CSerializedNetMsg msg;
         msg.m_type = std::move(msg_type);
-        // CodexaCoin ToDo: revert after nodes upgrade to current version
+        // FirstIslamicCoin ToDo: revert after nodes upgrade to current version
         int32_t serModes = nVersion <= OLD_VERSION ? SER_NETWORK : SER_NETWORK | SER_POSMARKER;
         VectorWriter{serModes, msg.data, 0, std::forward<Args>(args)...};
         return msg;

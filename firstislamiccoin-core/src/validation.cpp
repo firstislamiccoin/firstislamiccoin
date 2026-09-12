@@ -106,7 +106,7 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  *  noticeably interfere with the pruning mechanism.
  * */
 /*
-// CodexaCoin
+// FirstIslamicCoin
 static constexpr int PRUNE_LOCK_BUFFER{10};
 */
 
@@ -627,7 +627,7 @@ private:
     bool PreChecks(ATMPArgs& args, Workspace& ws) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs);
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     // Run checks for mempool replace-by-fee.
     bool ReplacementChecks(Workspace& ws) EXCLUSIVE_LOCKS_REQUIRED(cs_main, m_pool.cs);
     */
@@ -708,7 +708,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     TxValidationState& state = ws.m_state;
     std::unique_ptr<CTxMemPoolEntry>& entry = ws.m_entry;
 
-    // CodexaCoin: in v2 transactions use GetAdjustedTime() as nTimeTx
+    // FirstIslamicCoin: in v2 transactions use GetAdjustedTime() as nTimeTx
     int64_t nTimeTx = (int64_t)tx.nTime;
     if (!nTimeTx && tx.nVersion >= 2)
         nTimeTx = GetAdjustedTimeSeconds();
@@ -767,7 +767,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     {
         const CTransaction* ptxConflicting = m_pool.GetConflictTx(txin.prevout);
         if (ptxConflicting) {
-            // CodexaCoin: Disable replacement feature for now
+            // FirstIslamicCoin: Disable replacement feature for now
             return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "txn-mempool-conflict");
         }
     }
@@ -823,7 +823,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTxInputs
     }
 
-    // CodexaCoin: Minimum fee check
+    // FirstIslamicCoin: Minimum fee check
     if (Params().GetConsensus().IsProtocolV3_1(nTimeTx) && ws.m_base_fees < GetMinFee(tx, nTimeTx))
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-fee-not-enough");
 
@@ -870,7 +870,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (!bypass_limits && !args.m_package_feerates && !CheckFeeRate(ws.m_vsize, ws.m_modified_fees, state)) return false;
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     ws.m_iters_conflicting = m_pool.GetIterSet(ws.m_conflicts);
 
     // Note that these modifications are only applicable to single transaction scenarios;
@@ -946,7 +946,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 
     ws.m_ancestors = *ancestors;
 
-    // CodexaCoin
+    // FirstIslamicCoin
     /*
     // A transaction that spends outputs that would be replaced by it is invalid. Now
     // that we have the set of all ancestors we can detect this
@@ -965,7 +965,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
 }
 
 /*
-// CodexaCoin
+// FirstIslamicCoin
 bool MemPoolAccept::ReplacementChecks(Workspace& ws)
 {
     AssertLockHeld(cs_main);
@@ -1097,7 +1097,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     AssertLockHeld(cs_main);
     AssertLockHeld(m_pool.cs);
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     const CTransaction& tx = *ws.m_ptx;
     */
     const uint256& hash = ws.m_hash;
@@ -1107,7 +1107,7 @@ bool MemPoolAccept::Finalize(const ATMPArgs& args, Workspace& ws)
     std::unique_ptr<CTxMemPoolEntry>& entry = ws.m_entry;
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     // Remove conflicting transactions from the mempool
     for (CTxMemPool::txiter it : ws.m_all_conflicting)
     {
@@ -2118,9 +2118,9 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
     // violating blocks.
     uint32_t flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT};
     */
-    // CodexaCoin
+    // FirstIslamicCoin
     // BIP16 and DERSIG (BIP66) is always active
-    // CodexaCoin also requires DER encoding of pubkeys and low S in sigs
+    // FirstIslamicCoin also requires DER encoding of pubkeys and low S in sigs
     uint32_t flags{SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_DERKEY | SCRIPT_VERIFY_LOW_S};
     const auto it{consensusparams.script_flag_exceptions.find(*Assert(block_index.phashBlock))};
     if (it != consensusparams.script_flag_exceptions.end()) {
@@ -2722,7 +2722,7 @@ bool Chainstate::DisconnectTip(BlockValidationState& state, DisconnectedBlockTra
              Ticks<MillisecondsDouble>(SteadyClock::now() - time_start));
 
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     {
         // Prune locks that began at or after the tip should be moved backward so they get a chance to reorg
         const int max_height_first{pindexDelete->nHeight - 1};
@@ -3825,7 +3825,7 @@ std::vector<unsigned char> ChainstateManager::GenerateCoinbaseCommitment(CBlock&
 
 bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consensus::Params& consensusParams)
 {
-    // CodexaCoin ToDo: enable the check for PoW headers
+    // FirstIslamicCoin ToDo: enable the check for PoW headers
     /*
     return std::all_of(headers.cbegin(), headers.cend(),
             [&](const auto& header) { return CheckProofOfWork(header.GetHash(), header.nBits, consensusParams);});
@@ -4043,7 +4043,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
 
         // peercoin: Don't reject in case of old clients. Change our assumption instead.
         // ppcTODO: Maybe add restrictions until when this is allowed? We don't want new clients to pretend to be old clients and try to abuse this.
-        // CodexaCoin ToDo: remove fOldClient after the nodes got updated
+        // FirstIslamicCoin ToDo: remove fOldClient after the nodes got updated
         if (!CheckBlockHeader(block, state, GetConsensus(), chainstate, !fProofOfStake, fOldClient))
         {
             if (fOldClient)
@@ -4318,7 +4318,7 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        // CodexaCoin: also check for the signature encoding
+        // FirstIslamicCoin: also check for the signature encoding
         if (!CheckCanonicalBlockSignature(block)) {
             return error("%s: AcceptBlock FAILED (%s)", __func__, "bad block signature encoding");
         }
@@ -4416,7 +4416,7 @@ bool CheckCanonicalBlockSignature(const std::shared_ptr<const CBlock>& pblock)
     return ret;
 }
 
-// CodexaCoin
+// FirstIslamicCoin
 /* This function is called from the RPC code for pruneblockchain */
 /*
 void PruneBlockFilesManual(Chainstate& active_chainstate, int nManualPruneHeight)

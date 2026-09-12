@@ -8,12 +8,12 @@ import sys
 import tempfile
 
 BINARIES = [
-'src/codexacoind',
-'src/codexacoin-cli',
-'src/codexacoin-tx',
-'src/codexacoin-wallet',
-'src/codexacoin-util',
-'src/qt/codexacoin-qt',
+'src/firstislamiccoind',
+'src/firstislamiccoin-cli',
+'src/firstislamiccoin-tx',
+'src/firstislamiccoin-wallet',
+'src/firstislamiccoin-util',
+'src/qt/firstislamiccoin-qt',
 ]
 
 # Paths to external utilities.

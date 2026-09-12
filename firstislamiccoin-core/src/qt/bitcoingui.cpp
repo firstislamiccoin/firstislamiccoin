@@ -272,14 +272,14 @@ void BitcoinGUI::createActions()
     tabGroup->addAction(overviewAction);
 
     sendCoinsAction = new QAction(platformStyle->SingleColorIcon(":/icons/send"), tr("&Send"), this);
-    sendCoinsAction->setStatusTip(tr("Send coins to a CodexaCoin address"));
+    sendCoinsAction->setStatusTip(tr("Send coins to a FirstIslamicCoin address"));
     sendCoinsAction->setToolTip(sendCoinsAction->statusTip());
     sendCoinsAction->setCheckable(true);
     sendCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+2")));
     tabGroup->addAction(sendCoinsAction);
 
     receiveCoinsAction = new QAction(platformStyle->SingleColorIcon(":/icons/receiving_addresses"), tr("&Receive"), this);
-    receiveCoinsAction->setStatusTip(tr("Request payments (generates QR codes and codexacoin: URIs)"));
+    receiveCoinsAction->setStatusTip(tr("Request payments (generates QR codes and firstislamiccoin: URIs)"));
     receiveCoinsAction->setToolTip(receiveCoinsAction->statusTip());
     receiveCoinsAction->setCheckable(true);
     receiveCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+3")));
@@ -335,17 +335,17 @@ void BitcoinGUI::createActions()
     lockWalletAction->setToolTip(tr("Lock wallet"));
 
     stakingEnabledAction = new QAction(tr("&Enable Staking"), this);
-    stakingEnabledAction->setStatusTip(tr("Stake your CodexaCoin balance to earn the coin-age staking reward (~1.14%/month)"));
+    stakingEnabledAction->setStatusTip(tr("Stake your FirstIslamicCoin balance to earn the coin-age staking reward (~1.14%/month)"));
     stakingEnabledAction->setCheckable(true);
     stakingEnabledAction->setObjectName("stakingEnabledAction");
     signMessageAction = new QAction(tr("Sign &message…"), this);
-    signMessageAction->setStatusTip(tr("Sign messages with your CodexaCoin addresses to prove you own them"));
+    signMessageAction->setStatusTip(tr("Sign messages with your FirstIslamicCoin addresses to prove you own them"));
     verifyMessageAction = new QAction(tr("&Verify message…"), this);
-    verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified CodexaCoin addresses"));
+    verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified FirstIslamicCoin addresses"));
     m_load_psbt_action = new QAction(tr("&Load PSBT from file…"), this);
-    m_load_psbt_action->setStatusTip(tr("Load Partially Signed CodexaCoin Transaction"));
+    m_load_psbt_action->setStatusTip(tr("Load Partially Signed FirstIslamicCoin Transaction"));
     m_load_psbt_clipboard_action = new QAction(tr("Load PSBT from &clipboard…"), this);
-    m_load_psbt_clipboard_action->setStatusTip(tr("Load Partially Signed CodexaCoin Transaction from clipboard"));
+    m_load_psbt_clipboard_action->setStatusTip(tr("Load Partially Signed FirstIslamicCoin Transaction from clipboard"));
 
     openRPCConsoleAction = new QAction(tr("Node window"), this);
     openRPCConsoleAction->setStatusTip(tr("Open node debugging and diagnostic console"));
@@ -359,7 +359,7 @@ void BitcoinGUI::createActions()
     usedReceivingAddressesAction->setStatusTip(tr("Show the list of used receiving addresses and labels"));
 
     openAction = new QAction(tr("Open &URI…"), this);
-    openAction->setStatusTip(tr("Open a codexacoin: URI"));
+    openAction->setStatusTip(tr("Open a firstislamiccoin: URI"));
 
     m_open_wallet_action = new QAction(tr("Open Wallet"), this);
     m_open_wallet_action->setEnabled(false);
@@ -388,7 +388,7 @@ void BitcoinGUI::createActions()
 
     showHelpMessageAction = new QAction(tr("&Command-line options"), this);
     showHelpMessageAction->setMenuRole(QAction::NoRole);
-    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible CodexaCoin command-line options").arg(PACKAGE_NAME));
+    showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible FirstIslamicCoin command-line options").arg(PACKAGE_NAME));
 
     m_mask_values_action = new QAction(tr("&Mask values"), this);
     m_mask_values_action->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M));
@@ -698,7 +698,7 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndH
             walletFrame->setClientModel(nullptr);
         }
 #endif // ENABLE_WALLET
-        // CodexaCoin: Disable unit control
+        // FirstIslamicCoin: Disable unit control
         // unitDisplayControl->setOptionsModel(nullptr);
         // Disable top bar menu actions
         appMenuBar->clear();
@@ -1035,7 +1035,7 @@ void BitcoinGUI::updateNetworkState()
 
     if (m_node.getNetworkActive()) {
         //: A substring of the tooltip.
-        tooltip = tr("%n active connection(s) to CodexaCoin network.", "", count);
+        tooltip = tr("%n active connection(s) to FirstIslamicCoin network.", "", count);
     } else {
         //: A substring of the tooltip.
         tooltip = tr("Network activity disabled.");
@@ -1551,7 +1551,7 @@ void BitcoinGUI::toggleHidden()
 void BitcoinGUI::updateStakingIcon()
 {
     /*
-    // CodexaCoin ToDo: find out why it is not possible anymore to simply call m_node.shutdownRequested()
+    // FirstIslamicCoin ToDo: find out why it is not possible anymore to simply call m_node.shutdownRequested()
     // and adjust
     if (m_node.shutdownRequested() || !clientModel)
         return;

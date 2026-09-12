@@ -214,7 +214,7 @@ private:
      * below will be pruned, but callers should avoid assuming any particular buffer size.
      */
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     std::unordered_map<std::string, PruneLockInfo> m_prune_locks GUARDED_BY(::cs_main);
     */
 

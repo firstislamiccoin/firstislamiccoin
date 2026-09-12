@@ -6,7 +6,8 @@ outputs; see [`docs/genesis.md`](../../../docs/genesis.md) for why it is split
 and for the values currently pinned in `src/kernel/chainparams.cpp`.
 
 It needs only Python 3.8+ with OpenSSL's `hashlib.scrypt`. No build is
-required, unlike CodexaCoin's C++ `generate_genesis.cpp`, which it replaces.
+required, unlike the C++ `generate_genesis.cpp` inherited from upstream CAC,
+which it replaces.
 
 ## Trusting the output
 
@@ -17,7 +18,7 @@ itself before it is used:
 python3 contrib/genesis/generate_genesis.py --self-test
 ```
 
-This rebuilds CodexaCoin's three live genesis blocks and Blackcoin's mainnet
+This rebuilds upstream CAC's three live genesis blocks and Blackcoin's mainnet
 genesis from their published parameters, and checks the merkle root, header
 hash and scrypt proof of work of each.
 

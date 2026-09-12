@@ -6,7 +6,7 @@ The `macdeployqtplus` script should not be run manually. Instead, after building
 make deploy
 ```
 
-When complete, it will have produced `CodexaCoin-More.zip`.
+When complete, it will have produced `FirstIslamicCoin-More.zip`.
 
 ## SDK Extraction
 

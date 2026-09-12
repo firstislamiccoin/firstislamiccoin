@@ -34,16 +34,16 @@
   <string>????</string>
 
   <key>CFBundleExecutable</key>
-  <string>CodexaCoin-Qt</string>
+  <string>FirstIslamicCoin-Qt</string>
 
   <key>CFBundleName</key>
-  <string>CodexaCoin-Qt</string>
+  <string>FirstIslamicCoin-Qt</string>
 
   <key>LSHasLocalizedDisplayName</key>
   <true/>
 
   <key>CFBundleIdentifier</key>
-  <string>org.codexacoin.CodexaCoin-Qt</string>
+  <string>org.firstislamiccoin.FirstIslamicCoin-Qt</string>
 
   <key>CFBundleURLTypes</key>
   <array>
@@ -51,7 +51,7 @@
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
       <key>CFBundleURLName</key>
-      <string>org.codexacoin.CodexaCoinPayment</string>
+      <string>org.firstislamiccoin.FirstIslamicCoinPayment</string>
       <key>CFBundleURLSchemes</key>
       <array>
         <string>bitcoin</string>

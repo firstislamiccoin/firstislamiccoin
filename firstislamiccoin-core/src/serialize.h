@@ -1103,7 +1103,7 @@ public:
         return nSize;
     }
 
-    // CodexaCoin: dummy values
+    // FirstIslamicCoin: dummy values
     int GetType() const { return 0; }
     int GetVersion() const { return 0; }
 };
@@ -1143,7 +1143,7 @@ public:
     size_t size() const { return m_substream.size(); }
     const Params& GetParams() const { return m_params; }
 
-    // CodexaCoin: do not deprecate GetVersion() and GetType()
+    // FirstIslamicCoin: do not deprecate GetVersion() and GetType()
     /*
     int GetVersion() = delete; // Deprecated with Params usage
     int GetType() = delete;    // Deprecated with Params usage

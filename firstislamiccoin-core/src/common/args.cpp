@@ -36,7 +36,7 @@
 #include <utility>
 #include <variant>
 
-const char * const BITCOIN_CONF_FILENAME = "codexacoin.conf";
+const char * const BITCOIN_CONF_FILENAME = "firstislamiccoin.conf";
 const char * const BITCOIN_SETTINGS_FILENAME = "settings.json";
 
 ArgsManager gArgs;
@@ -685,12 +685,12 @@ std::string HelpMessageOpt(const std::string &option, const std::string &message
 
 fs::path GetDefaultDataDir()
 {
-    // Windows: C:\Users\Username\AppData\Roaming\CodexaCoin
-    // macOS: ~/Library/Application Support/CodexaCoin
-    // Unix-like: ~/.codexacoin
+    // Windows: C:\Users\Username\AppData\Roaming\FirstIslamicCoin
+    // macOS: ~/Library/Application Support/FirstIslamicCoin
+    // Unix-like: ~/.firstislamiccoin
 #ifdef WIN32
     // Windows
-    return GetSpecialFolderPath(CSIDL_APPDATA) / "CodexaCoin";
+    return GetSpecialFolderPath(CSIDL_APPDATA) / "FirstIslamicCoin";
 #else
     fs::path pathRet;
     char* pszHome = getenv("HOME");
@@ -700,10 +700,10 @@ fs::path GetDefaultDataDir()
         pathRet = fs::path(pszHome);
 #ifdef MAC_OSX
     // macOS
-    return pathRet / "Library/Application Support/CodexaCoin";
+    return pathRet / "Library/Application Support/FirstIslamicCoin";
 #else
     // Unix-like
-    return pathRet / ".codexacoin";
+    return pathRet / ".firstislamiccoin";
 #endif
 #endif
 }

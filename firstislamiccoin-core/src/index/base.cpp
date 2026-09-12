@@ -108,7 +108,7 @@ bool BaseIndex::Init()
         const CBlockIndex* locator_index{m_chainstate->m_blockman.LookupBlockIndex(locator.vHave.at(0))};
         if (!locator_index) {
             /*
-            // CodexaCoin ToDo: that's a temporary workaround for issue https://github.com/codexacoin/codexacoin-core/issues/22
+            // FirstIslamicCoin ToDo: that's a temporary workaround for issue https://github.com/FirstIslamicCoin/firstislamiccoin-core/issues/22
             // This addresses blockfilterindex and txindex crash issues but does not help to deal with the coinstatsindex crash
             // A more robust solution should replace this in the future
             */
@@ -437,7 +437,7 @@ IndexSummary BaseIndex::GetSummary() const
 void BaseIndex::SetBestBlockIndex(const CBlockIndex* block)
 {
     /*
-    // CodexaCoin
+    // FirstIslamicCoin
     assert(!m_chainstate->m_blockman.IsPruneMode() || AllowPrune());
 
     if (AllowPrune() && block) {

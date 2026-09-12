@@ -1,6 +1,6 @@
 all:
-	$(MAKE) -C .. codexacoin_test
+	$(MAKE) -C .. firstislamiccoin_test
 clean:
-	$(MAKE) -C .. codexacoin_test_clean
+	$(MAKE) -C .. firstislamiccoin_test_clean
 check:
-	$(MAKE) -C .. codexacoin_test_check
+	$(MAKE) -C .. firstislamiccoin_test_check

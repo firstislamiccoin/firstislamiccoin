@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE(reward_constant_regardless_of_stake_amount)
     for (const auto& stake : stakes) {
         BOOST_CHECK(IsValidCoinstakeReward(MeasureCoinstake(stake, FIXED_REWARD + fees), fees, height, params));
 
-        // CodexaCoin's model minted in proportion to the value staked; any such
+        // Upstream CAC's model minted in proportion to the value staked; any such
         // amount that differs from the fixed reward is now rejected.
         CAmount staked{0};
         for (const auto& in : stake) staked += in.value;
@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(reward_constant_regardless_of_coin_age)
     const std::vector<StakeInput> ages{
         {value, height - params.nCoinbaseMaturity, now - 500 * 64},
         {value, height - 20'000, now - 16 * 24 * 60 * 60},
-        {value, height - 60 * 1'350, now - 60 * 24 * 60 * 60},     // CodexaCoin's former 60-day cap
+        {value, height - 60 * 1'350, now - 60 * 24 * 60 * 60},     // upstream CAC's former 60-day cap
         {value, 1, now - 4 * 365 * 24 * 60 * 60},
         {value, 0, 1'789'171'200},
     };

@@ -2,26 +2,26 @@
 
 # backward compatibility for existing gentoo layout 
 #
-if [ -d "/var/lib/codexacoin/.codexacoin" ]; then
-	BITCOIND_DEFAULT_DATADIR="/var/lib/codexacoin/.codexacoin"
+if [ -d "/var/lib/firstislamiccoin/.firstislamiccoin" ]; then
+	BITCOIND_DEFAULT_DATADIR="/var/lib/firstislamiccoin/.firstislamiccoin"
 else
-	BITCOIND_DEFAULT_DATADIR="/var/lib/codexacoind"
+	BITCOIND_DEFAULT_DATADIR="/var/lib/firstislamiccoind"
 fi
 
-BITCOIND_CONFIGFILE=${BITCOIND_CONFIGFILE:-/etc/codexacoin/codexacoin.conf}
-BITCOIND_PIDDIR=${BITCOIND_PIDDIR:-/var/run/codexacoind}
-BITCOIND_PIDFILE=${BITCOIND_PIDFILE:-${BITCOIND_PIDDIR}/codexacoind.pid}
+BITCOIND_CONFIGFILE=${BITCOIND_CONFIGFILE:-/etc/firstislamiccoin/firstislamiccoin.conf}
+BITCOIND_PIDDIR=${BITCOIND_PIDDIR:-/var/run/firstislamiccoind}
+BITCOIND_PIDFILE=${BITCOIND_PIDFILE:-${BITCOIND_PIDDIR}/firstislamiccoind.pid}
 BITCOIND_DATADIR=${BITCOIND_DATADIR:-${BITCOIND_DEFAULT_DATADIR}}
-BITCOIND_USER=${BITCOIND_USER:-${BITCOIN_USER:-codexacoin}}
-BITCOIND_GROUP=${BITCOIND_GROUP:-codexacoin}
-BITCOIND_BIN=${BITCOIND_BIN:-/usr/bin/codexacoind}
+BITCOIND_USER=${BITCOIND_USER:-${BITCOIN_USER:-firstislamiccoin}}
+BITCOIND_GROUP=${BITCOIND_GROUP:-firstislamiccoin}
+BITCOIND_BIN=${BITCOIND_BIN:-/usr/bin/firstislamiccoind}
 BITCOIND_NICE=${BITCOIND_NICE:-${NICELEVEL:-0}}
 BITCOIND_OPTS="${BITCOIND_OPTS:-${BITCOIN_OPTS}}"
 
-name="CodexaCoin Core Daemon"
-description="CodexaCoin cryptocurrency P2P network daemon"
+name="FirstIslamicCoin Core Daemon"
+description="FirstIslamicCoin cryptocurrency P2P network daemon"
 
-command="/usr/bin/codexacoind"
+command="/usr/bin/firstislamiccoind"
 command_args="-pid=\"${BITCOIND_PIDFILE}\" \
 		-conf=\"${BITCOIND_CONFIGFILE}\" \
 		-datadir=\"${BITCOIND_DATADIR}\" \
@@ -72,7 +72,7 @@ checkconfig()
 	if grep -qs '^rpcuser=' "${BITCOIND_CONFIGFILE}" && \
 		! grep -qs '^rpcpassword=' "${BITCOIND_CONFIGFILE}" ; then
 		eerror ""
-		eerror "ERROR: You must set a secure rpcpassword to run codexacoind."
+		eerror "ERROR: You must set a secure rpcpassword to run firstislamiccoind."
 		eerror "The setting must appear in ${BITCOIND_CONFIGFILE}"
 		eerror ""
 		eerror "This password is security critical to securing wallets "
@@ -85,7 +85,7 @@ checkconfig()
 		eerror "It is recommended that you also set alertnotify so you are "
 		eerror "notified of problems:"
 		eerror ""
-		eerror "ie: alertnotify=echo %%s | mail -s \"CodexaCoin Alert\"" \
+		eerror "ie: alertnotify=echo %%s | mail -s \"FirstIslamicCoin Alert\"" \
 			"admin@foo.com"
 		eerror ""
 		return 1

@@ -547,7 +547,7 @@ void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 }
 
-// Peercoin/CodexaCoin
+// Peercoin/FirstIslamicCoin
 static bool ProcessBlockFound(const CBlock* pblock, ChainstateManager& chainman)
 {
     LogPrintf("%s", pblock->ToString());
@@ -644,7 +644,7 @@ bool SignBlock(CBlock& block, const CWallet& keystore)
 void PoSMiner(CWallet *pwallet)
 {
     pwallet->WalletLogPrintf("PoSMiner started for proof-of-stake\n");
-    util::ThreadRename(strprintf("codexacoin-stake-miner-%s", pwallet->GetName()));
+    util::ThreadRename(strprintf("firstislamiccoin-stake-miner-%s", pwallet->GetName()));
 
     unsigned int nExtraNonce = 0;
 

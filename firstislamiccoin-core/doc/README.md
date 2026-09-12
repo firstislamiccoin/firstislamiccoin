@@ -1,30 +1,30 @@
-CodexaCoin Core
+FirstIslamicCoin Core
 =============
 
 Setup
 ---------------------
-CodexaCoin Core is the original CodexaCoin client and it builds the backbone of the network. It downloads and, by default, stores the entire history of CodexaCoin transactions, which requires a few hundred gigabytes of disk space. Depending on the speed of your computer and network connection, the synchronization process can take anywhere from a few hours to a day or more.
+FirstIslamicCoin Core is the original FirstIslamicCoin client and it builds the backbone of the network. It downloads and, by default, stores the entire history of FirstIslamicCoin transactions, which requires a few hundred gigabytes of disk space. Depending on the speed of your computer and network connection, the synchronization process can take anywhere from a few hours to a day or more.
 
-To download CodexaCoin Core, visit [codexacoin.example](https://codexacoin.example).
+To download FirstIslamicCoin Core, visit [firstislamiccoin.com](https://firstislamiccoin.com).
 
 Running
 ---------------------
-The following are some helpful notes on how to run CodexaCoin Core on your native platform.
+The following are some helpful notes on how to run FirstIslamicCoin Core on your native platform.
 
 ### Unix
 
 Unpack the files into a directory and run:
 
-- `bin/codexacoin-qt` (GUI) or
-- `bin/codexacoind` (headless)
+- `bin/firstislamiccoin-qt` (GUI) or
+- `bin/firstislamiccoind` (headless)
 
 ### Windows
 
-Unpack the files into a directory, and then run codexacoin-qt.exe.
+Unpack the files into a directory, and then run firstislamiccoin-qt.exe.
 
 ### macOS
 
-Drag CodexaCoin Core to your applications folder, and then run CodexaCoin Core.
+Drag FirstIslamicCoin Core to your applications folder, and then run FirstIslamicCoin Core.
 
 ### Need Help?
 

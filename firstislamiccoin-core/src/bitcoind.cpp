@@ -113,7 +113,7 @@ int fork_daemon(bool nochdir, bool noclose, TokenPipeEnd& endpoint)
 
 static bool ParseArgs(ArgsManager& args, int argc, char* argv[])
 {
-    // If Qt is used, parameters/codexacoin.conf are parsed in qt/bitcoin.cpp's main()
+    // If Qt is used, parameters/firstislamiccoin.conf are parsed in qt/bitcoin.cpp's main()
     SetupServerArgs(args);
     std::string error;
     if (!args.ParseParameters(argc, argv, error)) {
@@ -142,7 +142,7 @@ static bool ProcessInitCommands(ArgsManager& args)
         if (args.IsArgSet("-version")) {
             strUsage += FormatParagraph(LicenseInfo());
         } else {
-            strUsage += "\nUsage:  codexacoind [options]                     Start " PACKAGE_NAME "\n"
+            strUsage += "\nUsage:  firstislamiccoind [options]                     Start " PACKAGE_NAME "\n"
                 "\n";
             strUsage += args.GetHelpMessage();
         }
@@ -260,7 +260,7 @@ MAIN_FUNCTION
 
     SetupEnvironment();
 
-    // Connect codexacoind signal handlers
+    // Connect firstislamiccoind signal handlers
     noui_connect();
 
     util::ThreadSetInternalName("init");

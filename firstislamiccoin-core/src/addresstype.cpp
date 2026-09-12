@@ -64,7 +64,7 @@ bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet)
         return false;
         */
 
-        // CodexaCoin: Reinterpret P2PK scripts as PKHash
+        // FirstIslamicCoin: Reinterpret P2PK scripts as PKHash
         // We need to do that because proof-of-stake mechanism uses P2PK outputs
         // It partially reverts Bitcoin Core PR#28246 https://github.com/bitcoin/bitcoin/pull/28246
         if (!pubKey.IsValid())
@@ -108,7 +108,7 @@ bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet)
     case TxoutType::NONSTANDARD: {
         addressRet = CNoDestination(scriptPubKey);
         
-        // CodexaCoin: Allow non-standard type with empty scriptPubKey
+        // FirstIslamicCoin: Allow non-standard type with empty scriptPubKey
         if (scriptPubKey.empty()) {
             return true;
         }

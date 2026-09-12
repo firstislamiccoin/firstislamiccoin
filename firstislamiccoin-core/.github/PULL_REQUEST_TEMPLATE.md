@@ -11,7 +11,7 @@ first. See CONTRIBUTING.md
 
 <!--
 Please provide clear motivation for your patch and explain how it improves
-CodexaCoin Core user experience or CodexaCoin Core developer experience
+FirstIslamicCoin Core user experience or FirstIslamicCoin Core developer experience
 significantly:
 
 * Any test improvements or new tests that improve coverage are always welcome.

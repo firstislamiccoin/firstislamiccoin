@@ -45,11 +45,11 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
 
     if (fuzzed_data_provider.ConsumeBool()) {
         wallet.m_pay_tx_fee = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};
-        // CodexaCoin
+        // FirstIslamicCoin
         // wallet.m_min_fee = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};
     }
 
-    // CodexaCoin
+    // FirstIslamicCoin
     // (void)GetRequiredFee(wallet, tx_bytes);
     (void)GetRequiredFeeRate(wallet);
 
@@ -58,11 +58,11 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
         coin_control.m_feerate = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};
     }
     if (fuzzed_data_provider.ConsumeBool()) {
-        // CodexaCoin
+        // FirstIslamicCoin
         // coin_control.m_confirm_target = fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, 999'000);
     }
 
-    // CodexaCoin
+    // FirstIslamicCoin
     /*
     FeeCalculation fee_calculation;
     FeeCalculation* maybe_fee_calculation{fuzzed_data_provider.ConsumeBool() ? nullptr : &fee_calculation};

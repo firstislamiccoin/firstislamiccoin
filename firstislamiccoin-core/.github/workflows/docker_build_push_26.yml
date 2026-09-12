@@ -8,7 +8,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          repository: CodexaCoinDev/docker-blk
+          repository: FirstIslamicCoinDev/docker-blk
           ref: main
       - name: Set environment variables
         run: echo "GIT_CURRENT_BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV

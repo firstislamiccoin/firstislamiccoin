@@ -137,7 +137,7 @@ void AvailableCoinsForStaking(const CWallet& wallet,
         const uint256& wtxid = entry.first;
         const CWalletTx& wtx = entry.second;
 
-        // CodexaCoin: no IsTxImmature() gate here -- see GetStakingBalance's
+        // FirstIslamicCoin: no IsTxImmature() gate here -- see GetStakingBalance's
         // comment above. The min_depth check a few lines down (already
         // nCoinbaseMaturity, not +1) is the correct staking-specific
         // maturity threshold; IsTxImmature would require one confirmation

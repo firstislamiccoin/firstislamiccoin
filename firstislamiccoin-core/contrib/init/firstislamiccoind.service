@@ -1,39 +1,39 @@
 # It is not recommended to modify this file in-place, because it will
 # be overwritten during package upgrades. If you want to add further
 # options or overwrite existing ones then use
-# $ systemctl edit codexacoind.service
+# $ systemctl edit firstislamiccoind.service
 # See "man systemd.service" for details.
 
 # Note that almost all daemon options could be specified in
-# /etc/codexacoin/codexacoin.conf, but keep in mind those explicitly
+# /etc/firstislamiccoin/firstislamiccoin.conf, but keep in mind those explicitly
 # specified as arguments in ExecStart= will override those in the
 # config file.
 
 [Unit]
-Description=CodexaCoin daemon
-Documentation=https://github.com/codexacoin/codexacoin-core/blob/master/doc/init.md
+Description=FirstIslamicCoin daemon
+Documentation=https://github.com/FirstIslamicCoin/firstislamiccoin-core/blob/master/doc/init.md
 
 # https://www.freedesktop.org/wiki/Software/systemd/NetworkTarget/
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/codexacoind -pid=/run/codexacoind/codexacoind.pid \
-                            -conf=/etc/codexacoin/codexacoin.conf \
-                            -datadir=/var/lib/codexacoind \
+ExecStart=/usr/bin/firstislamiccoind -pid=/run/firstislamiccoind/firstislamiccoind.pid \
+                            -conf=/etc/firstislamiccoin/firstislamiccoin.conf \
+                            -datadir=/var/lib/firstislamiccoind \
                             -startupnotify='systemd-notify --ready' \
                             -shutdownnotify='systemd-notify --stopping'
 
 # Make sure the config directory is readable by the service user
 PermissionsStartOnly=true
-ExecStartPre=/bin/chgrp codexacoin /etc/codexacoin
+ExecStartPre=/bin/chgrp firstislamiccoin /etc/firstislamiccoin
 
 # Process management
 ####################
 
 Type=notify
 NotifyAccess=all
-PIDFile=/run/codexacoind/codexacoind.pid
+PIDFile=/run/firstislamiccoind/firstislamiccoind.pid
 
 Restart=on-failure
 TimeoutStartSec=infinity
@@ -42,20 +42,20 @@ TimeoutStopSec=600
 # Directory creation and permissions
 ####################################
 
-# Run as codexacoin:codexacoin
-User=codexacoin
-Group=codexacoin
+# Run as firstislamiccoin:firstislamiccoin
+User=firstislamiccoin
+Group=firstislamiccoin
 
-# /run/codexacoind
-RuntimeDirectory=codexacoind
+# /run/firstislamiccoind
+RuntimeDirectory=firstislamiccoind
 RuntimeDirectoryMode=0710
 
-# /etc/codexacoin
-ConfigurationDirectory=codexacoin
+# /etc/firstislamiccoin
+ConfigurationDirectory=firstislamiccoin
 ConfigurationDirectoryMode=0710
 
-# /var/lib/codexacoind
-StateDirectory=codexacoind
+# /var/lib/firstislamiccoind
+StateDirectory=firstislamiccoind
 StateDirectoryMode=0710
 
 # Hardening measures

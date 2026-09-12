@@ -20,7 +20,7 @@ static constexpr auto REMOVAL_REASON_DUMMY = MemPoolRemovalReason::REPLACED;
 class MemPoolTest final : public CTxMemPool
 {
 public:
-    // CodexaCoin
+    // FirstIslamicCoin
     // using CTxMemPool::GetMinFee;
 };
 
@@ -478,7 +478,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     BOOST_CHECK(!pool.exists(GenTxid::Txid(tx2.GetHash())));
     BOOST_CHECK(!pool.exists(GenTxid::Txid(tx3.GetHash())));
 
-    // CodexaCoin
+    // FirstIslamicCoin
     /*
     CFeeRate maxFeeRateRemoved(25000, GetVirtualTransactionSize(CTransaction(tx3)) + GetVirtualTransactionSize(CTransaction(tx2)));
     BOOST_CHECK_EQUAL(pool.GetMinFee(1).GetFeePerK(), maxFeeRateRemoved.GetFeePerK() + 1000);
@@ -556,7 +556,7 @@ BOOST_AUTO_TEST_CASE(MempoolSizeLimitTest)
     pool.addUnchecked(entry.Fee(1000LL).FromTx(tx5));
     pool.addUnchecked(entry.Fee(9000LL).FromTx(tx7));
 
-    // CodexaCoin
+    // FirstIslamicCoin
     /*
     std::vector<CTransactionRef> vtx;
     SetMockTime(42);

@@ -506,7 +506,7 @@ public:
         consensus.nCoinbaseMaturity = 10;
 
         consensus.nPremineTotal = CAmount{14'000'000'000} * COIN;
-        consensus.nPowSubsidy = 28'000'000 * COIN; // test harness only; CodexaCoin's regtest per-block amount
+        consensus.nPowSubsidy = 28'000'000 * COIN; // test harness only; upstream CAC's regtest per-block amount
         consensus.nFixedStakeReward = 10 * COIN;
         consensus.nRewardHalvingInterval = 0;
 

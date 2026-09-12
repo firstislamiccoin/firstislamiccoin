@@ -85,33 +85,33 @@ EXTRA_LIBRARIES += \
   $(LIBBITCOIN_ZMQ)
 
 if BUILD_BITCOIND
-  bin_PROGRAMS += codexacoind
+  bin_PROGRAMS += firstislamiccoind
 endif
 
 if BUILD_BITCOIN_NODE
-  bin_PROGRAMS += codexacoin-node
+  bin_PROGRAMS += firstislamiccoin-node
 endif
 
 if BUILD_BITCOIN_CLI
-  bin_PROGRAMS += codexacoin-cli
+  bin_PROGRAMS += firstislamiccoin-cli
 endif
 
 if BUILD_BITCOIN_TX
-  bin_PROGRAMS += codexacoin-tx
+  bin_PROGRAMS += firstislamiccoin-tx
 endif
 
 if ENABLE_WALLET
 if BUILD_BITCOIN_WALLET
-  bin_PROGRAMS += codexacoin-wallet
+  bin_PROGRAMS += firstislamiccoin-wallet
 endif
 endif
 
 if BUILD_BITCOIN_UTIL
-  bin_PROGRAMS += codexacoin-util
+  bin_PROGRAMS += firstislamiccoin-util
 endif
 
 if BUILD_BITCOIN_CHAINSTATE
-  bin_PROGRAMS += codexacoin-chainstate
+  bin_PROGRAMS += firstislamiccoin-chainstate
 endif
 
 .PHONY: FORCE check-symbols check-security
@@ -782,17 +782,17 @@ libbitcoin_cli_a_SOURCES = \
 nodist_libbitcoin_util_a_SOURCES = $(srcdir)/obj/build.h
 #
 
-# codexacoind & codexacoin-node binaries #
-codexacoin_daemon_sources = bitcoind.cpp
-codexacoin_bin_cppflags = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
-codexacoin_bin_cxxflags = $(AM_CXXFLAGS) $(PIE_FLAGS)
-codexacoin_bin_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+# firstislamiccoind & firstislamiccoin-node binaries #
+firstislamiccoin_daemon_sources = bitcoind.cpp
+firstislamiccoin_bin_cppflags = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+firstislamiccoin_bin_cxxflags = $(AM_CXXFLAGS) $(PIE_FLAGS)
+firstislamiccoin_bin_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-codexacoin_daemon_sources += bitcoind-res.rc
+firstislamiccoin_daemon_sources += bitcoind-res.rc
 endif
 
-codexacoin_bin_ldadd = \
+firstislamiccoin_bin_ldadd = \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
@@ -804,53 +804,53 @@ codexacoin_bin_ldadd = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-codexacoin_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
+firstislamiccoin_bin_ldadd += $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
 
-codexacoind_SOURCES = $(codexacoin_daemon_sources) init/bitcoind.cpp
-codexacoind_CPPFLAGS = $(codexacoin_bin_cppflags)
-codexacoind_CXXFLAGS = $(codexacoin_bin_cxxflags)
-codexacoind_LDFLAGS = $(codexacoin_bin_ldflags)
-codexacoind_LDADD = $(LIBBITCOIN_NODE) $(codexacoin_bin_ldadd)
+firstislamiccoind_SOURCES = $(firstislamiccoin_daemon_sources) init/bitcoind.cpp
+firstislamiccoind_CPPFLAGS = $(firstislamiccoin_bin_cppflags)
+firstislamiccoind_CXXFLAGS = $(firstislamiccoin_bin_cxxflags)
+firstislamiccoind_LDFLAGS = $(firstislamiccoin_bin_ldflags)
+firstislamiccoind_LDADD = $(LIBBITCOIN_NODE) $(firstislamiccoin_bin_ldadd)
 
-codexacoin_node_SOURCES = $(codexacoin_daemon_sources) init/bitcoin-node.cpp
-codexacoin_node_CPPFLAGS = $(codexacoin_bin_cppflags)
-codexacoin_node_CXXFLAGS = $(codexacoin_bin_cxxflags)
-codexacoin_node_LDFLAGS = $(codexacoin_bin_ldflags)
-codexacoin_node_LDADD = $(LIBBITCOIN_NODE) $(codexacoin_bin_ldadd) $(LIBBITCOIN_IPC) $(LIBMULTIPROCESS_LIBS)
+firstislamiccoin_node_SOURCES = $(firstislamiccoin_daemon_sources) init/bitcoin-node.cpp
+firstislamiccoin_node_CPPFLAGS = $(firstislamiccoin_bin_cppflags)
+firstislamiccoin_node_CXXFLAGS = $(firstislamiccoin_bin_cxxflags)
+firstislamiccoin_node_LDFLAGS = $(firstislamiccoin_bin_ldflags)
+firstislamiccoin_node_LDADD = $(LIBBITCOIN_NODE) $(firstislamiccoin_bin_ldadd) $(LIBBITCOIN_IPC) $(LIBMULTIPROCESS_LIBS)
 
-# codexacoin-cli binary #
-codexacoin_cli_SOURCES = bitcoin-cli.cpp
-codexacoin_cli_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS)
-codexacoin_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-codexacoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+# firstislamiccoin-cli binary #
+firstislamiccoin_cli_SOURCES = bitcoin-cli.cpp
+firstislamiccoin_cli_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS)
+firstislamiccoin_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+firstislamiccoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-codexacoin_cli_SOURCES += bitcoin-cli-res.rc
+firstislamiccoin_cli_SOURCES += bitcoin-cli-res.rc
 endif
 
-codexacoin_cli_LDADD = \
+firstislamiccoin_cli_LDADD = \
   $(LIBBITCOIN_CLI) \
   $(LIBUNIVALUE) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO)
 
-codexacoin_cli_LDADD += $(EVENT_LIBS)
+firstislamiccoin_cli_LDADD += $(EVENT_LIBS)
 #
 
-# codexacoin-tx binary #
-codexacoin_tx_SOURCES = \
+# firstislamiccoin-tx binary #
+firstislamiccoin_tx_SOURCES = \
   bitcoin-tx.cpp \
   timedatadummy.cpp
-codexacoin_tx_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
-codexacoin_tx_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-codexacoin_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+firstislamiccoin_tx_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+firstislamiccoin_tx_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+firstislamiccoin_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-codexacoin_tx_SOURCES += bitcoin-tx-res.rc
+firstislamiccoin_tx_SOURCES += bitcoin-tx-res.rc
 endif
 
-codexacoin_tx_LDADD = \
+firstislamiccoin_tx_LDADD = \
   $(LIBUNIVALUE) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
@@ -859,13 +859,13 @@ codexacoin_tx_LDADD = \
   $(LIBSECP256K1)
 #
 
-# codexacoin-wallet binary #
-codexacoin_wallet_SOURCES = bitcoin-wallet.cpp
-codexacoin_wallet_SOURCES += init/bitcoin-wallet.cpp
-codexacoin_wallet_CPPFLAGS = $(codexacoin_bin_cppflags)
-codexacoin_wallet_CXXFLAGS = $(codexacoin_bin_cxxflags)
-codexacoin_wallet_LDFLAGS = $(codexacoin_bin_ldflags)
-codexacoin_wallet_LDADD = \
+# firstislamiccoin-wallet binary #
+firstislamiccoin_wallet_SOURCES = bitcoin-wallet.cpp
+firstislamiccoin_wallet_SOURCES += init/bitcoin-wallet.cpp
+firstislamiccoin_wallet_CPPFLAGS = $(firstislamiccoin_bin_cppflags)
+firstislamiccoin_wallet_CXXFLAGS = $(firstislamiccoin_bin_cxxflags)
+firstislamiccoin_wallet_LDFLAGS = $(firstislamiccoin_bin_ldflags)
+firstislamiccoin_wallet_LDADD = \
   $(LIBBITCOIN_WALLET_TOOL) \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_NODE) \
@@ -879,21 +879,21 @@ codexacoin_wallet_LDADD = \
   $(SQLITE_LIBS)
 
 if TARGET_WINDOWS
-codexacoin_wallet_SOURCES += bitcoin-wallet-res.rc
+firstislamiccoin_wallet_SOURCES += bitcoin-wallet-res.rc
 endif
 #
 
-# codexacoin-util binary #
-codexacoin_util_SOURCES = bitcoin-util.cpp
-codexacoin_util_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
-codexacoin_util_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-codexacoin_util_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+# firstislamiccoin-util binary #
+firstislamiccoin_util_SOURCES = bitcoin-util.cpp
+firstislamiccoin_util_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+firstislamiccoin_util_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+firstislamiccoin_util_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 
 if TARGET_WINDOWS
-codexacoin_util_SOURCES += bitcoin-util-res.rc
+firstislamiccoin_util_SOURCES += bitcoin-util-res.rc
 endif
 
-codexacoin_util_LDADD = \
+firstislamiccoin_util_LDADD = \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
   $(LIBUNIVALUE) \
@@ -902,17 +902,17 @@ codexacoin_util_LDADD = \
   $(LIBSECP256K1)
 #
 
-# codexacoin-chainstate binary #
-codexacoin_chainstate_SOURCES = bitcoin-chainstate.cpp
-codexacoin_chainstate_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BOOST_CPPFLAGS)
-codexacoin_chainstate_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+# firstislamiccoin-chainstate binary #
+firstislamiccoin_chainstate_SOURCES = bitcoin-chainstate.cpp
+firstislamiccoin_chainstate_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BOOST_CPPFLAGS)
+firstislamiccoin_chainstate_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 
-codexacoin_chainstate_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(PTHREAD_FLAGS) $(LIBTOOL_APP_LDFLAGS) -static
-codexacoin_chainstate_LDADD = $(LIBBITCOINKERNEL)
+firstislamiccoin_chainstate_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(PTHREAD_FLAGS) $(LIBTOOL_APP_LDFLAGS) -static
+firstislamiccoin_chainstate_LDADD = $(LIBBITCOINKERNEL)
 
 # libtool is unable to calculate this indirect dependency, presumably because it's a subproject.
 # libsecp256k1 only needs to be linked in when libbitcoinkernel is static.
-codexacoin_chainstate_LDADD += $(LIBSECP256K1)
+firstislamiccoin_chainstate_LDADD += $(LIBSECP256K1)
 #
 
 # bitcoinkernel library #

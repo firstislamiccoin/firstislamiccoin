@@ -149,7 +149,7 @@ jobs:
       - name: Build depends
         run: |
           make -j $MAKEJOBS -C depends HOST=${{ matrix.host }} ${{ matrix.dep-opts }}
-      - name: Build CodexaCoin
+      - name: Build FirstIslamicCoin
         run: |
           ./autogen.sh
           ./configure --prefix=`pwd`/depends/${{ matrix.host }} ${{ matrix.config-opts }} --enable-reduce-exports || ( cat config.log && false)
@@ -166,14 +166,14 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: codexacoin-${{ github.sha }}-${{ matrix.name }}
+          name: firstislamiccoin-${{ github.sha }}-${{ matrix.name }}
           path: |
-            depends/${{ matrix.host }}/bin/codexacoin*
-            dist/CodexaCoin-Qt.app
+            depends/${{ matrix.host }}/bin/firstislamiccoin*
+            dist/FirstIslamicCoin-Qt.app
           if-no-files-found: error
           retention-days: 7
 
       - name: Download artifacts
         uses: actions/download-artifact@v5
         with:
-          name: codexacoin-${{ github.sha }}-${{ matrix.name }}
+          name: firstislamiccoin-${{ github.sha }}-${{ matrix.name }}

@@ -6,8 +6,8 @@
 // Stake cache by Qtum
 // Copyright (c) 2016-2018 The Qtum developers
 
-#ifndef CODEXACOIN_POS_H
-#define CODEXACOIN_POS_H
+#ifndef FIRSTISLAMICCOIN_POS_H
+#define FIRSTISLAMICCOIN_POS_H
 
 #include <chain.h>
 #include <primitives/transaction.h>
@@ -63,4 +63,4 @@ inline bool IsStakeMature(int nCoinHeight, int nSpendHeight, const Consensus::Pa
  */
 bool IsValidCoinstakeReward(CAmount nActualStakeReward, CAmount nFees, int nHeight, const Consensus::Params& params);
 
-#endif // CODEXACOIN_POS_H
+#endif // FIRSTISLAMICCOIN_POS_H

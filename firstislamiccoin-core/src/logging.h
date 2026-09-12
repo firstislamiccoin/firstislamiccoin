@@ -46,7 +46,7 @@ namespace BCLog {
         WALLETDB    = (1 <<  6),
         RPC         = (1 <<  7),
         /*
-        // CodexaCoin
+        // FirstIslamicCoin
         ESTIMATEFEE = (1 <<  8),
         */
         ADDRMAN     = (1 <<  9),
@@ -55,7 +55,7 @@ namespace BCLog {
         CMPCTBLOCK  = (1 << 12),
         RAND        = (1 << 13),
         /*
-        // CodexaCoin
+        // FirstIslamicCoin
         PRUNE       = (1 << 14),
         */
         PROXY       = (1 << 15),

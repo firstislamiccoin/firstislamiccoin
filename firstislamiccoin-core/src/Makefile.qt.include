@@ -2,10 +2,10 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-bin_PROGRAMS += qt/codexacoin-qt
+bin_PROGRAMS += qt/firstislamiccoin-qt
 
 if BUILD_BITCOIN_GUI
-  bin_PROGRAMS += codexacoin-gui
+  bin_PROGRAMS += firstislamiccoin-gui
 endif
 
 EXTRA_LIBRARIES += qt/libbitcoinqt.a
@@ -318,43 +318,43 @@ QT_FORMS_H=$(join $(dir $(QT_FORMS_UI)),$(addprefix ui_, $(notdir $(QT_FORMS_UI:
 # Most files will depend on the forms and moc files as includes. Generate them
 # before anything else.
 $(QT_MOC): $(QT_FORMS_H)
-$(qt_libbitcoinqt_a_OBJECTS) $(qt_codexacoin_qt_OBJECTS) $(codexacoin_gui_OBJECTS) : | $(QT_MOC)
+$(qt_libbitcoinqt_a_OBJECTS) $(qt_firstislamiccoin_qt_OBJECTS) $(firstislamiccoin_gui_OBJECTS) : | $(QT_MOC)
 
-# codexacoin-qt and codexacoin-gui binaries #
-codexacoin_qt_cppflags = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
+# firstislamiccoin-qt and firstislamiccoin-gui binaries #
+firstislamiccoin_qt_cppflags = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
   $(QT_INCLUDES) $(QR_CFLAGS)
-codexacoin_qt_cxxflags = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
+firstislamiccoin_qt_cxxflags = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
 
-codexacoin_qt_sources = qt/main.cpp
+firstislamiccoin_qt_sources = qt/main.cpp
 if TARGET_WINDOWS
-  codexacoin_qt_sources += $(BITCOIN_QT_RC)
+  firstislamiccoin_qt_sources += $(BITCOIN_QT_RC)
 endif
-codexacoin_qt_ldadd = qt/libbitcoinqt.a $(LIBBITCOIN_NODE)
+firstislamiccoin_qt_ldadd = qt/libbitcoinqt.a $(LIBBITCOIN_NODE)
 if ENABLE_WALLET
-codexacoin_qt_ldadd += $(LIBBITCOIN_UTIL) $(LIBBITCOIN_WALLET) $(LIBBITCOIN_NODE)
+firstislamiccoin_qt_ldadd += $(LIBBITCOIN_UTIL) $(LIBBITCOIN_WALLET) $(LIBBITCOIN_NODE)
 endif
 if ENABLE_ZMQ
-codexacoin_qt_ldadd += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
+firstislamiccoin_qt_ldadd += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
 endif
-codexacoin_qt_ldadd += $(LIBBITCOIN_CLI) $(LIBBITCOIN_COMMON) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_CRYPTO) $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBMEMENV) \
+firstislamiccoin_qt_ldadd += $(LIBBITCOIN_CLI) $(LIBBITCOIN_COMMON) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_CRYPTO) $(LIBUNIVALUE) $(LIBLEVELDB) $(LIBMEMENV) \
   $(QT_LIBS) $(QT_DBUS_LIBS) $(QR_LIBS) $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(LIBSECP256K1) \
   $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(SQLITE_LIBS)
-codexacoin_qt_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
-codexacoin_qt_libtoolflags = $(AM_LIBTOOLFLAGS) --tag CXX
+firstislamiccoin_qt_ldflags = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+firstislamiccoin_qt_libtoolflags = $(AM_LIBTOOLFLAGS) --tag CXX
 
-qt_codexacoin_qt_CPPFLAGS = $(codexacoin_qt_cppflags)
-qt_codexacoin_qt_CXXFLAGS = $(codexacoin_qt_cxxflags)
-qt_codexacoin_qt_SOURCES = $(codexacoin_qt_sources) init/bitcoin-qt.cpp
-qt_codexacoin_qt_LDADD = $(codexacoin_qt_ldadd)
-qt_codexacoin_qt_LDFLAGS = $(codexacoin_qt_ldflags)
-qt_codexacoin_qt_LIBTOOLFLAGS = $(codexacoin_qt_libtoolflags)
+qt_firstislamiccoin_qt_CPPFLAGS = $(firstislamiccoin_qt_cppflags)
+qt_firstislamiccoin_qt_CXXFLAGS = $(firstislamiccoin_qt_cxxflags)
+qt_firstislamiccoin_qt_SOURCES = $(firstislamiccoin_qt_sources) init/bitcoin-qt.cpp
+qt_firstislamiccoin_qt_LDADD = $(firstislamiccoin_qt_ldadd)
+qt_firstislamiccoin_qt_LDFLAGS = $(firstislamiccoin_qt_ldflags)
+qt_firstislamiccoin_qt_LIBTOOLFLAGS = $(firstislamiccoin_qt_libtoolflags)
 
-codexacoin_gui_CPPFLAGS = $(codexacoin_qt_cppflags)
-codexacoin_gui_CXXFLAGS = $(codexacoin_qt_cxxflags)
-codexacoin_gui_SOURCES = $(codexacoin_qt_sources) init/bitcoin-gui.cpp
-codexacoin_gui_LDADD = $(codexacoin_qt_ldadd) $(LIBBITCOIN_IPC) $(LIBBITCOIN_UTIL) $(LIBMULTIPROCESS_LIBS)
-codexacoin_gui_LDFLAGS = $(codexacoin_qt_ldflags)
-codexacoin_gui_LIBTOOLFLAGS = $(codexacoin_qt_libtoolflags)
+firstislamiccoin_gui_CPPFLAGS = $(firstislamiccoin_qt_cppflags)
+firstislamiccoin_gui_CXXFLAGS = $(firstislamiccoin_qt_cxxflags)
+firstislamiccoin_gui_SOURCES = $(firstislamiccoin_qt_sources) init/bitcoin-gui.cpp
+firstislamiccoin_gui_LDADD = $(firstislamiccoin_qt_ldadd) $(LIBBITCOIN_IPC) $(LIBBITCOIN_UTIL) $(LIBMULTIPROCESS_LIBS)
+firstislamiccoin_gui_LDFLAGS = $(firstislamiccoin_qt_ldflags)
+firstislamiccoin_gui_LIBTOOLFLAGS = $(firstislamiccoin_qt_libtoolflags)
 
 #locale/foo.ts -> locale/foo.qm
 QT_QM=$(QT_TS:.ts=.qm)
@@ -392,22 +392,22 @@ CLEAN_QT = $(nodist_qt_libbitcoinqt_a_SOURCES) $(QT_QM) $(QT_FORMS_H) qt/*.gcda 
 
 CLEANFILES += $(CLEAN_QT)
 
-codexacoin_qt_clean: FORCE
-	rm -f $(CLEAN_QT) $(qt_libbitcoinqt_a_OBJECTS) $(qt_codexacoin_qt_OBJECTS) qt/codexacoin-qt$(EXEEXT) $(LIBBITCOINQT)
+firstislamiccoin_qt_clean: FORCE
+	rm -f $(CLEAN_QT) $(qt_libbitcoinqt_a_OBJECTS) $(qt_firstislamiccoin_qt_OBJECTS) qt/firstislamiccoin-qt$(EXEEXT) $(LIBBITCOINQT)
 
-codexacoin_qt : qt/codexacoin-qt$(EXEEXT)
+firstislamiccoin_qt : qt/firstislamiccoin-qt$(EXEEXT)
 
 APK_LIB_DIR = qt/android/libs/$(ANDROID_ARCH)
 QT_BASE_VERSION = $(lastword $(shell $(MOC) --version))
 QT_BASE_PATH = $(shell find ../depends/sources/ -maxdepth 1 -type f -regex ".*qtbase.*$(QT_BASE_VERSION)\.tar.xz")
 QT_BASE_TLD = $(shell tar tf $(QT_BASE_PATH) --exclude='*/*')
 
-codexacoin_qt_apk: FORCE
+firstislamiccoin_qt_apk: FORCE
 	mkdir -p $(APK_LIB_DIR)
 	cp $(dir $(lastword $(CC)))../sysroot/usr/lib/$(host_alias)/libc++_shared.so $(APK_LIB_DIR)
 	tar xf $(QT_BASE_PATH) -C qt/android/src/ $(QT_BASE_TLD)src/android/jar/src --strip-components=5
 	tar xf $(QT_BASE_PATH) -C qt/android/src/ $(QT_BASE_TLD)src/android/java/src --strip-components=5
-	cp qt/codexacoin-qt $(APK_LIB_DIR)/libbitcoin-qt_$(ANDROID_ARCH).so
+	cp qt/firstislamiccoin-qt $(APK_LIB_DIR)/libbitcoin-qt_$(ANDROID_ARCH).so
 	cd qt/android && gradle wrapper --gradle-version=6.6.1
 	cd qt/android && ./gradlew build
 

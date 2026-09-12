@@ -28,6 +28,6 @@ minisketch_libminisketch_a_CPPFLAGS = $(AM_CPPFLAGS) $(LIBMINISKETCH_CPPFLAGS)
 minisketch_libminisketch_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 
 # FirstIslamicCoin: minisketch's own test program is not built. Its source,
-# minisketch/src/test.cpp, is absent from the tree inherited from CodexaCoin,
+# minisketch/src/test.cpp, is absent from the tree inherited from upstream CAC,
 # so listing it here made `make check` fail before any unit test ran.
 # Minisketch is still exercised through the node's unit and functional tests.

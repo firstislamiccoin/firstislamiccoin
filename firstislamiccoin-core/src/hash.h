@@ -147,7 +147,7 @@ public:
     }
 };
 
-// CodexaCoin: Keep nType
+// FirstIslamicCoin: Keep nType
 class CHashWriter : public HashWriter
 {
 private:

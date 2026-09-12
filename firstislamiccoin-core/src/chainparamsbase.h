@@ -14,7 +14,7 @@
 class ArgsManager;
 
 /**
- * CBaseChainParams defines the base parameters (shared between codexacoin-cli and codexacoind)
+ * CBaseChainParams defines the base parameters (shared between firstislamiccoin-cli and firstislamiccoind)
  * of a given instance of the Bitcoin system.
  */
 class CBaseChainParams

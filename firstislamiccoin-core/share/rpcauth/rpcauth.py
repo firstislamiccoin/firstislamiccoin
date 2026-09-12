@@ -35,7 +35,7 @@ def main():
     salt = generate_salt(16)
     password_hmac = password_to_hmac(salt, args.password)
 
-    print('String to be appended to codexacoin.conf:')
+    print('String to be appended to firstislamiccoin.conf:')
     print(f'rpcauth={args.username}:{salt}${password_hmac}')
     print(f'Your password:\n{args.password}')
 

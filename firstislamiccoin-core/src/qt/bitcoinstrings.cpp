@@ -11,7 +11,7 @@
 static const char UNUSED *bitcoin_strings[] = {
 QT_TRANSLATE_NOOP("bitcoin-core", "The %s developers"),
 QT_TRANSLATE_NOOP("bitcoin-core", ""
-"%s corrupt. Try using the wallet tool codexacoin-wallet to salvage or "
+"%s corrupt. Try using the wallet tool firstislamiccoin-wallet to salvage or "
 "restoring a backup."),
 QT_TRANSLATE_NOOP("bitcoin-core", ""
 "%s failed to validate the -assumeutxo snapshot state. This indicates a "
@@ -64,7 +64,7 @@ QT_TRANSLATE_NOOP("bitcoin-core", ""
 QT_TRANSLATE_NOOP("bitcoin-core", ""
 "Error: Dumpfile identifier record is incorrect. Got \"%s\", expected \"%s\"."),
 QT_TRANSLATE_NOOP("bitcoin-core", ""
-"Error: Dumpfile version is not supported. This version of codexacoin-wallet "
+"Error: Dumpfile version is not supported. This version of firstislamiccoin-wallet "
 "only supports version 1 dumpfiles. Got dumpfile with version %s"),
 QT_TRANSLATE_NOOP("bitcoin-core", ""
 "Error: Duplicate descriptors created during migration. Your wallet may be "
