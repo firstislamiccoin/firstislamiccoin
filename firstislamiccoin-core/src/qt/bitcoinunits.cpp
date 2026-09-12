@@ -10,7 +10,9 @@
 
 #include <cassert>
 
-static constexpr auto MAX_DIGITS_BTC = 16;
+// FirstIslamicCoin: 11 whole digits + 8 decimals. Bitcoin's 16 fitted a 21 million
+// supply; FIC's 14 billion premine alone needs 11 whole digits.
+static constexpr auto MAX_DIGITS_BTC = 19;
 
 BitcoinUnits::BitcoinUnits(QObject *parent):
         QAbstractListModel(parent),
@@ -180,11 +182,19 @@ bool BitcoinUnits::parse(Unit unit, const QString& value, CAmount* val_out)
     bool ok = false;
     QString str = whole + decimals.leftJustified(num_decimals, '0');
 
-    if(str.size() > 18)
+    // FirstIslamicCoin: allow 19 digits. Upstream refused anything over 18, which
+    // never bites with 21 million BTC, but any amount of 10 billion FIC or more is
+    // 19 digits in fils -- the premine holder could not type their own balance.
+    // Twenty digits always exceed 63 bits; at 19, toLongLong() reports overflow
+    // and MoneyRange() below enforces MAX_MONEY.
+    if(str.size() > 19)
     {
         return false; // Longer numbers will exceed 63 bits
     }
     CAmount retvalue(str.toLongLong(&ok));
+    if (ok && !MoneyRange(retvalue)) {
+        ok = false;
+    }
     if(val_out)
     {
         *val_out = retvalue;
