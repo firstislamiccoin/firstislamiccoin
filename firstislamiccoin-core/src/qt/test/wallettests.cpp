@@ -200,7 +200,12 @@ std::shared_ptr<CWallet> SetupLegacyWatchOnlyWallet(interfaces::Node& node, Test
         CPubKey pubKey = test.coinbaseKey.GetPubKey();
         bool import_keys = wallet->ImportPubKeys({pubKey.GetID()}, {{pubKey.GetID(), pubKey}} , /*key_origins=*/{}, /*add_keypool=*/false, /*internal=*/false, /*timestamp=*/1);
         assert(import_keys);
-        wallet->SetLastBlockProcessed(105, WITH_LOCK(node.context()->chainman->GetMutex(), return node.context()->chainman->ActiveChain().Tip()->GetBlockHash()));
+        // FirstIslamicCoin: record the real tip height. Upstream hardcoded 105 for
+        // its 100+5-block fixture; this chain's fixture is 500+5 blocks, and a stale
+        // height gave coinbases a negative depth.
+        const auto [tip_height, tip_hash] = WITH_LOCK(node.context()->chainman->GetMutex(),
+            return std::make_pair(node.context()->chainman->ActiveChain().Height(), node.context()->chainman->ActiveChain().Tip()->GetBlockHash()));
+        wallet->SetLastBlockProcessed(tip_height, tip_hash);
     }
     SyncUpWallet(wallet, node);
     return wallet;
@@ -223,7 +228,10 @@ std::shared_ptr<CWallet> SetupDescriptorsWallet(interfaces::Node& node, TestChai
     if (!wallet->AddWalletDescriptor(w_desc, provider, "", false)) assert(false);
     CTxDestination dest = GetDestinationForKey(test.coinbaseKey.GetPubKey(), wallet->m_default_address_type);
     wallet->SetAddressBook(dest, "", wallet::AddressPurpose::RECEIVE);
-    wallet->SetLastBlockProcessed(105, WITH_LOCK(node.context()->chainman->GetMutex(), return node.context()->chainman->ActiveChain().Tip()->GetBlockHash()));
+    // FirstIslamicCoin: the real tip height, not upstream's hardcoded 105 (see above).
+    const auto [tip_height, tip_hash] = WITH_LOCK(node.context()->chainman->GetMutex(),
+        return std::make_pair(node.context()->chainman->ActiveChain().Height(), node.context()->chainman->ActiveChain().Tip()->GetBlockHash()));
+    wallet->SetLastBlockProcessed(tip_height, tip_hash);
     SyncUpWallet(wallet, node);
     wallet->SetBroadcastTransactions(true);
     return wallet;
