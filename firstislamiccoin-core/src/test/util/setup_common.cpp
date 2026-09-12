@@ -13,6 +13,7 @@
 #include <common/url.h>
 #include <consensus/consensus.h>
 #include <consensus/params.h>
+#include <consensus/merkle.h>
 #include <consensus/validation.h>
 #include <crypto/sha256.h>
 #include <init.h>
@@ -315,10 +316,20 @@ CBlock TestChain100Setup::CreateBlock(
     for (const CMutableTransaction& tx : txns) {
         block.vtx.push_back(MakeTransactionRef(tx));
     }
-    // FirstIslamicCoin
-    // RegenerateCommitments(block, *Assert(m_node.chainman));
+    // FirstIslamicCoin: recompute the witness commitment and merkle root now
+    // that transactions are in -- this fork's BlockAssembler leaves the merkle
+    // root to the caller -- and solve proof of work against the scrypt PoW
+    // hash, as CheckBlockHeader() checks it, not GetHash(), which is SHA256d
+    // for version-7 blocks. Upstream had both wrong (RegenerateCommitments was
+    // commented out because it breaks on blocks without a witness commitment),
+    // so this fixture never produced a valid block.
+    if (GetWitnessCommitmentIndex(block) != NO_WITNESS_COMMITMENT) {
+        RegenerateCommitments(block, *Assert(m_node.chainman));
+    } else {
+        block.hashMerkleRoot = BlockMerkleRoot(block);
+    }
 
-    while (!CheckProofOfWork(block.GetHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
+    while (!CheckProofOfWork(block.GetPoWHash(), block.nBits, m_node.chainman->GetConsensus())) ++block.nNonce;
 
     return block;
 }

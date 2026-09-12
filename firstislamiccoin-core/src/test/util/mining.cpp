@@ -52,7 +52,8 @@ std::vector<std::shared_ptr<CBlock>> CreateBlockChain(size_t total_height, const
         block.nBits = params.GenesisBlock().nBits;
         block.nNonce = 0;
 
-        while (!CheckProofOfWork(block.GetHash(), block.nBits, params.GetConsensus())) {
+        // FirstIslamicCoin: proof of work is the scrypt PoW hash (see CheckBlockHeader).
+        while (!CheckProofOfWork(block.GetPoWHash(), block.nBits, params.GetConsensus())) {
             ++block.nNonce;
             assert(block.nNonce);
         }
@@ -86,7 +87,9 @@ protected:
 
 COutPoint MineBlock(const NodeContext& node, std::shared_ptr<CBlock>& block)
 {
-    while (!CheckProofOfWork(block->GetHash(), block->nBits, Params().GetConsensus())) {
+    // FirstIslamicCoin: proof of work is the scrypt PoW hash, not GetHash(), which
+    // is SHA256d for the version-7 blocks BlockAssembler builds.
+    while (!CheckProofOfWork(block->GetPoWHash(), block->nBits, Params().GetConsensus())) {
         ++block->nNonce;
         assert(block->nNonce);
     }

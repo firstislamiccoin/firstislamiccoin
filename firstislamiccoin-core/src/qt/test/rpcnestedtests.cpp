@@ -82,9 +82,9 @@ void RPCNestedTests::rpcNestedTests()
     QVERIFY(result == result2);
 
     RPCConsole::RPCExecuteCommandLine(m_node, result, "getblock(getbestblockhash())[tx][0]", &filtered);
-    // FirstIslamicCoin: the regtest genesis coinbase txid (its merkle root). Upstream
-    // still expected Blackcoin's genesis here.
-    QVERIFY(result == "8b2a04a50eefa5278f18e583eb1f03e965be9e6210bb5e9c406cf7010cd594c0");
+    // FirstIslamicCoin: TestingSetup defaults to mainnet, so this is the mainnet
+    // genesis coinbase txid (its merkle root). Upstream still expected Blackcoin's.
+    QVERIFY(result == "098f41ec382356d32495c8db82e43d429f6c3d20a6ad8455a74cd99808d03e1a");
     QVERIFY(filtered == "getblock(getbestblockhash())[tx][0]");
 
     RPCConsole::RPCParseCommandLine(nullptr, result, "importprivkey", false, &filtered);
