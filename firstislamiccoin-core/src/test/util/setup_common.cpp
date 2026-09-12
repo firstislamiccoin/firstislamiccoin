@@ -268,12 +268,23 @@ TestingSetup::TestingSetup(
     }
 }
 
+/**
+ * FirstIslamicCoin: regtest stops accepting proof of work after block 500 unless
+ * told otherwise. This fixture mines its chain by proof of work, and many tests
+ * then mine further blocks on top of it, so lift the window for them.
+ */
+static std::vector<const char*> WithUnlimitedProofOfWork(std::vector<const char*> args)
+{
+    args.push_back("-lastpowblock=2147483646");
+    return args;
+}
+
 TestChain100Setup::TestChain100Setup(
         const ChainType chain_type,
         const std::vector<const char*>& extra_args,
         const bool coins_db_in_memory,
         const bool block_tree_db_in_memory)
-    : TestingSetup{ChainType::REGTEST, extra_args, coins_db_in_memory, block_tree_db_in_memory}
+    : TestingSetup{ChainType::REGTEST, WithUnlimitedProofOfWork(extra_args), coins_db_in_memory, block_tree_db_in_memory}
 {
     // FirstIslamicCoin: start the mock clock just after the regtest genesis block.
     // The upstream value, 1598887952 (2020), predates this chain's 2026 genesis,
