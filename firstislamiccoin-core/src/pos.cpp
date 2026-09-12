@@ -138,7 +138,7 @@ bool CheckProofOfStake(CBlockIndex* pindexPrev, const CTransaction& tx, unsigned
     }
 
     // Min age requirement
-    if (pindexPrev->nHeight + 1 - coinPrev.nHeight < Params().GetConsensus().nCoinbaseMaturity){
+    if (!IsStakeMature(coinPrev.nHeight, pindexPrev->nHeight + 1, Params().GetConsensus())) {
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "stake-prevout-not-mature", strprintf("CheckProofOfStake() : Stake prevout is not mature, expecting %i and only matured to %i", Params().GetConsensus().nCoinbaseMaturity, pindexPrev->nHeight + 1 - coinPrev.nHeight));
     }
 
@@ -173,7 +173,7 @@ bool CheckKernel(CBlockIndex* pindexPrev, unsigned int nBits, uint32_t nTime, co
             return false;
         }
 
-        if (pindexPrev->nHeight + 1 - coinPrev.nHeight < Params().GetConsensus().nCoinbaseMaturity) {
+        if (!IsStakeMature(coinPrev.nHeight, pindexPrev->nHeight + 1, Params().GetConsensus())) {
             return error("CheckKernel(): Coin is not mature");
         }
 
@@ -210,7 +210,7 @@ void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevo
         return;
     }
 
-    if (pindexPrev->nHeight + 1 - coinPrev.nHeight < Params().GetConsensus().nCoinbaseMaturity) {
+    if (!IsStakeMature(coinPrev.nHeight, pindexPrev->nHeight + 1, Params().GetConsensus())) {
         return;
     }
 
@@ -223,85 +223,13 @@ void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevo
     cache.insert({prevout, c});
 }
 
-// CodexaCoin: coin-age-proportional staking reward (spec Appendix A).
-//
-// IMPORTANT: this affects the REWARD only. The PoS v3 kernel/stake-eligibility
-// weight computed in CheckStakeKernelHash() above remains strictly amount-only
-// (bnWeight = arith_uint256(nValueIn), no age term) -- that is Blackcoin's
-// existing fix against coin-age-hoarding attacks on stake *eligibility*, and
-// this code does not touch it. Coin-age is reintroduced here, in reward
-// calculation, only.
-//
-//   coinage_coinsec = value_satoshis * min(age_seconds, AGE_CAP_SECONDS)
-//   nReward         = coinage_coinsec * STAKE_REWARD_ANNUAL_BP
-//                      / (10000 * SECONDS_PER_YEAR)
-//
-// 128-bit intermediate math (arith_uint256) is required: at CodexaCoin's
-// premine scale (14e9 CAC = 1.4e18 satoshis) a single large input times a
-// 60-day age cap (5,184,000 seconds) overflows int64 by several orders of
-// magnitude (1.4e18 * 5.184e6 ~= 7.3e24, vs int64 max ~9.2e18).
-CAmount ComputeCoinAgeReward(CAmount valueSat, int64_t ageSeconds, const Consensus::Params& params)
+// FirstIslamicCoin: replaces CodexaCoin's coin-age-proportional reward
+// (ComputeCoinAgeReward / GetCoinstakeMaxReward). The reward is now a fixed
+// amount per block, so the arithmetic that scaled it by value x age -- and the
+// 60-day cap and 128-bit overflow handling that came with it -- is gone.
+// Kernel weight in CheckStakeKernelHash() was already amount-only and is
+// unchanged.
+bool IsValidCoinstakeReward(CAmount nActualStakeReward, CAmount nFees, int nHeight, const Consensus::Params& params)
 {
-    if (valueSat <= 0 || ageSeconds <= 0)
-        return 0;
-
-    int64_t cappedAge = std::min(ageSeconds, params.nStakeRewardAgeCapSeconds);
-
-    arith_uint256 coinSeconds = arith_uint256(static_cast<uint64_t>(valueSat)) * arith_uint256(static_cast<uint64_t>(cappedAge));
-    arith_uint256 numerator = coinSeconds * arith_uint256(static_cast<uint64_t>(params.nStakeRewardAnnualBP));
-    arith_uint256 denominator = arith_uint256(10000) * arith_uint256(static_cast<uint64_t>(SECONDS_PER_YEAR));
-    arith_uint256 reward256 = numerator / denominator;
-
-    static const arith_uint256 nMaxCAmount = arith_uint256(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()));
-    if (reward256 > nMaxCAmount) {
-        // Defensive clamp; should be unreachable for any realistic single
-        // input under MAX_MONEY, but never let a reward computation wrap
-        // negative.
-        return std::numeric_limits<int64_t>::max();
-    }
-    return static_cast<CAmount>(reward256.GetLow64());
-}
-
-// Sums ComputeCoinAgeReward() across every input of a coinstake transaction.
-// Used both to independently verify a submitted coinstake's reward during
-// ConnectBlock() and (by the wallet, with its own already-loaded prevouts)
-// to construct a valid coinstake in the first place.
-//
-// IMPORTANT: origin timestamp resolution here deliberately does NOT mirror
-// CheckStakeKernelHash()'s "Coin.nTime if set, else the origin block's
-// time" fallback, even though that's the pattern used for kernel-hash
-// scrambling elsewhere in this file. Coin.nTime is not canonical across
-// nodes: CTransaction only serializes nTime for nVersion<2
-// (primitives/transaction.h) -- for our nVersion=2 transactions it's the
-// node's own in-memory value if that node originally mined the block
-// (never serialized), but silently 0 if the node instead received the
-// block over P2P (deserialized, hitting the nVersion>=2 path). Since kernel
-// weight is amount-only (unaffected by coin-age), that inconsistency was
-// harmless before this feature existed. It stops being harmless the moment
-// age feeds into a *reward amount*, which every node must agree on
-// byte-for-byte: two nodes could otherwise compute two different
-// "originTime" values for the identical UTXO depending on which one mined
-// it, disagree on the allowed reward by the resulting few seconds of
-// coinbase-vs-block-time skew (node/miner.cpp sets a PoW block's final
-// time via std::max(MTP+1, ...) *after* the coinbase tx object already
-// self-initialized its own nTime at construction), and reject each other's
-// otherwise-valid blocks. Confirmed as a real, reproducible bug this
-// session (see PARAMETERS.md section 6.3) before this fix: always use the
-// origin block's own header time (canonical, identical on every node that
-// has that block, regardless of sync history), never Coin.nTime.
-CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction& tx, CCoinsViewCache& view, unsigned int nTimeTx, const Consensus::Params& params)
-{
-    CAmount nTotal = 0;
-    for (const CTxIn& txin : tx.vin) {
-        Coin coinPrev;
-        if (!view.GetCoin(txin.prevout, coinPrev))
-            continue; // Caller (ConnectBlock/CheckTxInputs) already rejects missing prevouts elsewhere.
-
-        const CBlockIndex* blockFrom = pindexPrev->GetAncestor(coinPrev.nHeight);
-        int64_t originTime = blockFrom ? blockFrom->nTime : 0;
-        int64_t age = (int64_t)nTimeTx - originTime;
-
-        nTotal += ComputeCoinAgeReward(coinPrev.out.nValue, age, params);
-    }
-    return nTotal;
+    return nActualStakeReward == GetProofOfStakeReward(nHeight, nFees, params);
 }

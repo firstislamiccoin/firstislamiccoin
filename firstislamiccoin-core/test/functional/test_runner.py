@@ -95,10 +95,10 @@ BASE_SCRIPTS = [
     # vv Tests less than 5m vv
     'feature_taproot.py',
     'feature_block.py',
-    # CodexaCoin: coin-age reward / premine / PoS-reorg tests (PARAMETERS.md section 6/9)
+    # FirstIslamicCoin: genesis premine, fixed staking reward, PoS reorg
+    'feature_fic_fixed_reward.py',
+    'feature_fic_genesis_premine.py',
     'feature_pos_reorg.py',
-    'feature_coinage_reward.py',
-    'feature_premine.py',
     # vv Tests less than 2m vv
     'mining_getblocktemplate_longpoll.py',
     'p2p_segwit.py',

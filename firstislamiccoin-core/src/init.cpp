@@ -880,6 +880,13 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     const CChainParams& chainparams = Params();
     // ********************************************************* Step 2: parameter interactions
 
+    // FirstIslamicCoin: refuse to run a network whose genesis premine still pays
+    // the placeholder script. Nobody holds its key, so the chain could never
+    // stake its first block; fail here with the reason instead.
+    if (chainparams.GenesisPremineIsPlaceholder()) {
+        return InitError(Untranslated(strprintf("The %s genesis block is a placeholder: its premine awaits the genesis key ceremony (docs/LAUNCH-RUNBOOK.md). Rebuild with the final genesis block before running this network.", ChainTypeToDisplayString(chainparams.GetChainType()))));
+    }
+
     // also see: InitParameterInteraction()
 
     // Error if network-specific options (-addnode, -connect, etc) are

@@ -96,8 +96,6 @@ void WalletInit::AddWalletOptions(ArgsManager& argsman) const
 
     argsman.AddArg("-minstakingamount=<amt>", strprintf("Minimum input value to be used for staking (default: %u)", wallet::DEFAULT_MIN_STAKING_AMOUNT), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-reservebalance=<amt>", strprintf("Reserved balance not used for staking (default: %u)", wallet::DEFAULT_RESERVE_BALANCE), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
-    argsman.AddArg("-donatetodevfund=<n>", strprintf("Donate the specified percentage of staking rewards to the dev fund (%u to %u, default: %u)",
-        wallet::MIN_DONATION_PERCENTAGE, wallet::MAX_DONATION_PERCENTAGE, wallet::DEFAULT_DONATION_PERCENTAGE), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
 
     argsman.AddArg("-walletrejectlongchains", strprintf("Wallet will not create transactions that violate mempool chain limits (default: %u)", DEFAULT_WALLET_REJECT_LONG_CHAINS), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::WALLET_DEBUG_TEST);
     argsman.AddArg("-walletcrosschain", strprintf("Allow reusing wallet files across chains (default: %u)", DEFAULT_WALLETCROSSCHAIN), ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::WALLET_DEBUG_TEST);

@@ -24,10 +24,6 @@
 
 using namespace std;
 
-/** CodexaCoin: seconds in a Gregorian year (365.2425 days), used by the
- *  coin-age reward formula. Not network-specific. */
-static constexpr int64_t SECONDS_PER_YEAR = 31556952;
-
 /** Compute the hash modifier for proof-of-stake */
 uint256 ComputeStakeModifier(const CBlockIndex* pindexPrev, const uint256& kernel);
 
@@ -47,8 +43,24 @@ bool CheckStakeKernelHash(const CBlockIndex* pindexPrev, unsigned int nBits, uin
 bool CheckProofOfStake(CBlockIndex* pindexPrev, const CTransaction& tx, unsigned int nBits, BlockValidationState& state, CCoinsViewCache& view, unsigned int nTimeTx);
 void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevout, CBlockIndex* pindexPrev, CCoinsViewCache& view);
 
-/** CodexaCoin: coin-age-proportional staking reward (see pos.cpp for the full derivation). */
-CAmount ComputeCoinAgeReward(CAmount valueSat, int64_t ageSeconds, const Consensus::Params& params);
-CAmount GetCoinstakeMaxReward(const CBlockIndex* pindexPrev, const CTransaction& tx, CCoinsViewCache& view, unsigned int nTimeTx, const Consensus::Params& params);
+/**
+ * FirstIslamicCoin: whether a coin created at nCoinHeight may be used as a
+ * stake kernel, or spent, in a block at nSpendHeight. Coins need
+ * nCoinbaseMaturity confirmations, except genesis outputs. The genesis block
+ * can never be reorganised away, which is the only thing maturity guards
+ * against; and without the exemption the chain could not start, since no
+ * other coin exists to produce blocks while the premine matures.
+ */
+inline bool IsStakeMature(int nCoinHeight, int nSpendHeight, const Consensus::Params& params)
+{
+    return nCoinHeight == 0 || nSpendHeight - nCoinHeight >= params.nCoinbaseMaturity;
+}
+
+/**
+ * FirstIslamicCoin: the fixed-reward invariant. nActualStakeReward is the
+ * coinstake's value out minus value in; it must equal the fixed block reward
+ * plus nFees exactly, whatever the amount or age of the coins staked.
+ */
+bool IsValidCoinstakeReward(CAmount nActualStakeReward, CAmount nFees, int nHeight, const Consensus::Params& params);
 
 #endif // CODEXACOIN_POS_H

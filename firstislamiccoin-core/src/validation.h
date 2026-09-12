@@ -117,8 +117,8 @@ void StartScriptCheckWorkerThreads(int threads_num);
 void StopScriptCheckWorkerThreads();
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams, bool fProofOfStake = false);
-CAmount GetProofOfWorkSubsidy();
-CAmount GetProofOfStakeSubsidy();
+/** FirstIslamicCoin: what a proof-of-stake block at nHeight must mint -- the fixed reward plus nFees. */
+CAmount GetProofOfStakeReward(int nHeight, CAmount nFees, const Consensus::Params& consensusParams);
 
 bool FatalError(kernel::Notifications& notifications, BlockValidationState& state, const std::string& strMessage, const bilingual_str& userMessage = {});
 

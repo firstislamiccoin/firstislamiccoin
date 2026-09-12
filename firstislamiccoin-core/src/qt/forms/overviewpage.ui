@@ -279,48 +279,22 @@
              </widget>
             </item>
             <item row="7" column="0">
-             <widget class="QLabel" name="labelDonationsText">
+             <widget class="QLabel" name="labelBlockRewardText">
               <property name="text">
-               <string>Donations:</string>
+               <string>Block reward:</string>
               </property>
              </widget>
             </item>
             <item row="7" column="1">
-             <widget class="QLabel" name="labelDonations">
+             <widget class="QLabel" name="labelBlockReward">
               <property name="cursor">
                <cursorShape>IBeamCursor</cursorShape>
               </property>
               <property name="toolTip">
-               <string>Total donations to the CodexaCoin team</string>
+               <string>Every block you stake pays this fixed reward plus the fees of the transactions in it. The amount does not depend on how much you stake or for how long; a larger stake only wins blocks more often. Rewards are not guaranteed.</string>
               </property>
               <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-              </property>
-              <property name="textInteractionFlags">
-               <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="0">
-             <widget class="QLabel" name="labelStakingRewardText">
-              <property name="text">
-               <string>Est. monthly reward:</string>
-              </property>
-             </widget>
-            </item>
-            <item row="8" column="1">
-             <widget class="QLabel" name="labelStakingRewardEstimate">
-              <property name="cursor">
-               <cursorShape>IBeamCursor</cursorShape>
-              </property>
-              <property name="toolTip">
-               <string>Deterministic estimate at the current coin-age staking rate (~1.14%/month, ~14.6%/year compounded) applied to your current stakeable balance. Actual reward depends on how long each coin stays unspent before it stakes (see the wallet documentation) -- this is an estimate, never a guarantee.</string>
-              </property>
-              <property name="text">
-               <string notr="true">0.00000000 CAC / month</string>
+               <string notr="true">10.00000000 FIC + fees</string>
               </property>
               <property name="alignment">
                <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>

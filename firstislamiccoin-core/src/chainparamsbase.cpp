@@ -17,6 +17,7 @@ void SetupChainParamsBaseOptions(ArgsManager& argsman)
     argsman.AddArg("-regtest", "Enter regression test mode, which uses a special chain in which blocks can be solved instantly. "
                  "This is intended for regression testing tools and app development. Equivalent to -chain=regtest.", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::CHAINPARAMS);
     argsman.AddArg("-testactivationheight=name@height.", "Set the activation height of 'name' (segwit, bip34, dersig, cltv, csv). (regtest-only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
+    argsman.AddArg("-lastpowblock=<n>", "Last height at which proof-of-work blocks are accepted. 0 makes the chain proof-of-stake from block 1, as on mainnet and testnet (regtest-only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::DEBUG_TEST);
     argsman.AddArg("-testnet", "Use the test chain. Equivalent to -chain=test.", ArgsManager::ALLOW_ANY, OptionsCategory::CHAINPARAMS);
     argsman.AddArg("-vbparams=deployment:start:end[:min_activation_height]", "Use given start/end times and min_activation_height for specified version bits deployment (regtest-only)", ArgsManager::ALLOW_ANY | ArgsManager::DEBUG_ONLY, OptionsCategory::CHAINPARAMS);
     argsman.AddArg("-signet", "Use the signet chain. Equivalent to -chain=signet. Note that the network is defined by the -signetchallenge parameter", ArgsManager::ALLOW_ANY, OptionsCategory::CHAINPARAMS);
@@ -38,17 +39,16 @@ const CBaseChainParams& BaseParams()
  */
 std::unique_ptr<CBaseChainParams> CreateBaseChainParams(const ChainType chain)
 {
-    // CodexaCoin: RPC ports per PARAMETERS.md (Tor ports shifted to match,
-    // arbitrary but kept out of the P2P/RPC ranges above).
+    // FirstIslamicCoin: RPC port is the P2P port + 1, Tor onion target + 3.
     switch (chain) {
     case ChainType::MAIN:
-        return std::make_unique<CBaseChainParams>("", 16211, 16213);
+        return std::make_unique<CBaseChainParams>("", 19771, 19773);
     case ChainType::TESTNET:
-        return std::make_unique<CBaseChainParams>("testnet", 26211, 26213);
+        return std::make_unique<CBaseChainParams>("testnet", 29771, 29773);
     case ChainType::SIGNET:
-        return std::make_unique<CBaseChainParams>("signet", 46211, 46213);
+        return std::make_unique<CBaseChainParams>("signet", 49771, 49773);
     case ChainType::REGTEST:
-        return std::make_unique<CBaseChainParams>("regtest", 36211, 36213);
+        return std::make_unique<CBaseChainParams>("regtest", 39771, 39773);
     }
     assert(false);
 }

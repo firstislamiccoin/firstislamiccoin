@@ -370,7 +370,8 @@ void Chainstate::MaybeUpdateMempoolForReorg(
                 const Coin& coin{CoinsTip().AccessCoin(txin.prevout)};
                 assert(!coin.IsSpent());
                 const auto mempool_spend_height{m_chain.Tip()->nHeight + 1};
-                if (coin.IsCoinBase() && mempool_spend_height - coin.nHeight < Params().GetConsensus().nCoinbaseMaturity) {
+                // FirstIslamicCoin: genesis outputs are exempt (see IsStakeMature() in pos.h).
+                if (coin.IsCoinBase() && coin.nHeight != 0 && mempool_spend_height - coin.nHeight < Params().GetConsensus().nCoinbaseMaturity) {
                     return true;
                 }
             }
@@ -1648,43 +1649,24 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams, bool fProofOfStake)
 {
+    // FirstIslamicCoin: the genesis coinbase carries the whole premine.
+    if (nHeight == 0)
+        return consensusParams.nPremineTotal;
+
     if (fProofOfStake)
-        return GetProofOfStakeSubsidy();
+        return consensusParams.StakeReward(nHeight);
 
-    return GetProofOfWorkSubsidy();
+    // Mainnet and testnet have nLastPOWBlock = 0, so this is zero there and
+    // ContextualCheckBlockHeader rejects the block anyway. Only regtest mines
+    // PoW, as a test-harness convenience.
+    return nHeight <= consensusParams.nLastPOWBlock ? consensusParams.nPowSubsidy : 0;
 }
 
-// CodexaCoin
-CAmount GetProofOfWorkSubsidy()
+CAmount GetProofOfStakeReward(int nHeight, CAmount nFees, const Consensus::Params& consensusParams)
 {
-    const Consensus::Params& params = Params().GetConsensus();
-    if (params.nLastPOWBlock <= 0 || params.nPremineTotal <= 0)
-        return 0;
-    // CodexaCoin: the entire premine is minted evenly across the fixed PoW
-    // window (blocks 1..nLastPOWBlock), mined privately pre-launch and
-    // checkpointed. See PARAMETERS.md section 5 for the design rationale
-    // (window length chosen to exactly equal nCoinbaseMaturity so PoS can
-    // take over at block nLastPOWBlock+1 with no staking-eligibility gap).
-    return params.nPremineTotal / params.nLastPOWBlock;
-}
-
-CAmount GetProofOfStakeSubsidy()
-{
-    // CodexaCoin: retained only as a legacy/statistics-only placeholder.
-    // Actual PoS block rewards are coin-age-proportional (see
-    // pos.cpp::GetCoinstakeMaxReward / ComputeCoinAgeReward) and vary per
-    // coinstake depending on its specific inputs' value and age -- they are
-    // no longer a fixed value derivable from block height alone.
-    // ConnectBlock() does NOT use this value for PoS block validation (see
-    // nMaxStakeReward there); it remains here only because a few
-    // non-consensus indexing/RPC code paths (coinstatsindex.cpp,
-    // getblockstats's "subsidy" field) still call GetBlockSubsidy(height,
-    // params, /*fProofOfStake=*/true) for informational display and have
-    // not yet been updated to read actual per-block coinstake output
-    // values instead. Those specific figures will not reflect real rewards
-    // post-coin-age-reward; fixing them is tracked as Phase-1 follow-up,
-    // not required for consensus correctness.
-    return COIN * 3 / 2;
+    // FirstIslamicCoin: a fixed amount per block plus the fees collected. There
+    // is deliberately no input for the stake's value or age.
+    return consensusParams.StakeReward(nHeight) + nFees;
 }
 
 CoinsViews::CoinsViews(DBParams db_params, CoinsViewOptions options)
@@ -2229,27 +2211,25 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     assert(hashPrevBlock == view.GetBestBlock());
 
     // Check proof-of-stake
-    CAmount nMaxStakeReward = 0;
     if (block.IsProofOfStake() && params.GetConsensus().IsProtocolV3(block.GetBlockTime())) {
         unsigned int nCoinstakeTime = block.vtx[1]->nTime ? block.vtx[1]->nTime : block.nTime;
         if (!CheckProofOfStake(pindex->pprev, *block.vtx[1], block.nBits, state, view, nCoinstakeTime)) {
             LogPrintf("WARNING: %s: check proof-of-stake failed for block %s\n", __func__, block.GetHash().ToString());
             return false; // do not error here as we expect this during initial block download
         }
-        // CodexaCoin: coin-age-proportional reward cap, computed from the
-        // coinstake's actual inputs while `view` still reflects chain state
-        // strictly before this block (none of its own transactions have
-        // updated the coin set yet). See pos.cpp::GetCoinstakeMaxReward.
-        nMaxStakeReward = GetCoinstakeMaxReward(pindex->pprev, *block.vtx[1], view, nCoinstakeTime, params.GetConsensus());
     }
 
     num_blocks_total++;
 
-    // Special case for the genesis block, skipping connection of its transactions
-    // (its coinbase is unspendable)
+    // Special case for the genesis block: nothing to validate, no undo data.
+    // FirstIslamicCoin: its coinbase is the premine and is spendable, so its
+    // outputs enter the UTXO set here. Upstream skipped this step because
+    // Bitcoin's genesis output was deliberately unspendable.
     if (block_hash == params.GetConsensus().hashGenesisBlock) {
-        if (!fJustCheck)
+        if (!fJustCheck) {
+            AddCoins(view, *block.vtx[0], pindex->nHeight);
             view.SetBestBlock(pindex->GetBlockHash());
+        }
         return true;
     }
 
@@ -2381,10 +2361,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
         if (!tx.IsCoinBase())
         {
+            // FirstIslamicCoin: fees are already tallied from CheckTxInputs
+            // above. Upstream added (value in - value out) here a second time
+            // for every non-coinstake transaction, which let a block claim
+            // twice the fees it collected.
             if (tx.IsCoinStake())
                 nActualStakeReward = tx.GetValueOut()-view.GetValueIn(tx);
-            else
-                nFees += view.GetValueIn(tx)-tx.GetValueOut();
 
             std::vector<CScriptCheck> vChecks;
             bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
@@ -2422,12 +2404,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     }
 
     if (block.IsProofOfStake() && params.GetConsensus().IsProtocolV3(block.GetBlockTime())) {
-        // CodexaCoin: coin-age-proportional cap (nMaxStakeReward), not the
-        // old flat GetProofOfStakeSubsidy(). Computed above, alongside
-        // CheckProofOfStake(), from the coinstake's own inputs.
-        CAmount blockReward = nFees + nMaxStakeReward;
-        if (nActualStakeReward > blockReward) {
-            LogPrintf("ERROR: ConnectBlock(): coinstake pays too much (actual=%d vs limit=%d)\n", nActualStakeReward, blockReward);
+        // FirstIslamicCoin: the fixed-reward invariant. The coinstake must mint
+        // exactly the fixed reward plus the block's fees -- no more and no less.
+        if (!IsValidCoinstakeReward(nActualStakeReward, nFees, pindex->nHeight, params.GetConsensus())) {
+            LogPrintf("ERROR: ConnectBlock(): coinstake mints %d, must be exactly %d (fixed reward + fees)\n",
+                      nActualStakeReward, GetProofOfStakeReward(pindex->nHeight, nFees, params.GetConsensus()));
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cs-amount");
         }
     }

@@ -196,7 +196,6 @@ OverviewPage::~OverviewPage()
 void OverviewPage::setBalance(const interfaces::WalletBalances& balances)
 {
     BitcoinUnit unit = walletModel->getOptionsModel()->getDisplayUnit();
-    unsigned int donation_percentage = walletModel->wallet().getDonationPercentage();
     if (walletModel->wallet().isLegacy()) {
         if (walletModel->wallet().privateKeysDisabled()) {
             ui->labelBalance->setText(BitcoinUnits::formatWithPrivacy(unit, balances.watch_only_balance, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy));
@@ -223,38 +222,20 @@ void OverviewPage::setBalance(const interfaces::WalletBalances& balances)
         ui->labelStake->setText(BitcoinUnits::formatWithPrivacy(unit, balances.stake, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy));
         ui->labelTotal->setText(BitcoinUnits::formatWithPrivacy(unit, balances.balance + balances.unconfirmed_balance + balances.immature_balance + balances.stake, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy));
     }
-    ui->labelDonations->setText((m_privacy ? QString::fromStdString("#") : (QString::number(donation_percentage) + "%")) + " of stake rewards");
 
-    // CodexaCoin: deterministic monthly reward estimate at the coin-age
-    // staking rate (spec Appendix A / PARAMETERS.md section 6), applied to
-    // the current spendable balance as a stand-in for "stakeable" -- not
-    // exact (doesn't account for per-UTXO min-age/maturity timing or the
-    // 60-day age cap), but a reasonable steady-state estimate: at the
-    // target rate a balance held continuously earns
-    // balance * (nStakeRewardAnnualBP / 10000) / 12 per month, simple
-    // (non-compounded) -- matches the "~1.14%/month" figure quoted
-    // elsewhere rather than the compounded annual figure, since that's
-    // the number users actually see accrue month to month.
-    {
-        // Double arithmetic deliberately: this is a UI estimate, not a
-        // consensus amount, so there's no need for the 128-bit intermediate
-        // math the actual reward formula uses in pos.cpp (naive int64
-        // multiplication here -- balance * annualBP -- would overflow for
-        // any realistically large balance, e.g. the premine scale).
-        const int64_t annualBP = Params().GetConsensus().nStakeRewardAnnualBP;
-        const CAmount monthlyReward = static_cast<CAmount>(
-            (static_cast<double>(balances.balance) * annualBP / 10000.0) / 12.0);
-        ui->labelStakingRewardEstimate->setText(
-            BitcoinUnits::formatWithPrivacy(unit, monthlyReward, BitcoinUnits::SeparatorStyle::ALWAYS, m_privacy)
-            + " / " + tr("month"));
-    }
+    // FirstIslamicCoin: every staked block pays the same fixed reward plus fees,
+    // whatever the stake's size or age, so there is no rate to project onto the
+    // balance. Show the reward itself.
+    const int next_height{clientModel ? clientModel->getNumBlocks() + 1 : 1};
+    ui->labelBlockReward->setText(
+        BitcoinUnits::formatWithUnit(unit, Params().GetConsensus().StakeReward(next_height), false, BitcoinUnits::SeparatorStyle::ALWAYS)
+        + " " + tr("+ fees"));
     // only show immature (newly mined) balance if it's non-zero, so as not to complicate things
     // for the non-mining users
     bool showImmature = balances.immature_balance != 0;
     bool showStake = balances.stake != 0;
     bool showWatchOnlyImmature = balances.immature_watch_only_balance != 0;
     bool showWatchOnlyStake = balances.watch_only_stake != 0;
-    bool showDonations = donation_percentage != 0;
 
     // for symmetry reasons also show immature label when the watch-only one is shown
     ui->labelImmature->setVisible(showImmature || showWatchOnlyImmature);
@@ -263,8 +244,6 @@ void OverviewPage::setBalance(const interfaces::WalletBalances& balances)
     ui->labelStake->setVisible(showStake || showWatchOnlyStake);
     ui->labelStakeText->setVisible(showStake || showWatchOnlyStake);
     ui->labelWatchStake->setVisible(!walletModel->wallet().privateKeysDisabled() && showWatchOnlyStake); // show watch-only stake balance
-    ui->labelDonations->setVisible(showDonations);
-    ui->labelDonationsText->setVisible(showDonations);
 }
 
 // show/hide watch-only labels

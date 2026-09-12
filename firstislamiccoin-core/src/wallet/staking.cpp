@@ -17,53 +17,13 @@ namespace wallet {
 static int64_t GetStakeCombineThreshold() { return 500 * COIN; }
 static int64_t GetStakeSplitThreshold() { return 2 * GetStakeCombineThreshold(); }
 
-// CodexaCoin: resolve a wallet UTXO's origin time for coin-age reward
-// purposes. MUST match pos.cpp::GetCoinstakeMaxReward's resolution
-// EXACTLY, or the wallet can construct a coinstake that ConnectBlock (on
-// this node or any peer) then rejects as paying too much -- or, worse,
-// that a receiving node computes a *different* allowed reward for than
-// the constructing node did, causing nodes to disagree with each other
-// depending purely on which one originally mined a given input.
-//
-// Two bugs found and fixed this session, in order:
-//   1. Naively reading wtx.tx->nTime directly: CTransaction only
-//      serializes nTime for nVersion<2 (primitives/transaction.h); for our
-//      nVersion=2 transactions it deserializes as a hardcoded 0, making
-//      (txNew.nTime - 0) the "age" -- effectively the full Unix
-//      timestamp, clamped to AGE_CAP_SECONDS, inflating a single
-//      coinstake's reward by ~21,600x.
-//   2. Falling back to the confirming block's time only when tx->nTime
-//      was 0 (mirroring pos.cpp's OLD fallback pattern): tx->nTime can
-//      actually be *nonzero* here if this node originally mined the
-//      input itself (never round-tripped through (de)serialization), but
-//      a few seconds *earlier* than that same block's own header time
-//      (node/miner.cpp sets a PoW block's final nTime via
-//      std::max(MTP+1, ...) *after* the coinbase tx object already
-//      self-initialized its own nTime at construction). A peer that
-//      instead received that block over P2P has no such in-memory value
-//      and always falls back to the (later) block time -- so the two
-//      nodes compute two different rewards for the *same* input,
-//      and the peer correctly rejects the originating node's own block.
-//      Confirmed as a real, reproducible cross-node consensus failure
-//      this session (see PARAMETERS.md section 6.3).
-//
-// Fix for both: always use the origin block's own canonical header time,
-// via wallet.chain().findBlock() -- identical on every node that has that
-// block, regardless of whether they mined it or synced it -- never
-// wtx.tx->nTime, and never wallet-local metadata like nTimeReceived
-// (which depends on when *this* node happened to see the tx over P2P).
-static int64_t GetWalletTxOriginTime(const CWallet& wallet, const CWalletTx& wtx)
+// FirstIslamicCoin: genesis premine outputs may stake from block 1 (see
+// IsStakeMature() in pos.h). Wallet code works in confirmation depths rather
+// than heights, so it recognises them by their confirming block.
+static bool IsGenesisOutput(const CWalletTx& wtx)
 {
-    if (const auto* conf = wtx.state<TxStateConfirmed>()) {
-        int64_t block_time = 0;
-        if (wallet.chain().findBlock(conf->confirmed_block_hash, interfaces::FoundBlock().time(block_time))) {
-            return block_time;
-        }
-    }
-    // Should be unreachable for any UTXO that passed SelectCoinsForStaking's
-    // depth check (which requires it to be confirmed), but fail safe to an
-    // age of 0 (no reward) rather than a wildly wrong one.
-    return 0;
+    const auto* conf = wtx.state<TxStateConfirmed>();
+    return conf && conf->confirmed_block_height == 0;
 }
 
 void StakeCoins(CWallet& wallet, bool fStake) {
@@ -103,25 +63,13 @@ void StopStake(CWallet& wallet) {
     }
 }
 
-// CodexaCoin: staking-eligible balance -- deliberately NOT GetBalance()'s
-// m_mine_trusted, which (via CachedTxGetAvailableCredit -> IsTxImmature ->
-// GetTxBlocksToMaturity) only counts a coinbase/coinstake output once it
-// has nCoinbaseMaturity+1 confirmations. The PoS block-validation rule in
-// pos.cpp (CheckProofOfStake, ContextualCheckBlockHeader) only requires
-// nCoinbaseMaturity confirmations -- one block earlier, by design, per
-// PARAMETERS.md section 5.2, so the very first PoS block can be produced
-// the moment the PoW premine window ends with no dead zone. Reusing the
-// generic "trusted balance" here silently reintroduced exactly that dead
-// zone: every wallet would refuse to even attempt staking with its own
-// premine output until one block after the chain could actually accept
-// one, and since nLastPOWBlock permanently disables PoW at the same
-// height, nothing could ever produce that first block. Confirmed as a
-// real, reproducible stall at height 500 on live mainnet (2026-08-01) --
-// getbalances showed the full premine as "immature" and getstakinginfo
-// showed weight 0, both explained by chasing this exact code path.
-// Sums AvailableCoinsForStaking's own candidate list instead, which
-// already applies the correct (one-block-earlier) threshold via its
-// min_depth check.
+// Staking-eligible balance -- deliberately NOT GetBalance()'s m_mine_trusted,
+// which (via CachedTxGetAvailableCredit -> IsTxImmature -> GetTxBlocksToMaturity)
+// only counts a coinbase/coinstake output once it has nCoinbaseMaturity+1
+// confirmations, one more than CheckProofOfStake() requires. Using it would
+// make every wallet wait a block longer than consensus does before staking a
+// maturing output. Sums AvailableCoinsForStaking's own candidate list instead,
+// which applies the consensus threshold via its min_depth check.
 static CAmount GetStakingBalance(const CWallet& wallet)
 {
     LOCK(wallet.cs_wallet);
@@ -158,7 +106,7 @@ uint64_t GetStakeWeight(const CWallet& wallet)
 
     for (std::pair<const CWalletTx*,unsigned int> pcoin : setCoins)
     {
-        if (wallet.GetTxDepthInMainChain(*pcoin.first) >= Params().GetConsensus().nCoinbaseMaturity)
+        if (IsGenesisOutput(*pcoin.first) || wallet.GetTxDepthInMainChain(*pcoin.first) >= Params().GetConsensus().nCoinbaseMaturity)
         {
             nWeight += pcoin.first->tx->vout[pcoin.second].nValue;
         }
@@ -209,7 +157,7 @@ void AvailableCoinsForStaking(const CWallet& wallet,
             continue;
         }
 
-        if (nDepth < min_depth || nDepth > max_depth) {
+        if ((nDepth < min_depth && !IsGenesisOutput(wtx)) || nDepth > max_depth) {
             continue;
         }
 
@@ -368,13 +316,6 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
         return false;
 
     CAmount nCredit = 0;
-    // CodexaCoin: running coin-age-proportional reward, accumulated per
-    // input as it's added below (kernel input, then any combined inputs).
-    // Mirrors GetCoinstakeMaxReward() in pos.cpp so the wallet never builds
-    // a coinstake that consensus would reject for paying too much, and
-    // never leaves reward on the table by understaking relative to what's
-    // actually allowed.
-    CAmount nCoinAgeReward = 0;
     bool fKernelFound = false;
     CScript scriptPubKeyKernel, scriptPubKeyOut;
     bool bMinterKey = false;
@@ -464,10 +405,6 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
                 txNew.nTime -= n;
                 txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
                 nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
-                nCoinAgeReward += ComputeCoinAgeReward(
-                    pcoin.first->tx->vout[pcoin.second].nValue,
-                    (int64_t)txNew.nTime - GetWalletTxOriginTime(wallet, *pcoin.first),
-                    Params().GetConsensus());
                 vwtxPrev.push_back(tx);
 
                 if (bMinterKey) {
@@ -520,56 +457,32 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
 
             txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
             nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
-            nCoinAgeReward += ComputeCoinAgeReward(
-                pcoin.first->tx->vout[pcoin.second].nValue,
-                (int64_t)txNew.nTime - GetWalletTxOriginTime(wallet, *pcoin.first),
-                Params().GetConsensus());
             vwtxPrev.push_back(tx);
         }
     }
 
     // Calculate reward
-    // CodexaCoin: coin-age-proportional reward (nCoinAgeReward, accumulated
-    // above per input) replaces Blackcoin's flat GetProofOfStakeSubsidy().
-    // See PARAMETERS.md section 6 / spec Appendix A.
-    CAmount nReward = nFees + nCoinAgeReward;
+    // FirstIslamicCoin: the fixed block reward plus the fees of this block's
+    // transactions -- exactly what ConnectBlock requires. Nothing about the
+    // staked inputs, their amount or their age, enters into it, and all of it
+    // goes to the staker.
+    const CAmount nReward = GetProofOfStakeReward(pindexPrev->nHeight + 1, nFees, Params().GetConsensus());
     if (nReward < 0)
         return false;
-
-    bool isDevFundEnabled = (wallet.m_donation_percentage > 0 && !Params().GetDevFundAddress().empty()) ? true : false;
-    CAmount nDevCredit = 0;
-    CAmount nMinerCredit = 0;
-
-    if (isDevFundEnabled)
-    {
-        nDevCredit = (nCoinAgeReward * wallet.m_donation_percentage) / 100;
-        nMinerCredit = nReward - nDevCredit;
-        nCredit += nMinerCredit;
-    }
-    else
-    {
-        nCredit += nReward;
-    }
+    nCredit += nReward;
 
     // Split stake
     if (nCredit >= GetStakeSplitThreshold())
         txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
 
-    if (isDevFundEnabled)
-        txNew.vout.push_back(CTxOut(0, Params().GetDevRewardScript()));
-
     // Set output amount
-    if (txNew.vout.size() == (isDevFundEnabled ? 4u : 3u) + bMinterKey) {
+    if (txNew.vout.size() == 3u + bMinterKey) {
         txNew.vout[1 + bMinterKey].nValue = (nCredit / 2 / CENT) * CENT;
         txNew.vout[2 + bMinterKey].nValue = nCredit - txNew.vout[1 + bMinterKey].nValue;
-        if (isDevFundEnabled)
-            txNew.vout[3 + bMinterKey].nValue = nDevCredit;
     }
     else
     {
         txNew.vout[1 + bMinterKey].nValue = nCredit;
-        if (isDevFundEnabled)
-            txNew.vout[2 + bMinterKey].nValue = nDevCredit;
     }
 
     // Sign

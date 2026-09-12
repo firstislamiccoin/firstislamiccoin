@@ -140,10 +140,6 @@ static constexpr size_t DUMMY_NESTED_P2WPKH_INPUT_SIZE = 91;
 static const CAmount DEFAULT_MIN_STAKING_AMOUNT = 0.1 * COIN;
 //! -reservebalance default
 static const CAmount DEFAULT_RESERVE_BALANCE = 0;
-//! -donatetodevfund default
-static const unsigned int DEFAULT_DONATION_PERCENTAGE = 20;
-static const unsigned int MIN_DONATION_PERCENTAGE = 0;
-static const unsigned int MAX_DONATION_PERCENTAGE = 95;
 
 class CCoinControl;
 
@@ -721,7 +717,6 @@ public:
     int64_t m_last_coin_stake_search_interval{0};
     CAmount m_min_staking_amount{DEFAULT_MIN_STAKING_AMOUNT};
     CAmount m_reserve_balance{DEFAULT_RESERVE_BALANCE};
-    unsigned int m_donation_percentage{DEFAULT_DONATION_PERCENTAGE};
     std::atomic<bool> m_enabled_staking{false};
     std::atomic<bool> m_stop_staking_thread{false};
     uint64_t GetStakeWeight() const;

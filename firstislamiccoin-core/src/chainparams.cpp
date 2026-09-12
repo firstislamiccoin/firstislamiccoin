@@ -11,7 +11,6 @@
 #include <consensus/params.h>
 #include <deploymentinfo.h>
 #include <logging.h>
-#include <key_io.h> // for DecodeDestination()
 #include <tinyformat.h>
 #include <util/chaintype.h>
 #include <util/strencodings.h>
@@ -61,6 +60,13 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
         } else {
             throw std::runtime_error(strprintf("Invalid name (%s) for -testactivationheight=name@height.", arg));
         }
+    }
+
+    if (const auto last_pow_block{args.GetIntArg("-lastpowblock")}) {
+        if (*last_pow_block < 0 || *last_pow_block >= std::numeric_limits<int>::max()) {
+            throw std::runtime_error(strprintf("Invalid -lastpowblock (%d)", *last_pow_block));
+        }
+        options.last_pow_block = static_cast<int>(*last_pow_block);
     }
 
     if (!args.IsArgSet("-vbparams")) return;
@@ -131,17 +137,4 @@ void SelectParams(const ChainType chain)
 {
     SelectBaseParams(chain);
     globalChainParams = CreateChainParams(gArgs, chain);
-}
-
-// CodexaCoin: Donations to dev fund 
-std::string CChainParams::GetDevFundAddress() const
-{
-    return !vDevFundAddress.empty() ? vDevFundAddress[0] : "";
-}
-
-CScript CChainParams::GetDevRewardScript() const
-{
-    CTxDestination dest = DecodeDestination(GetDevFundAddress());
-    CScript scriptPubKey = GetScriptForDestination(dest);
-    return scriptPubKey;
 }

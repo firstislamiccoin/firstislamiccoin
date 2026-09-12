@@ -185,8 +185,10 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
         const Coin& coin = inputs.AccessCoin(prevout);
         assert(!coin.IsSpent());
 
-        // If prev is coinbase or coinstake, check that it's matured
-        if ((coin.IsCoinBase() || coin.IsCoinStake()) && nSpendHeight - coin.nHeight < (::Params().GetConsensus().IsProtocolV3_1(nTimeTx) ? ::Params().GetConsensus().nCoinbaseMaturity : Params().nCoinbaseMaturity)) {
+        // If prev is coinbase or coinstake, check that it's matured.
+        // FirstIslamicCoin: genesis premine outputs (nHeight 0) are mature from
+        // the start -- see IsStakeMature() in pos.h.
+        if ((coin.IsCoinBase() || coin.IsCoinStake()) && coin.nHeight != 0 && nSpendHeight - coin.nHeight <(::Params().GetConsensus().IsProtocolV3_1(nTimeTx) ? ::Params().GetConsensus().nCoinbaseMaturity : Params().nCoinbaseMaturity)) {
             return state.Invalid(TxValidationResult::TX_PREMATURE_SPEND, "bad-txns-premature-spend-of-coinbase",
                 strprintf("tried to spend coinbase at depth %d", nSpendHeight - coin.nHeight));
         }

@@ -2329,8 +2329,9 @@ bool DescriptorScriptPubKeyMan::SetupDescriptorGeneration(const CExtKey& master_
     if (Params().IsTestChain()) {
         desc_prefix += "/1h";
     } else {
-        // CodexaCoin: Use BIP44 value according to https://github.com/satoshilabs/slips/blob/master/slip-0044.md
-        desc_prefix += "/10h";
+        // FirstIslamicCoin: BIP44 coin type 9770. Not yet registered in
+        // https://github.com/satoshilabs/slips/blob/master/slip-0044.md (TODO-HUMAN).
+        desc_prefix += "/9770h";
     }
 
     std::string internal_path = internal ? "/1" : "/0";

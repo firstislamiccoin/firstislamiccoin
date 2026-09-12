@@ -3101,14 +3101,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     std::optional<CAmount> reserve_balance = ParseMoney(gArgs.GetArg("-reservebalance", FormatMoney(DEFAULT_RESERVE_BALANCE)));
     walletInstance->m_reserve_balance = reserve_balance.value_or(DEFAULT_RESERVE_BALANCE);
 
-    unsigned int donation_percentage = args.GetIntArg("-donatetodevfund", DEFAULT_DONATION_PERCENTAGE);
-    if (donation_percentage <= 0) {
-        donation_percentage = MIN_DONATION_PERCENTAGE;
-    }
-    donation_percentage = std::max(donation_percentage, MIN_DONATION_PERCENTAGE);
-    donation_percentage = std::min(donation_percentage, MAX_DONATION_PERCENTAGE);
-    walletInstance->m_donation_percentage = donation_percentage;
-
     walletInstance->WalletLogPrintf("Wallet completed loading in %15dms\n", Ticks<std::chrono::milliseconds>(SteadyClock::now() - start));
 
     // Try to top up keypool. No-op if the wallet is locked.
@@ -3354,6 +3346,11 @@ int CWallet::GetTxBlocksToMaturity(const CWalletTx& wtx) const
     AssertLockHeld(cs_wallet);
 
     if (!(wtx.IsCoinBase() || wtx.IsCoinStake())) {
+        return 0;
+    }
+    // FirstIslamicCoin: genesis premine outputs are mature from the start
+    // (see IsStakeMature() in pos.h).
+    if (const auto* conf = wtx.state<TxStateConfirmed>(); conf && conf->confirmed_block_height == 0) {
         return 0;
     }
     int chain_depth = GetTxDepthInMainChain(wtx);

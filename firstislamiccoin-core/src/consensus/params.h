@@ -125,23 +125,35 @@ struct Params {
     int nStakeTimestampMask;
     int nCoinbaseMaturity;
     /**
-     * CodexaCoin: total premine (in satoshis) minted across the fixed PoW
-     * window (blocks 1..nLastPOWBlock), split evenly per block. See
-     * PARAMETERS.md section 5 for the design rationale. Zero on networks
-     * that don't premine (kept as a knob per-network rather than a single
-     * global constant so testnet/regtest can use smaller values).
+     * FirstIslamicCoin: total premine, in satoshis, carried by the genesis
+     * coinbase as equal, spendable outputs. See docs/genesis.md.
      */
     CAmount nPremineTotal;
     /**
-     * CodexaCoin: coin-age-proportional staking reward parameters
-     * (see PARAMETERS.md section 6 / spec Appendix A). The PoS v3 kernel
-     * weight (stake-eligibility) remains amount-only and is NOT affected by
-     * these -- they only bound the reward a coinstake is allowed to mint.
+     * Proof-of-work subsidy per block for heights 1..nLastPOWBlock. Mainnet
+     * and testnet set nLastPOWBlock = 0 and are proof-of-stake from block 1;
+     * regtest keeps a PoW window only so the functional test harness can mine
+     * blocks on demand.
      */
-    /** Target annual reward rate in basis points (1368 = 13.68%/yr = 1.14%/mo) */
-    int64_t nStakeRewardAnnualBP;
-    /** Coin-age accrual cap per input, in seconds (default 60 days) */
-    int64_t nStakeRewardAgeCapSeconds;
+    CAmount nPowSubsidy;
+    /**
+     * FirstIslamicCoin: reward minted by every proof-of-stake block on top of
+     * the fees it collects. Independent of the stake's amount and age.
+     */
+    CAmount nFixedStakeReward;
+    /**
+     * Blocks between reward halvings; 0 disables halving. Disabled on every
+     * network at launch. Enabling it is a consensus change (docs/tokenomics.md).
+     */
+    int nRewardHalvingInterval{0};
+    /** FirstIslamicCoin: fixed proof-of-stake reward, before fees, for a block at nHeight */
+    CAmount StakeReward(int nHeight) const
+    {
+        if (nRewardHalvingInterval <= 0) return nFixedStakeReward;
+        const int halvings = nHeight / nRewardHalvingInterval;
+        // Right-shifting a 64-bit amount by 63 or more is undefined.
+        return halvings >= 63 ? 0 : nFixedStakeReward >> halvings;
+    }
     /** The best chain should have at least this much work */
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */

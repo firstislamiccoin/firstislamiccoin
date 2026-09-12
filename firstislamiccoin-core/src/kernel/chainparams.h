@@ -126,8 +126,12 @@ public:
     }
 
     const ChainTxData& TxData() const { return chainTxData; }
-    std::string GetDevFundAddress() const;
-    CScript GetDevRewardScript() const;
+    /**
+     * FirstIslamicCoin: true while this network's genesis premine pays a
+     * placeholder script awaiting the genesis key ceremony. Such a network
+     * cannot be run (see AppInitParameterInteraction).
+     */
+    bool GenesisPremineIsPlaceholder() const { return m_genesis_premine_placeholder; }
 
     /**
      * SigNetOptions holds configurations for creating a signet CChainParams.
@@ -152,6 +156,8 @@ public:
     struct RegTestOptions {
         std::unordered_map<Consensus::DeploymentPos, VersionBitsParameters> version_bits_parameters{};
         std::unordered_map<Consensus::BuriedDeployment, int> activation_heights{};
+        //! FirstIslamicCoin: override nLastPOWBlock; 0 reproduces mainnet's PoS-from-block-1 rules
+        std::optional<int> last_pow_block{};
     };
 
     static std::unique_ptr<const CChainParams> RegTest(const RegTestOptions& options);
@@ -177,15 +183,7 @@ protected:
     CCheckpointData checkpointData;
     std::vector<AssumeutxoData> m_assumeutxo_data;
     ChainTxData chainTxData;
-    std::vector<std::string> vDevFundAddress;
+    bool m_genesis_premine_placeholder{false};
 };
-
-/**
- * CodexaCoin: brute-force nNonce for a genesis block satisfying nBits, using
- * the same coinbase/timestamp construction every network's genesis already
- * uses (see kernel/chainparams.cpp). Used by contrib/genesis tooling to
- * (re)generate genesis nTime/nNonce/hash when network parameters change.
- */
-CBlock FindGenesisBlock(uint32_t nTime, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward, uint32_t& nNonceOut);
 
 #endif // BITCOIN_KERNEL_CHAINPARAMS_H

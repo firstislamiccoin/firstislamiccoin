@@ -1,54 +1,57 @@
 # Genesis mining tool
 
-`generate_genesis.cpp` brute-forces the `nNonce` for a genesis block at a
-given `(nTime, nBits)`, reusing the real `CreateGenesisBlock()` /
-`FindGenesisBlock()` in `src/kernel/chainparams.cpp` — it does not
-reimplement block or transaction serialization, so it cannot silently
-disagree with the node about what a given genesis block actually hashes to.
+`generate_genesis.py` builds a FirstIslamicCoin genesis block and brute-forces
+its `nNonce`. The coinbase carries the whole premine as equal, spendable
+outputs; see [`docs/genesis.md`](../../../docs/genesis.md) for why it is split
+and for the values currently pinned in `src/kernel/chainparams.cpp`.
 
-Not wired into the autotools build (`Makefile.am`) — it's a one-off tool for
-finalizing chain parameters, not a shipped binary. Build it manually after
-building the main project (`./configure && make` from the repo root), then
-compile and link against the resulting static libraries:
+It needs only Python 3.8+ with OpenSSL's `hashlib.scrypt`. No build is
+required, unlike CodexaCoin's C++ `generate_genesis.cpp`, which it replaces.
 
-```bash
-g++ -std=c++20 -I src -I src/config -DHAVE_CONFIG_H \
-  -c contrib/genesis/generate_genesis.cpp -o /tmp/generate_genesis.o
+## Trusting the output
 
-g++ -std=c++20 /tmp/generate_genesis.o \
-  src/.libs/libunivalue.a \
-  src/libbitcoin_common.a \
-  src/libbitcoin_util.a \
-  src/libbitcoin_consensus.a \
-  src/crypto/.libs/libbitcoin_crypto_base.a \
-  src/crypto/.libs/libbitcoin_crypto_sse41.a \
-  src/crypto/.libs/libbitcoin_crypto_avx2.a \
-  src/crypto/.libs/libbitcoin_crypto_x86_shani.a \
-  src/secp256k1/.libs/libsecp256k1.a \
-  -lpthread \
-  -o /tmp/generate_genesis
-```
-
-Usage:
+The script reimplements transaction and header serialization, so it proves
+itself before it is used:
 
 ```bash
-/tmp/generate_genesis <network-label> <nTime> <nBits-hex>
-# e.g.
-/tmp/generate_genesis mainnet 1785326400 1e0fffff
+python3 contrib/genesis/generate_genesis.py --self-test
 ```
 
-Prints the mined `nNonce`, the resulting `hashGenesisBlock` /
-`hashMerkleRoot`, and a ready-to-paste `CreateGenesisBlock(...)` +
-`assert(...)` block for `kernel/chainparams.cpp`.
+This rebuilds CodexaCoin's three live genesis blocks and Blackcoin's mainnet
+genesis from their published parameters, and checks the merkle root, header
+hash and scrypt proof of work of each.
 
-**Important:** proof-of-work is validated against `CBlockHeader::GetPoWHash()`
-(scrypt) everywhere in this codebase, not `GetHash()` (SHA256d, and only for
-`nVersion > 6` at that — see `primitives/block.cpp`). `FindGenesisBlock()`
-already checks the right one; if you ever reimplement this logic elsewhere,
-don't check `GetHash()` against the target or your genesis block will pass
-local generation but fail `high-hash` the moment any node tries to load it.
+The node checks the result too: `chainparams.cpp` `assert()`s every network's
+genesis hash and merkle root at startup, so a wrong value cannot ship quietly.
 
-See `PARAMETERS.md` §8 (repo root) for the currently-mined values for
-mainnet/testnet/signet/regtest, and §9 for what's still a placeholder pending
-real launch (the mainnet genesis here is already final; the *premine window*
-mined on top of it is not — that's a separate, later mining ceremony).
+## Usage
+
+```bash
+python3 contrib/genesis/generate_genesis.py \
+  --network regtest --time 1789171200 --bits 207fffff \
+  --script 76a91470e519799aeef0396b253b70a5f523d2fed89d6488ac
+```
+
+| Option | Default | |
+|---|---|---|
+| `--script` | *(required)* | premine output `scriptPubKey`, hex |
+| `--outputs` | `1000` | number of equal premine outputs |
+| `--premine` | `14000000000` | total premine, whole coins |
+| `--time` | `1789171200` | genesis `nTime` |
+| `--bits` | `1e0fffff` | compact target, hex |
+| `--phrase` | FIC timestamp phrase | coinbase message |
+| `--nonce` | — | verify a known nonce instead of mining |
+| `--workers` | CPU count | mining processes |
+
+It prints `nNonce`, `hashGenesisBlock` and `hashMerkleRoot` to paste into
+`chainparams.cpp`.
+
+## Three traps, all inherited and all real
+
+1. **`nVersion` must be 7.** `CheckBlockHeader()` rejects `nVersion < 7` once
+   `IsProtocolV2()` holds, which it does for any 2026 timestamp.
+2. **Proof of work is checked against `GetPoWHash()` (scrypt), never
+   `GetHash()`.** For `nVersion > 6`, `GetHash()` is SHA256d.
+3. **The coinbase `scriptSig` may be at most 100 bytes**
+   (`consensus/tx_check.cpp`). The FIC phrase encodes to 99; the tool refuses
+   anything over the limit.
