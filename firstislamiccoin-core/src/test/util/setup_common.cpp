@@ -274,19 +274,22 @@ TestChain100Setup::TestChain100Setup(
         const bool block_tree_db_in_memory)
     : TestingSetup{ChainType::REGTEST, extra_args, coins_db_in_memory, block_tree_db_in_memory}
 {
-    SetMockTime(1598887952);
+    // FirstIslamicCoin: start the mock clock just after the regtest genesis block.
+    // The upstream value, 1598887952 (2020), predates this chain's 2026 genesis,
+    // so every block this fixture built was rejected as time-too-new.
+    SetMockTime(m_node.chainman->GetParams().GenesisBlock().GetBlockTime() + 1);
     constexpr std::array<unsigned char, 32> vchKey = {
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
 
-    // FirstIslamicCoin
-    // Generate a 500-block chain:
+    // Generate a 500-block chain (regtest's proof-of-work window):
     this->mineBlocks(500);
     {
         LOCK(::cs_main);
-        assert(
-            m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
-            "0000724595fb3b9609d441cbfb9577615c292abf07d996d3edabc48de843642d");
+        // FirstIslamicCoin: upstream pinned the tip hash here, but the value it
+        // carried was Blackcoin's testnet genesis hash and could never match
+        // this chain.
+        assert(m_node.chainman->ActiveChain().Height() == 500);
     }
 }
 

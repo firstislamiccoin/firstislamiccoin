@@ -880,13 +880,6 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     const CChainParams& chainparams = Params();
     // ********************************************************* Step 2: parameter interactions
 
-    // FirstIslamicCoin: refuse to run a network whose genesis premine still pays
-    // the placeholder script. Nobody holds its key, so the chain could never
-    // stake its first block; fail here with the reason instead.
-    if (chainparams.GenesisPremineIsPlaceholder()) {
-        return InitError(Untranslated(strprintf("The %s genesis block is a placeholder: its premine awaits the genesis key ceremony (docs/LAUNCH-RUNBOOK.md). Rebuild with the final genesis block before running this network.", ChainTypeToString(chainparams.GetChainType()))));
-    }
-
     // also see: InitParameterInteraction()
 
     // Error if network-specific options (-addnode, -connect, etc) are
@@ -1074,6 +1067,16 @@ static bool LockDataDirectory(bool probeOnly)
 bool AppInitSanityChecks(const kernel::Context& kernel)
 {
     // ********************************************************* Step 4: sanity checks
+
+    // FirstIslamicCoin: refuse to run a network whose genesis premine still pays
+    // the placeholder script. Nobody holds its key, so the chain could never
+    // stake its first block; fail here with the reason instead. This lives in
+    // the sanity checks, which only firstislamiccoind and the GUI run, rather
+    // than in AppInitParameterInteraction, which unit tests also call on mainnet.
+    if (const CChainParams& chainparams{Params()}; chainparams.GenesisPremineIsPlaceholder()) {
+        return InitError(Untranslated(strprintf("The %s genesis block is a placeholder: its premine awaits the genesis key ceremony (docs/LAUNCH-RUNBOOK.md). Rebuild with the final genesis block before running this network.", ChainTypeToString(chainparams.GetChainType()))));
+    }
+
     auto result{kernel::SanityChecks(kernel)};
     if (!result) {
         InitError(util::ErrorString(result));
