@@ -295,13 +295,16 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 
     // Send two transactions, and verify they are added to transaction list.
     TransactionTableModel* transactionTableModel = walletModel.getTransactionTableModel();
-    QCOMPARE(transactionTableModel->rowCount({}), 105);
+    // FirstIslamicCoin: one coinbase per fixture block after genesis. Upstream
+    // hardcoded 105 (and 107 below) for its 100+5-block fixture; this one is 500+5.
+    const int fixture_tx_count{WITH_LOCK(node.context()->chainman->GetMutex(), return node.context()->chainman->ActiveChain().Height())};
+    QCOMPARE(transactionTableModel->rowCount({}), fixture_tx_count);
     // FirstIslamicCoin
     uint256 txid1 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 5 * COIN);
     uint256 txid2 = SendCoins(*wallet.get(), sendCoinsDialog, PKHash(), 10 * COIN);
     // Transaction table model updates on a QueuedConnection, so process events to ensure it's updated.
     qApp->processEvents();
-    QCOMPARE(transactionTableModel->rowCount({}), 107);
+    QCOMPARE(transactionTableModel->rowCount({}), fixture_tx_count + 2);
     QVERIFY(FindTx(*transactionTableModel, txid1).isValid());
     QVERIFY(FindTx(*transactionTableModel, txid2).isValid());
 
