@@ -39,6 +39,12 @@ BOOST_AUTO_TEST_CASE(getcoinscachesizestate)
     // PoolResource defaults to 256 KiB that will be allocated, so we'll take that and make it a bit larger.
     constexpr size_t MAX_COINS_CACHE_BYTES = 262144 + 512;
 
+    // FirstIslamicCoin: the genesis block's 1,000 premine outputs sit in the coins
+    // cache from startup. Flush them to the database first -- which, as the end of
+    // this test relies on, also reallocates the cache -- so it starts empty, as
+    // the assertions below assume.
+    BOOST_REQUIRE(view.Flush());
+
     // Without any coins in the cache, we shouldn't need to flush.
     BOOST_TEST(
         chainstate.GetCoinsCacheSizeState(MAX_COINS_CACHE_BYTES, /*max_mempool_size_bytes=*/ 0) != CoinsCacheSizeState::CRITICAL);
