@@ -12,8 +12,9 @@ target repositories so the phase instructions still read correctly:
 
 ```
 First Islamic Coin/
-├── codexacoin/                       # upstream reference clone, read-only, never edited
+├── codexacoin/                       # upstream reference clone, read-only, never edited, git-ignored
 ├── docs/                             # FIC-level docs (this file, cac-audit.md, CHANGELOG-FIC.md, …)
+│   └── upstream/                     # CAC's PARAMETERS.md and changelogs, archived unmodified
 ├── firstislamiccoin-brand/           # brand kit  ← done, Phase 0
 ├── firstislamiccoin-core/            # ← codexacoin/codexacoin-core
 ├── firstislamiccoin-electrumx/       # ← codexacoin/electrumx-cac
