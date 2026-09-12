@@ -1,0 +1,16 @@
+:root {
+  --fic-green: #0B6E4F; --fic-green-deep: #08523B; --fic-gold: #D4AF37; --fic-gold-deep: #B8962E; --fic-gold-light: #E9CC6A;
+  --fic-bg: #F7F5EE; --fic-surface: #FFFFFF; --fic-ink: #14201B; --fic-muted: #5E6B65; --fic-line: #D9D6CB;
+  --fic-primary: var(--fic-green); --fic-on-primary: #FFFFFF; --fic-accent: var(--fic-gold); --fic-on-accent: #0A1F17;
+  --fic-success: #1E9E6A; --fic-warning: #D89B2B; --fic-error: #C2413B; --fic-info: #2F6F9F;
+  --fic-font-display: "Poppins", system-ui, sans-serif; --fic-font-body: "Inter", system-ui, sans-serif; --fic-font-arabic: "Noto Naskh Arabic", "Amiri", serif;
+  --fic-radius-sm: 6px; --fic-radius-md: 12px; --fic-radius-lg: 20px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --fic-bg: #0A1F17; --fic-surface: #10291F; --fic-ink: #EEF2EE; --fic-muted: #9DB0A6; --fic-line: #23483A;
+  --fic-primary: #1B9A6E; --fic-accent: #E9CC6A;
+} }
+:root[data-theme="dark"] {
+  --fic-bg: #0A1F17; --fic-surface: #10291F; --fic-ink: #EEF2EE; --fic-muted: #9DB0A6; --fic-line: #23483A;
+  --fic-primary: #1B9A6E; --fic-accent: #E9CC6A;
+}

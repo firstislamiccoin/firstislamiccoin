@@ -1,0 +1,16 @@
+# Upstream reference clone -- read-only, never committed into FIC
+/codexacoin/
+
+# Raw brand-kit inputs; the reconciled kit lives in firstislamiccoin-brand/
+/FIC_Brand_Kit/
+/FIC_Brand_Kit.zip
+/FIC_brand_preview.png
+
+# Private keys and anything secret (testnet genesis key, signing keys)
+/secrets/
+
+# Build outputs
+/build/
+*.o
+*.a
+.deps/

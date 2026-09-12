@@ -1,0 +1,35 @@
+{
+  "brand": {
+    "green": "#0B6E4F",
+    "greenDeep": "#08523B",
+    "gold": "#D4AF37",
+    "goldDeep": "#B8962E",
+    "goldLight": "#E9CC6A"
+  },
+  "neutral": {
+    "dark": "#0A1F17",
+    "light": "#F7F5EE",
+    "white": "#FFFFFF",
+    "ink": "#14201B",
+    "muted": "#5E6B65",
+    "line": "#D9D6CB"
+  },
+  "semantic": {
+    "success": "#1E9E6A",
+    "warning": "#D89B2B",
+    "error": "#C2413B",
+    "info": "#2F6F9F"
+  },
+  "typography": {
+    "display": "Poppins",
+    "body": "Inter, system-ui, sans-serif",
+    "arabic": "Noto Naskh Arabic, Amiri, serif",
+    "mono": "JetBrains Mono, monospace"
+  },
+  "radius": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  }
+}

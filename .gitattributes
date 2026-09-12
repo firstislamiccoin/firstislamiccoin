@@ -1,0 +1,10 @@
+# Normalise to LF everywhere: this tree is built on Linux (autotools, shell
+# scripts) but edited on Windows.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.gif binary
+*.zip binary
+*.bmp binary
