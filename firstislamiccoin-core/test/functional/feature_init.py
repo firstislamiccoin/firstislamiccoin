@@ -91,6 +91,9 @@ class InitStressTest(BitcoinTestFramework):
             sigterm_node()
 
         check_clean_start()
+        # FirstIslamicCoin: needed below to aim the blk*.dat perturbation past the
+        # genesis block, which carries 1,000 premine outputs.
+        genesis_block_size = len(node.getblock(node.getblockhash(0), 0)) // 2
         self.stop_node(0)
 
         self.log.info("Test startup errors after removing certain essential files")
@@ -139,7 +142,14 @@ class InitStressTest(BitcoinTestFramework):
                     # Since the genesis block is not checked by -checkblocks, the
                     # perturbation window must be chosen such that a higher block
                     # in blk*.dat is affected.
-                    tweaked_contents[150:350] = b'1' * 200
+                    start = 150
+                    if file_patt == 'blocks/blk*.dat':
+                        # FirstIslamicCoin: upstream's [150:350] lands inside a
+                        # genesis block of a few hundred bytes' neighbour; FIC's
+                        # genesis is ~34 KB, so skip past it and its 8-byte
+                        # magic/size record header first.
+                        start += 8 + genesis_block_size
+                    tweaked_contents[start:start + 200] = b'1' * 200
                 with open(target_file, "wb") as tf_write:
                     tf_write.write(bytes(tweaked_contents))
 
