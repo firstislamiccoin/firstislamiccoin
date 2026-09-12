@@ -26,16 +26,19 @@ from test_framework.script_util import (
     program_to_witness_script,
     scripthash_to_p2sh_script,
 )
+from test_framework.descriptors import descsum_create
 from test_framework.segwit_addr import (
     decode_segwit_address,
     encode_segwit_address,
 )
 
 
-ADDRESS_BCRT1_UNSPENDABLE = 'bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj'
-ADDRESS_BCRT1_UNSPENDABLE_DESCRIPTOR = 'addr(bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj)#juyq9d97'
+# FirstIslamicCoin: regtest addresses use the "rfic" HRP. The names keep their
+# upstream BCRT1 spelling because tests import them by name.
+ADDRESS_BCRT1_UNSPENDABLE = 'rfic1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqtr49lf'
+ADDRESS_BCRT1_UNSPENDABLE_DESCRIPTOR = descsum_create(f'addr({ADDRESS_BCRT1_UNSPENDABLE})')
 # Coins sent to this address can be spent with a witness stack of just OP_TRUE
-ADDRESS_BCRT1_P2WSH_OP_TRUE = 'bcrt1qft5p2uhsdcdc3l2ua4ap5qqfg4pjaqlp250x7us7a8qqhrxrxfsqseac85'
+ADDRESS_BCRT1_P2WSH_OP_TRUE = 'rfic1qft5p2uhsdcdc3l2ua4ap5qqfg4pjaqlp250x7us7a8qqhrxrxfsq2u5yu0'
 
 
 class AddressType(enum.Enum):
@@ -57,7 +60,7 @@ def create_deterministic_address_bcrt1_p2tr_op_true():
     """
     internal_key = (1).to_bytes(32, 'big')
     address = output_key_to_p2tr(taproot_construct(internal_key, [(None, CScript([OP_TRUE]))]).output_pubkey)
-    assert_equal(address, 'bcrt1p9yfmy5h72durp7zrhlw9lf7jpwjgvwdg0jr0lqmmjtgg83266lqsekaqka')
+    assert_equal(address, 'rfic1p9yfmy5h72durp7zrhlw9lf7jpwjgvwdg0jr0lqmmjtgg83266lqsrn5udx')
     return (address, internal_key)
 
 
