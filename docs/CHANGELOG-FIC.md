@@ -458,13 +458,142 @@ because its filter follows the mempool's dynamic minimum; FIC's version
 hardcoded the fixed fee, and does not raise the filter when its mempool is
 full (noted for Phase 10).
 
+### Mempool and RPC fixes from the test diagnosis
+
+- **Unlimited unconfirmed chains.** The CPFP carve-out in `PreChecks` retried a
+  transaction that broke the ancestor/descendant limits with
+  `Limits::NoLimits()` whenever it was at most 10,000 vB. Upstream's carve-out
+  (one extra small child of a parent already at the descendant limit) had been
+  commented out with RBF, because it read the removed RBF limits. Unconfirmed
+  chains could therefore grow without bound, a mempool denial-of-service.
+  **Fixed**: the carve-out is restored against the pool's own limits.
+- **RPC hex without witnesses.** `-rpcserialversion` defaulted to 0, stripping
+  witness data from raw transaction and block hex. With SegWit enforced that hex
+  does not verify when relayed. **Fixed**: default 1, as upstream.
+- `decoderawtransaction` and `getdeploymentinfo` result docs corrected, and
+  `RegenerateCommitments` no longer erases at index −1 (a double free on
+  `generateblock` without a witness commitment).
+
+### Open for the Phase 10 security review
+
+Reported by the diagnosis and deliberately not changed during testnet work:
+
+- `HasValidProofOfWork` returns true for every header (`validation.cpp`, marked
+  "ToDo"), so headers presync performs no anti-DoS work check. PoS headers
+  cannot be checked for work at all; a correct design needs care.
+- `SCRIPT_VERIFY_DERKEY` is in the block flags but nothing in the interpreter
+  enforces it.
+- Block-download and stale-tip timeouts scale with target spacing; at regtest's
+  1 s they disconnect peers after about a second, and at 64 s they are roughly a
+  tenth of Bitcoin's.
+- The fee filter follows the fixed fee rather than the mempool's dynamic
+  minimum, so a node with a full mempool does not raise it.
+- `MAX_MONEY` is `INT64_MAX`; sums are now overflow-safe, but a real cap is
+  still worth deciding.
+- `ReplayBlocks` does not re-add the genesis premine if a node crashes during
+  its first UTXO flush (patch proposed by the unit-test diagnosis).
+
 The gap that prompted the investigation, 512 s before block 4, is **not**
 explained by this bug: at that block's `nBits` the wrapped threshold was 23% of
 the hash space. It was the block that carried the last two 18 KB tranche
 transactions, but large transactions are not the cause either: tranche 2 put
 four 18 KB transactions into block 61 and one into block 62, each 16 s after
-its predecessor. The gap did not recur in the remaining blocks of that run; the
-rerun logs coinstake activity on every node so any repeat can be explained.
+its predecessor.
+
+**It reproduced** on the restarted testnet (kernel fix in place): blocks 1–3
+within a minute, then 896 s before block 4. With `-debug=coinstake` the staker
+logged nothing at all during the gap.
+
+### Staking bug found: one wallet's search blocked every other wallet
+
+**Cause.** `CreateNewBlock` kept the last searched coinstake timestamp in a
+single `static` for the whole process. Each wallet's staking thread searches
+only if the current 16-second slot is later than that value, and records the
+slot whether or not it found a kernel. On a node staking several wallets, the
+thread that reached a slot first consumed it and the others skipped it
+silently. node0 stakes the genesis wallet and `staker1`; before `staker1`'s
+coins matured, its empty searches kept winning the slots, and the only wallet
+able to stake sat idle. The tranche transactions were a coincidence of timing:
+`staker1` is created just before block 3.
+
+**Measured** on regtest, the premine wallet plus eight empty staking wallets on
+one node, old and new binaries running side by side for 150 s:
+
+| Binary | Blocks | Seconds per block |
+|---|---|---|
+| shared `static` | 0 (not even block 1 in 270 s) | — |
+| per wallet | 8 | 18.8 (the post-block rest) |
+
+**Fixed**: the search time is a `CWallet` member.
+
+### Wallet bugs found: coin selection over-reserved fees, `fee_rate` was ignored, SFFO could go negative
+
+Found while integrating the diagnosis agents' wallet patches, verified by rebuild:
+
+- Coin selection applied `GetMinFee()` — a whole-transaction floor,
+  `max(10,000 sat, 100 sat/vB)` — separately to the change output, the change
+  spend, the transaction's non-input part, and every input's long-term cost:
+  up to four times the real minimum reserved during selection. The floor is
+  enforced once, correctly, on the finished transaction. Fixed by using the
+  effective/discard fee rates alone for those components; `CoinSelectionParams`
+  gains `m_long_term_feerate` (FIC has no fee estimation, so it is the
+  effective rate) since `OutputGroup`'s long-term fee needs a real rate instead
+  of `GetMinFee()` per input.
+- `sendtoaddress` and `sendmany` declared a `fee_rate` argument that neither
+  handler read (dropped with the rest of fee estimation). `sendtoaddress(...,
+  fee_rate=300)` paid exactly the 100 sat/vB floor regardless. Both now set
+  `coin_control.m_feerate`.
+- `CreateTransactionInternal`'s "reduce change if the fee is short" step also
+  ran when subtract-fee-from-outputs was requested, silently overriding SFFO
+  and, if the shortfall exceeded the change, producing a negative change
+  output (`bad-txns-vout-negative`). It no longer runs when SFFO is set.
+
+`spend_tests` and `wallet_tests`, both broken by CAC's version of this code,
+pass. `coinselector_tests` has one remaining pre-existing failure
+(`bnb_search_test`), not caused by this fix and not yet diagnosed.
+
+### Incident: a Docker Desktop crash exposed a genesis-reindex crash and a brief fork
+
+The host's Docker Desktop went down for several hours while this session was
+rate-limited. The testnet's containers restart automatically, but two of the
+four nodes (node0, node1) came back with a corrupted transaction index
+("`best block of the index not found`") — plausibly from an unclean shutdown
+mid-write — and needed `-reindex`. That surfaced a second, unrelated crash:
+
+**Consensus bug found: reindexing genesis crashed on mainnet and testnet.**
+`ContextualCheckBlock()` asserted `pindexPrev != nullptr` as soon as it judged
+CSV active, then dereferenced `pindexPrev` two lines later regardless of the
+assert. Mainnet and testnet set `CSVHeight = 0` ("active from genesis"), so at
+the genesis block itself (no parent) both are unconditionally true. A normal
+startup bootstraps genesis directly and never reaches this path; `-reindex`
+walks every block on disk through `AcceptBlock()`, genesis included, which is
+how this was found. Regtest and signet (`CSVHeight = 1`) never trigger it —
+why it survived the entire functional and unit suite, both regtest-based, and
+only surfaced on a real operator action against a mainnet/testnet-shaped
+chain. **Fixed**: genesis has no contextual rules to check against a
+nonexistent parent (it is already exempted from PoW, maturity and coinstake
+requirements elsewhere in this fork), so the function returns true immediately
+when `pindexPrev` is null. Regression test:
+`fic_genesis_tests/csv_active_from_genesis_on_main_and_testnet`.
+
+**Then a brief fork, self-healed.** node0/node1 reindexed and resumed staking
+with the per-wallet fix in place (above), which let them produce blocks much
+faster than before; node2/node3, still on the pre-crash binary, had kept
+staking on their own during the outage. The two sides had a different block at
+height 171. Once node0/node1's reindex caught up and its greater chainwork
+(height 200 vs. 171) reached node2/node3 over their existing peer connections,
+both reorged onto it within seconds — a 1-block-deep fork, well inside every
+reorg-depth protection this fork has (the sync checkpoint and
+`nMaxReorganizationDepth`), so no manual `invalidateblock`/`reconsiderblock`
+was needed. All four nodes converged at height 206 with an identical tip.
+node2 and node3 were then moved onto the fixed image too (non-consensus
+changes only — safe with the chain running), so all four now run the same
+build.
+
+**Lesson for launch**: an operator recovering a crashed node with `-reindex`
+on mainnet or testnet would have hit the ContextualCheckBlock crash before
+this fix existed, with no workaround short of a source change. Worth a
+deliberate crash-recovery drill before mainnet (TODO-HUMAN).
 
 ## Prompt items that need no work
 
@@ -490,3 +619,4 @@ those are removed.
 | 6 | DNS seeders for `seed{1,2,3}.firstislamiccoin.com`; testnet seeds | Phase 6 |
 | 7 | `generate.py` in the brand kit hardcodes `/home/claude/fic-brand` and Linux font paths | — |
 | 8 | Verify ElectrumX full block indexing end-to-end — never done upstream | Phase 4 |
+| 9 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
