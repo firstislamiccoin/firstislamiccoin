@@ -129,7 +129,11 @@ BOOST_AUTO_TEST_CASE(siphash)
     // FirstIslamicCoin: use tx.nVersion=2 to avoid mutating tx.nTime
     tx.nVersion = 2;
     ss << TX_WITH_WITNESS(tx);
-    BOOST_CHECK_EQUAL(SipHashUint256(1, 2, ss.GetHash()), 0x79751e980c2a0a35ULL);
+    // FirstIslamicCoin: upstream's 0x79751e980c2a0a35 hashes the nVersion=1
+    // serialization (01000000 00 00 00000000). With nVersion=2 the serialized
+    // bytes are 02000000 00 00 00000000, so the digest (and its SipHash) differ.
+    // Value recomputed independently with test_framework/siphash.py.
+    BOOST_CHECK_EQUAL(SipHashUint256(1, 2, ss.GetHash()), 0x0ade131195b255c8ULL);
 
     // Check consistency between CSipHasher and SipHashUint256[Extra].
     FastRandomContext ctx;

@@ -174,7 +174,13 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
 
             if (InsecureRandRange(5) == 0 || coin.IsSpent()) {
                 Coin newcoin;
-                newcoin.out.nValue = InsecureRandMoneyAmount();
+                // FirstIslamicCoin: MAX_MONEY is INT64_MAX, but Coin's on-disk
+                // TxOutCompression (CompressAmount) only round-trips amounts up to
+                // 2049638230412172402 sat (~20.5B FIC) before uint64 overflow. The
+                // CCoinsViewDB half of this simulation otherwise reads back a
+                // different amount. Draw from the representable range; this is above
+                // the whole 14B FIC supply, so no real output is excluded.
+                newcoin.out.nValue = static_cast<CAmount>(InsecureRandRange(2049638230412172402ULL + 1));
                 newcoin.nHeight = 1;
 
                 // Infrequently test adding unspendable coins.
@@ -502,17 +508,23 @@ BOOST_AUTO_TEST_CASE(updatecoins_simulation_test)
 
 BOOST_AUTO_TEST_CASE(ccoins_serialization)
 {
+    // FirstIslamicCoin: Coin serializes as VARINT(height*4 + coinbase + 2*coinstake),
+    // VARINT(nTime), compressed txout (src/coins.h). Upstream used
+    // VARINT(height*2 + coinbase) with no nTime. The vectors below re-encode the
+    // same height/coinbase/txout in that format with nTime = 0.
     // Good example
-    DataStream ss1{ParseHex("97f23c835800816115944e077fe7c803cfa57f29b36bf87c1d35")};
+    DataStream ss1{ParseHex("b0e57800835800816115944e077fe7c803cfa57f29b36bf87c1d35")};
     Coin cc1;
     ss1 >> cc1;
     BOOST_CHECK_EQUAL(cc1.fCoinBase, false);
+    BOOST_CHECK_EQUAL(cc1.fCoinStake, false);
+    BOOST_CHECK_EQUAL(cc1.nTime, 0U);
     BOOST_CHECK_EQUAL(cc1.nHeight, 203998U);
     BOOST_CHECK_EQUAL(cc1.out.nValue, CAmount{60000000000});
     BOOST_CHECK_EQUAL(HexStr(cc1.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160(ParseHex("816115944e077fe7c803cfa57f29b36bf87c1d35"))))));
 
     // Good example
-    DataStream ss2{ParseHex("8ddf77bbd123008c988f1a4a4de2161e0f50aac7f17e7f9555caa4")};
+    DataStream ss2{ParseHex("9cc06d00bbd123008c988f1a4a4de2161e0f50aac7f17e7f9555caa4")};
     Coin cc2;
     ss2 >> cc2;
     BOOST_CHECK_EQUAL(cc2.fCoinBase, true);
@@ -521,7 +533,7 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     BOOST_CHECK_EQUAL(HexStr(cc2.out.scriptPubKey), HexStr(GetScriptForDestination(PKHash(uint160(ParseHex("8c988f1a4a4de2161e0f50aac7f17e7f9555caa4"))))));
 
     // Smallest possible example
-    DataStream ss3{ParseHex("000006")};
+    DataStream ss3{ParseHex("00000006")};
     Coin cc3;
     ss3 >> cc3;
     BOOST_CHECK_EQUAL(cc3.fCoinBase, false);
@@ -530,7 +542,7 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     BOOST_CHECK_EQUAL(cc3.out.scriptPubKey.size(), 0U);
 
     // scriptPubKey that ends beyond the end of the stream
-    DataStream ss4{ParseHex("000007")};
+    DataStream ss4{ParseHex("00000007")};
     try {
         Coin cc4;
         ss4 >> cc4;
@@ -543,7 +555,7 @@ BOOST_AUTO_TEST_CASE(ccoins_serialization)
     uint64_t x = 3000000000ULL;
     tmp << VARINT(x);
     BOOST_CHECK_EQUAL(HexStr(tmp), "8a95c0bb00");
-    DataStream ss5{ParseHex("00008a95c0bb00")};
+    DataStream ss5{ParseHex("0000008a95c0bb00")};
     try {
         Coin cc5;
         ss5 >> cc5;

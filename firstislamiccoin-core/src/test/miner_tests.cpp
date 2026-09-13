@@ -10,6 +10,7 @@
 #include <consensus/tx_verify.h>
 #include <node/miner.h>
 #include <policy/policy.h>
+#include <pow.h>
 #include <test/util/random.h>
 #include <test/util/txmempool.h>
 #include <timedata.h>
@@ -31,6 +32,12 @@ using node::CBlockTemplate;
 
 namespace miner_tests {
 struct MinerTestingSetup : public TestingSetup {
+    // FirstIslamicCoin: mainnet is proof-of-stake from block 1 (nLastPOWBlock = 0), so
+    // this proof-of-work mining test runs on regtest instead, with the PoW window lifted
+    // (TestBasicMining builds a fake chain up to height 210000) and CSV kept inactive at
+    // these heights, as it is on the Bitcoin mainnet the test was written for (the
+    // relative-lock-time checks below rely on BIP68 not being enforced yet).
+    MinerTestingSetup() : TestingSetup{ChainType::REGTEST, {"-lastpowblock=2147483646", "-testactivationheight=csv@419328"}} {}
     void TestPackageSelection(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     void TestBasicMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst, int baseheight) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
     void TestPrioritisedMining(const CScript& scriptPubKey, const std::vector<CTransactionRef>& txFirst) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
@@ -141,7 +148,10 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
 
     // Test that a package below the block min tx fee doesn't get included
     tx.vin[0].prevout.hash = hashHighFeeTx;
-    tx.vout[0].nValue = 5000000000LL - 1000 - 50000; // 0 fee
+    // FirstIslamicCoin: GetMinFee() is a consensus rule (bad-txns-fee-not-enough), so a
+    // transaction that ends up in a block must really pay MIN_TX_FEE, even where its
+    // mempool entry declares a lower fee for the selection logic under test.
+    tx.vout[0].nValue = 5000000000LL - 1000 - 50000 - MIN_TX_FEE; // 0 fee (as declared to the mempool)
     uint256 hashFreeTx = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(0).FromTx(tx));
     size_t freeTxSize = ::GetSerializeSize(TX_WITH_WITNESS(tx));
@@ -151,7 +161,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     CAmount feeToUse = blockMinFeeRate.GetFee(2*freeTxSize) - 1;
 
     tx.vin[0].prevout.hash = hashFreeTx;
-    tx.vout[0].nValue = 5000000000LL - 1000 - 50000 - feeToUse;
+    tx.vout[0].nValue = 5000000000LL - 1000 - 50000 - MIN_TX_FEE - feeToUse;
     uint256 hashLowFeeTx = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(feeToUse).FromTx(tx));
     pblocktemplate = AssemblerForTest(tx_mempool).CreateNewBlock(scriptPubKey);
@@ -187,7 +197,7 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     tx.vin[0].prevout.hash = hashFreeTx2;
     tx.vout.resize(1);
     feeToUse = blockMinFeeRate.GetFee(freeTxSize);
-    tx.vout[0].nValue = 5000000000LL - 100000000 - feeToUse;
+    tx.vout[0].nValue = 5000000000LL - 100000000 - MIN_TX_FEE; // FirstIslamicCoin: pays the consensus minimum; the entry declares feeToUse
     uint256 hashLowFeeTx2 = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(feeToUse).SpendsCoinbase(false).FromTx(tx));
     pblocktemplate = AssemblerForTest(tx_mempool).CreateNewBlock(scriptPubKey);
@@ -201,8 +211,11 @@ void MinerTestingSetup::TestPackageSelection(const CScript& scriptPubKey, const 
     // This tx will be mineable, and should cause hashLowFeeTx2 to be selected
     // as well.
     tx.vin[0].prevout.n = 1;
-    tx.vout[0].nValue = 100000000 - 10000; // 10k satoshi fee
-    tx_mempool.addUnchecked(entry.Fee(10000).FromTx(tx));
+    // FirstIslamicCoin: the block min feerate is DEFAULT_BLOCK_MIN_TX_FEE = 100000 sat/kvB,
+    // 100x upstream's 1000, so upstream's 10k sat child no longer lifts the
+    // (free parent + child) package above it. Scale the fee by the same 100x.
+    tx.vout[0].nValue = 100000000 - 1000000; // 1M satoshi fee
+    tx_mempool.addUnchecked(entry.Fee(1000000).FromTx(tx));
     pblocktemplate = AssemblerForTest(tx_mempool).CreateNewBlock(scriptPubKey);
     BOOST_REQUIRE_EQUAL(pblocktemplate->block.vtx.size(), 9U);
     BOOST_CHECK(pblocktemplate->block.vtx[8]->GetHash() == hashLowFeeTx2);
@@ -557,7 +570,7 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
 
     // This tx also has a low fee, but is prioritised
     tx.vin[0].prevout.hash = hashParentTx;
-    tx.vout[0].nValue = 5000000000LL - 1000 - 1000; // 1000 satoshi fee
+    tx.vout[0].nValue = 5000000000LL - 1000 - MIN_TX_FEE; // 1000 satoshi fee declared (FirstIslamicCoin: MIN_TX_FEE paid)
     uint256 hashPrioritsedChild = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(1000).Time(Now<NodeSeconds>()).SpendsCoinbase(false).FromTx(tx));
     tx_mempool.PrioritiseTransaction(hashPrioritsedChild, 2 * COIN);
@@ -575,13 +588,13 @@ void MinerTestingSetup::TestPrioritisedMining(const CScript& scriptPubKey, const
     tx_mempool.PrioritiseTransaction(hashFreeParent, 10 * COIN);
 
     tx.vin[0].prevout.hash = hashFreeParent;
-    tx.vout[0].nValue = 5000000000LL; // 0 fee
+    tx.vout[0].nValue = 5000000000LL - MIN_TX_FEE; // 0 fee declared (FirstIslamicCoin: MIN_TX_FEE paid)
     uint256 hashFreeChild = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(0).SpendsCoinbase(false).FromTx(tx));
     tx_mempool.PrioritiseTransaction(hashFreeChild, 1 * COIN);
 
     tx.vin[0].prevout.hash = hashFreeChild;
-    tx.vout[0].nValue = 5000000000LL; // 0 fee
+    tx.vout[0].nValue = 5000000000LL - 2 * MIN_TX_FEE; // 0 fee declared
     uint256 hashFreeGrandchild = tx.GetHash();
     tx_mempool.addUnchecked(entry.Fee(0).SpendsCoinbase(false).FromTx(tx));
 
@@ -607,6 +620,12 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     CScript scriptPubKey = CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f") << OP_CHECKSIG;
     std::unique_ptr<CBlockTemplate> pblocktemplate;
 
+    // FirstIslamicCoin: transactions carry a timestamp that must not be later than the
+    // adjusted time or the block time for the miner to include them (peercoin timestamp
+    // limit in BlockAssembler::TestPackageTransactions). The blocks below are timestamped
+    // from the regtest genesis block's median time past, so run the clock from there too.
+    SetMockTime(m_node.chainman->GetParams().GenesisBlock().GetBlockTime() + 1);
+
     CTxMemPool& tx_mempool{*m_node.mempool};
     // Simple block creation, nothing special yet:
     BOOST_CHECK(pblocktemplate = AssemblerForTest(tx_mempool).CreateNewBlock(scriptPubKey));
@@ -626,6 +645,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
             txCoinbase.nVersion = 1;
             txCoinbase.vin[0].scriptSig = CScript{} << (m_node.chainman->ActiveChain().Height() + 1) << bi.extranonce;
             txCoinbase.vout.resize(1); // Ignore the (optional) segwit commitment added by CreateNewBlock (as the hardcoded nonces don't account for this)
+            txCoinbase.vin[0].scriptWitness.SetNull(); // FirstIslamicCoin: and the witness reserved value that goes with it (segwit is active on regtest)
             txCoinbase.vout[0].scriptPubKey = CScript();
             pblock->vtx[0] = MakeTransactionRef(std::move(txCoinbase));
             if (txFirst.size() == 0)
@@ -634,6 +654,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
                 txFirst.push_back(pblock->vtx[0]);
             pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
             pblock->nNonce = bi.nonce;
+            // FirstIslamicCoin: the hardcoded nonces solve Bitcoin's SHA256d proof of work on
+            // Bitcoin's chain; grind against this chain's scrypt proof-of-work hash instead.
+            while (!CheckProofOfWork(pblock->GetPoWHash(), pblock->nBits, m_node.chainman->GetConsensus())) ++pblock->nNonce;
         }
         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
         BOOST_CHECK(Assert(m_node.chainman)->ProcessNewBlock(shared_pblock, true, true, nullptr));

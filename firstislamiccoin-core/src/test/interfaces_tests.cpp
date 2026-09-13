@@ -47,13 +47,14 @@ BOOST_AUTO_TEST_CASE(findBlock)
 
     bool cur_active{false}, next_active{false};
     uint256 next_hash;
-    BOOST_CHECK_EQUAL(active.Height(), 100);
-    BOOST_CHECK(chain->findBlock(active[99]->GetBlockHash(), FoundBlock().inActiveChain(cur_active).nextBlock(FoundBlock().inActiveChain(next_active).hash(next_hash))));
+    // FirstIslamicCoin: TestChain100Setup mines 500 blocks (regtest's proof-of-work window).
+    BOOST_CHECK_EQUAL(active.Height(), 500);
+    BOOST_CHECK(chain->findBlock(active[499]->GetBlockHash(), FoundBlock().inActiveChain(cur_active).nextBlock(FoundBlock().inActiveChain(next_active).hash(next_hash))));
     BOOST_CHECK(cur_active);
     BOOST_CHECK(next_active);
-    BOOST_CHECK_EQUAL(next_hash, active[100]->GetBlockHash());
+    BOOST_CHECK_EQUAL(next_hash, active[500]->GetBlockHash());
     cur_active = next_active = false;
-    BOOST_CHECK(chain->findBlock(active[100]->GetBlockHash(), FoundBlock().inActiveChain(cur_active).nextBlock(FoundBlock().inActiveChain(next_active))));
+    BOOST_CHECK(chain->findBlock(active[500]->GetBlockHash(), FoundBlock().inActiveChain(cur_active).nextBlock(FoundBlock().inActiveChain(next_active))));
     BOOST_CHECK(cur_active);
     BOOST_CHECK(!next_active);
 

@@ -17,7 +17,9 @@
 BOOST_AUTO_TEST_SUITE(txpackage_tests)
 // A fee amount that is above 1sat/vB but below 5sat/vB for most transactions created within these
 // unit tests.
-static const CAmount low_fee_amt{200};
+// FirstIslamicCoin: fees are 100x Bitcoin's here -- DEFAULT_MIN_RELAY_TX_FEE and the consensus
+// minimum fee GetMinFee() are both 100 sat/vB -- so this is above 100 sat/vB but below 500 sat/vB.
+static const CAmount low_fee_amt{20000};
 
 // Create placeholder transactions that have no meaning.
 inline CTransactionRef create_placeholder_tx(size_t num_inputs, size_t num_outputs)
@@ -81,6 +83,8 @@ BOOST_FIXTURE_TEST_CASE(package_sanitization_tests, TestChain100Setup)
 BOOST_FIXTURE_TEST_CASE(package_validation_tests, TestChain100Setup)
 {
     LOCK(cs_main);
+    // FirstIslamicCoin: coinbases pay the regtest proof-of-work subsidy, not 50 BTC.
+    const CAmount coinbase_value{m_coinbase_txns[0]->vout[0].nValue};
     unsigned int initialPoolSize = m_node.mempool->size();
 
     // Parent and Child Package
@@ -90,7 +94,7 @@ BOOST_FIXTURE_TEST_CASE(package_validation_tests, TestChain100Setup)
     auto mtx_parent = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[0], /*input_vout=*/0,
                                                     /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                     /*output_destination=*/parent_locking_script,
-                                                    /*output_amount=*/CAmount(49 * COIN), /*submit=*/false);
+                                                    /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/false);
     CTransactionRef tx_parent = MakeTransactionRef(mtx_parent);
 
     CKey child_key;
@@ -99,7 +103,7 @@ BOOST_FIXTURE_TEST_CASE(package_validation_tests, TestChain100Setup)
     auto mtx_child = CreateValidMempoolTransaction(/*input_transaction=*/tx_parent, /*input_vout=*/0,
                                                    /*input_height=*/101, /*input_signing_key=*/parent_key,
                                                    /*output_destination=*/child_locking_script,
-                                                   /*output_amount=*/CAmount(48 * COIN), /*submit=*/false);
+                                                   /*output_amount=*/coinbase_value - 2 * COIN, /*submit=*/false);
     CTransactionRef tx_child = MakeTransactionRef(mtx_child);
     const auto result_parent_child = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool, {tx_parent, tx_child}, /*test_accept=*/true);
     BOOST_CHECK_MESSAGE(result_parent_child.m_state.IsValid(),
@@ -234,6 +238,8 @@ BOOST_FIXTURE_TEST_CASE(noncontextual_package_tests, TestChain100Setup)
 BOOST_FIXTURE_TEST_CASE(package_submission_tests, TestChain100Setup)
 {
     LOCK(cs_main);
+    // FirstIslamicCoin: coinbases pay the regtest proof-of-work subsidy, not 50 BTC.
+    const CAmount coinbase_value{m_coinbase_txns[0]->vout[0].nValue};
     unsigned int expected_pool_size = m_node.mempool->size();
     CKey parent_key;
     parent_key.MakeNewKey(true);
@@ -245,7 +251,7 @@ BOOST_FIXTURE_TEST_CASE(package_submission_tests, TestChain100Setup)
         auto mtx = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[i + 25], /*input_vout=*/0,
                                                  /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                  /*output_destination=*/parent_locking_script,
-                                                 /*output_amount=*/CAmount(49 * COIN), /*submit=*/false);
+                                                 /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/false);
         package_unrelated.emplace_back(MakeTransactionRef(mtx));
     }
     auto result_unrelated_submit = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool,
@@ -261,7 +267,7 @@ BOOST_FIXTURE_TEST_CASE(package_submission_tests, TestChain100Setup)
     auto mtx_parent = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[0], /*input_vout=*/0,
                                                     /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                     /*output_destination=*/parent_locking_script,
-                                                    /*output_amount=*/CAmount(49 * COIN), /*submit=*/false);
+                                                    /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/false);
     CTransactionRef tx_parent = MakeTransactionRef(mtx_parent);
     package_parent_child.push_back(tx_parent);
     package_3gen.push_back(tx_parent);
@@ -272,7 +278,7 @@ BOOST_FIXTURE_TEST_CASE(package_submission_tests, TestChain100Setup)
     auto mtx_child = CreateValidMempoolTransaction(/*input_transaction=*/tx_parent, /*input_vout=*/0,
                                                    /*input_height=*/101, /*input_signing_key=*/parent_key,
                                                    /*output_destination=*/child_locking_script,
-                                                   /*output_amount=*/CAmount(48 * COIN), /*submit=*/false);
+                                                   /*output_amount=*/coinbase_value - 2 * COIN, /*submit=*/false);
     CTransactionRef tx_child = MakeTransactionRef(mtx_child);
     package_parent_child.push_back(tx_child);
     package_3gen.push_back(tx_child);
@@ -283,7 +289,7 @@ BOOST_FIXTURE_TEST_CASE(package_submission_tests, TestChain100Setup)
     auto mtx_grandchild = CreateValidMempoolTransaction(/*input_transaction=*/tx_child, /*input_vout=*/0,
                                                        /*input_height=*/101, /*input_signing_key=*/child_key,
                                                        /*output_destination=*/grandchild_locking_script,
-                                                       /*output_amount=*/CAmount(47 * COIN), /*submit=*/false);
+                                                       /*output_amount=*/coinbase_value - 3 * COIN, /*submit=*/false);
     CTransactionRef tx_grandchild = MakeTransactionRef(mtx_grandchild);
     package_3gen.push_back(tx_grandchild);
 
@@ -389,8 +395,14 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
 {
     // Mine blocks to mature coinbases.
     mineBlocks(5);
-    MockMempoolMinFee(CFeeRate(5000));
+    // FirstIslamicCoin: the minimum relay feerate is 100 sat/vB (DEFAULT_MIN_RELAY_TX_FEE),
+    // 100x Bitcoin's, so upstream's 5 sat/vB target is below it. Note that this chain's
+    // CheckFeeRate() uses GetMinFee() rather than the mempool's rolling minimum, so the
+    // mocked value does not change which transactions are accepted.
+    MockMempoolMinFee(CFeeRate(5 * DEFAULT_MIN_RELAY_TX_FEE));
     LOCK(cs_main);
+    // FirstIslamicCoin: coinbases pay the regtest proof-of-work subsidy, not 50 BTC.
+    const CAmount coinbase_value{m_coinbase_txns[0]->vout[0].nValue};
 
     // Transactions with a same-txid-different-witness transaction in the mempool should be ignored,
     // and the mempool entry's wtxid returned.
@@ -399,7 +411,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     auto mtx_parent = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[0], /*input_vout=*/0,
                                                     /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                     /*output_destination=*/scriptPubKey,
-                                                    /*output_amount=*/CAmount(49 * COIN), /*submit=*/false);
+                                                    /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/false);
     CTransactionRef ptx_parent = MakeTransactionRef(mtx_parent);
 
     // Make two children with the same txid but different witnesses.
@@ -422,7 +434,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     mtx_child1.vin[0].scriptSig = CScript();
     mtx_child1.vin[0].scriptWitness = witness1;
     mtx_child1.vout.resize(1);
-    mtx_child1.vout[0].nValue = CAmount(48 * COIN);
+    mtx_child1.vout[0].nValue = coinbase_value - 2 * COIN;
     mtx_child1.vout[0].scriptPubKey = child_locking_script;
 
     CMutableTransaction mtx_child2{mtx_child1};
@@ -499,7 +511,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     auto mtx_grandchild = CreateValidMempoolTransaction(/*input_transaction=*/ptx_child2, /*input_vout=*/0,
                                                         /*input_height=*/0, /*input_signing_key=*/child_key,
                                                         /*output_destination=*/grandchild_locking_script,
-                                                        /*output_amount=*/CAmount(47 * COIN), /*submit=*/false);
+                                                        /*output_amount=*/coinbase_value - 3 * COIN, /*submit=*/false);
     CTransactionRef ptx_grandchild = MakeTransactionRef(mtx_grandchild);
 
     // We already submitted child1 above.
@@ -535,7 +547,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     auto mtx_parent1 = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[1], /*input_vout=*/0,
                                                      /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                      /*output_destination=*/acs_spk,
-                                                     /*output_amount=*/CAmount(49 * COIN), /*submit=*/true);
+                                                     /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/true);
     CTransactionRef ptx_parent1 = MakeTransactionRef(mtx_parent1);
     package_mixed.push_back(ptx_parent1);
 
@@ -553,7 +565,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     auto mtx_grandparent2 = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[2], /*input_vout=*/0,
                                                           /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                           /*output_destination=*/grandparent2_spk,
-                                                          /*output_amount=*/CAmount(49 * COIN), /*submit=*/true);
+                                                          /*output_amount=*/coinbase_value - 1 * COIN, /*submit=*/true);
     CTransactionRef ptx_grandparent2 = MakeTransactionRef(mtx_grandparent2);
 
     CMutableTransaction mtx_parent2_v1;
@@ -564,7 +576,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     mtx_parent2_v1.vin[0].scriptSig = CScript();
     mtx_parent2_v1.vin[0].scriptWitness = parent2_witness1;
     mtx_parent2_v1.vout.resize(1);
-    mtx_parent2_v1.vout[0].nValue = CAmount(48 * COIN);
+    mtx_parent2_v1.vout[0].nValue = coinbase_value - 2 * COIN;
     mtx_parent2_v1.vout[0].scriptPubKey = acs_spk;
 
     CMutableTransaction mtx_parent2_v2{mtx_parent2_v1};
@@ -578,10 +590,11 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     package_mixed.push_back(ptx_parent2_v1);
 
     // parent3 will be a new transaction. Put a low feerate to make it invalid on its own.
+    // FirstIslamicCoin: that is not possible on this chain -- see the feerate checks below.
     auto mtx_parent3 = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[3], /*input_vout=*/0,
                                                      /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                      /*output_destination=*/acs_spk,
-                                                     /*output_amount=*/CAmount(50 * COIN - low_fee_amt), /*submit=*/false);
+                                                     /*output_amount=*/coinbase_value - low_fee_amt, /*submit=*/false);
     CTransactionRef ptx_parent3 = MakeTransactionRef(mtx_parent3);
     package_mixed.push_back(ptx_parent3);
     // FirstIslamicCoin
@@ -600,7 +613,7 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
     mtx_mixed_child.vin[0].scriptWitness = acs_witness;
     mtx_mixed_child.vin[1].scriptWitness = acs_witness;
     mtx_mixed_child.vin[2].scriptWitness = acs_witness;
-    mtx_mixed_child.vout.emplace_back((48 + 49 + 50 - 1) * COIN, mixed_child_spk);
+    mtx_mixed_child.vout.emplace_back(3 * coinbase_value - 4 * COIN, mixed_child_spk);
     CTransactionRef ptx_mixed_child = MakeTransactionRef(mtx_mixed_child);
     package_mixed.push_back(ptx_mixed_child);
 
@@ -634,20 +647,28 @@ BOOST_FIXTURE_TEST_CASE(package_witness_swap_tests, TestChain100Setup)
         BOOST_CHECK(m_node.mempool->exists(GenTxid::Txid(ptx_parent3->GetHash())));
         BOOST_CHECK(m_node.mempool->exists(GenTxid::Txid(ptx_mixed_child->GetHash())));
 
-        // package feerate should include parent3 and child. It should not include parent1 or parent2_v1.
-        const CFeeRate expected_feerate(1 * COIN, GetVirtualTransactionSize(*ptx_parent3) + GetVirtualTransactionSize(*ptx_mixed_child));
-        BOOST_CHECK(it_parent3->second.m_effective_feerate.value() == expected_feerate);
-        BOOST_CHECK(it_child->second.m_effective_feerate.value() == expected_feerate);
-        std::vector<uint256> expected_wtxids({ptx_parent3->GetWitnessHash(), ptx_mixed_child->GetWitnessHash()});
-        BOOST_CHECK(it_parent3->second.m_wtxids_fee_calculations.value() == expected_wtxids);
-        BOOST_CHECK(it_child->second.m_wtxids_fee_calculations.value() == expected_wtxids);
+        // FirstIslamicCoin: paying less than GetMinFee() is a consensus failure
+        // (bad-txns-fee-not-enough) that package validation cannot rescue, and CheckFeeRate()
+        // uses that same minimum instead of the mempool's rolling minimum. A consensus-valid
+        // parent3 therefore always meets the feerate on its own, so parent3 and the child are
+        // each accepted individually, at their own feerates, rather than as a CPFP package.
+        const CFeeRate parent3_feerate(low_fee_amt, GetVirtualTransactionSize(*ptx_parent3));
+        const CFeeRate child_feerate(1 * COIN - low_fee_amt, GetVirtualTransactionSize(*ptx_mixed_child));
+        BOOST_CHECK(it_parent3->second.m_effective_feerate.value() == parent3_feerate);
+        BOOST_CHECK(it_child->second.m_effective_feerate.value() == child_feerate);
+        BOOST_CHECK(it_parent3->second.m_wtxids_fee_calculations.value() == std::vector<uint256>{ptx_parent3->GetWitnessHash()});
+        BOOST_CHECK(it_child->second.m_wtxids_fee_calculations.value() == std::vector<uint256>{ptx_mixed_child->GetWitnessHash()});
     }
 }
 
 BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
 {
     mineBlocks(5);
-    MockMempoolMinFee(CFeeRate(5000));
+    // FirstIslamicCoin: the minimum relay feerate is 100 sat/vB (DEFAULT_MIN_RELAY_TX_FEE),
+    // 100x Bitcoin's, so upstream's 5 sat/vB target is below it. Note that this chain's
+    // CheckFeeRate() uses GetMinFee() rather than the mempool's rolling minimum, so the
+    // mocked value does not change which transactions are accepted.
+    MockMempoolMinFee(CFeeRate(5 * DEFAULT_MIN_RELAY_TX_FEE));
     LOCK(::cs_main);
     size_t expected_pool_size = m_node.mempool->size();
     CKey child_key;
@@ -658,7 +679,8 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
     CScript child_spk = GetScriptForDestination(WitnessV0KeyHash(grandchild_key.GetPubKey()));
 
     // low-fee parent and high-fee child package
-    const CAmount coinbase_value{50 * COIN};
+    // FirstIslamicCoin: coinbases pay the regtest proof-of-work subsidy, not 50 BTC.
+    const CAmount coinbase_value{m_coinbase_txns[0]->vout[0].nValue};
     const CAmount parent_value{coinbase_value - low_fee_amt};
     const CAmount child_value{parent_value - COIN};
 
@@ -685,19 +707,26 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
         const auto submit_cpfp_deprio = ProcessNewPackage(m_node.chainman->ActiveChainstate(), *m_node.mempool,
                                                    package_cpfp, /*test_accept=*/ false);
-        BOOST_CHECK_EQUAL(submit_cpfp_deprio.m_state.GetResult(), PackageValidationResult::PCKG_TX);
+        // FirstIslamicCoin: CheckFeeRate() tests GetMinFee() before the min relay feerate (both
+        // 100 sat/vB), so the parent fails individually with "min fee not met"; the package as a
+        // whole (0 modified fees) then fails the package feerate check.
+        BOOST_CHECK_EQUAL(submit_cpfp_deprio.m_state.GetResult(), PackageValidationResult::PCKG_POLICY);
         BOOST_CHECK(submit_cpfp_deprio.m_state.IsInvalid());
         BOOST_CHECK_EQUAL(submit_cpfp_deprio.m_tx_results.find(tx_parent->GetWitnessHash())->second.m_state.GetResult(),
                           TxValidationResult::TX_MEMPOOL_POLICY);
         BOOST_CHECK_EQUAL(submit_cpfp_deprio.m_tx_results.find(tx_child->GetWitnessHash())->second.m_state.GetResult(),
                           TxValidationResult::TX_MISSING_INPUTS);
-        BOOST_CHECK(submit_cpfp_deprio.m_tx_results.find(tx_parent->GetWitnessHash())->second.m_state.GetRejectReason() == "min relay fee not met");
+        BOOST_CHECK(submit_cpfp_deprio.m_tx_results.find(tx_parent->GetWitnessHash())->second.m_state.GetRejectReason() == "min fee not met");
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
         const CFeeRate expected_feerate(0, GetVirtualTransactionSize(*tx_parent) + GetVirtualTransactionSize(*tx_child));
     }
 
     // Clear the prioritisation of the parent transaction.
     WITH_LOCK(m_node.mempool->cs, m_node.mempool->ClearPrioritisation(tx_parent->GetHash()));
+    // FirstIslamicCoin: the parent must pay GetMinFee() for its size (consensus), which is
+    // also the minimum feerate, so on its own it would simply be accepted. Prioritise away
+    // its whole fee so that only the child's fee can get it in.
+    m_node.mempool->PrioritiseTransaction(tx_parent->GetHash(), -(coinbase_value - parent_value));
 
     // Package CPFP: Even though the parent's feerate is below the mempool minimum feerate, the
     // child pays enough for the package feerate to meet the threshold.
@@ -722,7 +751,8 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
         BOOST_CHECK(m_node.mempool->exists(GenTxid::Txid(tx_parent->GetHash())));
         BOOST_CHECK(m_node.mempool->exists(GenTxid::Txid(tx_child->GetHash())));
 
-        const CFeeRate expected_feerate(coinbase_value - child_value,
+        // FirstIslamicCoin: modified fees; the parent's were prioritised down to 0 above.
+        const CFeeRate expected_feerate(parent_value - child_value,
                                         GetVirtualTransactionSize(*tx_parent) + GetVirtualTransactionSize(*tx_child));
         BOOST_CHECK(it_parent->second.m_effective_feerate.value() == expected_feerate);
         BOOST_CHECK(it_child->second.m_effective_feerate.value() == expected_feerate);
@@ -733,11 +763,13 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
     }
 
     // Just because we allow low-fee parents doesn't mean we allow low-feerate packages.
-    // The mempool minimum feerate is 5sat/vB, but this package just pays 800 satoshis total.
+    // FirstIslamicCoin: the minimum feerate is 100 sat/vB and each transaction must pay
+    // GetMinFee() for its own size (consensus), so both pay 20000 satoshis; the parent is
+    // prioritised down to 0 below, leaving a package that pays 20000 for about 265 vB.
     // The child fees would be able to pay for itself, but isn't enough for the entire package.
     Package package_still_too_low;
-    const CAmount parent_fee{200};
-    const CAmount child_fee{600};
+    const CAmount parent_fee{20000};
+    const CAmount child_fee{20000};
     auto mtx_parent_cheap = CreateValidMempoolTransaction(/*input_transaction=*/m_coinbase_txns[1], /*input_vout=*/0,
                                                           /*input_height=*/0, /*input_signing_key=*/coinbaseKey,
                                                           /*output_destination=*/parent_spk,
@@ -757,6 +789,8 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
     // FirstIslamicCoin
     // BOOST_CHECK(m_node.mempool->GetMinFee().GetFee(GetVirtualTransactionSize(*tx_child_cheap)) <= child_fee);
     // BOOST_CHECK(m_node.mempool->GetMinFee().GetFee(GetVirtualTransactionSize(*tx_parent_cheap) + GetVirtualTransactionSize(*tx_child_cheap)) > parent_fee + child_fee);
+
+    m_node.mempool->PrioritiseTransaction(tx_parent_cheap->GetHash(), -parent_fee);
 
     // Cheap package should fail with package-fee-too-low.
     {
@@ -779,7 +813,7 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
         expected_pool_size += 2;
         BOOST_CHECK_MESSAGE(submit_prioritised_package.m_state.IsValid(),
                 "Package validation unexpectedly failed" << submit_prioritised_package.m_state.GetRejectReason());
-        const CFeeRate expected_feerate(1 * COIN + parent_fee + child_fee,
+        const CFeeRate expected_feerate(1 * COIN + child_fee, // FirstIslamicCoin: the parent's modified fee is 0
             GetVirtualTransactionSize(*tx_parent_cheap) + GetVirtualTransactionSize(*tx_child_cheap));
         BOOST_CHECK_EQUAL(submit_prioritised_package.m_tx_results.size(), package_still_too_low.size());
         auto it_parent = submit_prioritised_package.m_tx_results.find(tx_parent_cheap->GetWitnessHash());
@@ -842,8 +876,9 @@ BOOST_FIXTURE_TEST_CASE(package_cpfp_tests, TestChain100Setup)
         BOOST_CHECK(it_parent->second.m_effective_feerate == CFeeRate(high_parent_fee, GetVirtualTransactionSize(*tx_parent_rich)));
         BOOST_CHECK(it_child != submit_rich_parent.m_tx_results.end());
         BOOST_CHECK_EQUAL(it_child->second.m_result_type, MempoolAcceptResult::ResultType::INVALID);
-        BOOST_CHECK_EQUAL(it_child->second.m_state.GetResult(), TxValidationResult::TX_MEMPOOL_POLICY);
-        BOOST_CHECK(it_child->second.m_state.GetRejectReason() == "min relay fee not met");
+        // FirstIslamicCoin: paying less than GetMinFee() is a consensus failure (CheckTxInputs()).
+        BOOST_CHECK_EQUAL(it_child->second.m_state.GetResult(), TxValidationResult::TX_CONSENSUS);
+        BOOST_CHECK(it_child->second.m_state.GetRejectReason() == "bad-txns-fee-not-enough");
 
         BOOST_CHECK_EQUAL(m_node.mempool->size(), expected_pool_size);
         BOOST_CHECK(m_node.mempool->exists(GenTxid::Txid(tx_parent_rich->GetHash())));

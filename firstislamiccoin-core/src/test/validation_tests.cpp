@@ -137,20 +137,21 @@ BOOST_AUTO_TEST_CASE(test_assumeutxo)
 
     // These heights don't have assumeutxo configurations associated, per the contents
     // of kernel/chainparams.cpp.
-    std::vector<int> bad_heights{0, 100, 111, 115, 209, 211};
+    // FirstIslamicCoin: regtest has a single entry, at height 510 of the unit-test chain.
+    std::vector<int> bad_heights{0, 100, 110, 500, 509, 511};
 
     for (auto empty : bad_heights) {
         const auto out = params->AssumeutxoForHeight(empty);
         BOOST_CHECK(!out);
     }
 
-    const auto out110 = *params->AssumeutxoForHeight(110);
-    BOOST_CHECK_EQUAL(out110.hash_serialized.ToString(), "6657b736d4fe4db0cbc796789e812d5dba7f5c143764b1b6905612f1830609d1");
-    BOOST_CHECK_EQUAL(out110.nChainTx, 111U);
+    const auto out510 = *params->AssumeutxoForHeight(510);
+    BOOST_CHECK_EQUAL(out510.hash_serialized.ToString(), "d5de4dc7bed0e1def21c094cea1a77e62bb3c1256156ec0b5b9f536ae5b5a2a2");
+    BOOST_CHECK_EQUAL(out510.nChainTx, 511U);
 
-    const auto out110_2 = *params->AssumeutxoForBlockhash(uint256S("0x696e92821f65549c7ee134edceeeeaaa4105647a3c4fd9f298c0aec0ab50425c"));
-    BOOST_CHECK_EQUAL(out110_2.hash_serialized.ToString(), "6657b736d4fe4db0cbc796789e812d5dba7f5c143764b1b6905612f1830609d1");
-    BOOST_CHECK_EQUAL(out110_2.nChainTx, 111U);
+    const auto out510_2 = *params->AssumeutxoForBlockhash(uint256S("0xa067e50a2d85cd01a0ce0a167f53e8173f088670016366aae9bb33b4f90b3bb9"));
+    BOOST_CHECK_EQUAL(out510_2.hash_serialized.ToString(), "d5de4dc7bed0e1def21c094cea1a77e62bb3c1256156ec0b5b9f536ae5b5a2a2");
+    BOOST_CHECK_EQUAL(out510_2.nChainTx, 511U);
 }
 
 BOOST_AUTO_TEST_CASE(block_malleation)
@@ -278,12 +279,15 @@ BOOST_AUTO_TEST_CASE(block_malleation)
         //
         // The `random_tx` function used to mine the txs below simply created
         // empty transactions with a random version field.
+        // FirstIslamicCoin: re-mined for this chain's serialization, which inserts a
+        // uint32 nTime after nVersion when nVersion < 2 (the upstream vectors used
+        // negative versions). tx1, tx2 and tx3 all have nVersion >= 2.
         CMutableTransaction tx1;
-        BOOST_CHECK(DecodeHexTx(tx1, "ff204bd0000000000000", /*try_no_witness=*/true, /*try_witness=*/false));
+        BOOST_CHECK(DecodeHexTx(tx1, "5e11f767000000000000", /*try_no_witness=*/true, /*try_witness=*/false));
         CMutableTransaction tx2;
-        BOOST_CHECK(DecodeHexTx(tx2, "8ae53c92000000000000", /*try_no_witness=*/true, /*try_witness=*/false));
+        BOOST_CHECK(DecodeHexTx(tx2, "c3dcba19000000000000", /*try_no_witness=*/true, /*try_witness=*/false));
         CMutableTransaction tx3;
-        BOOST_CHECK(DecodeHexTx(tx3, "cdaf22d00002c6a7f848f8ae4d30054e61dcf3303d6fe01d282163341f06feecc10032b3160fcab87bdfe3ecfb769206ef2d991b92f8a268e423a6ef4d485f06", /*try_no_witness=*/true, /*try_witness=*/false));
+        BOOST_CHECK(DecodeHexTx(tx3, "f6ab0c050002b8ea996fd42860ca23d9864a49c98dffc2a6eaf89ea3fd2466e0b7e86474a2ad86e5b7d5d975609775cd482d4e756d7cec9913090136a7c9f500", /*try_no_witness=*/true, /*try_witness=*/false));
         {
             // Verify that double_sha256(txid1||txid2) == txid3
             HashWriter hasher;

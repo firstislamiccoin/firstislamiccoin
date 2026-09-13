@@ -443,7 +443,9 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket_legacy)
     uint256 nKey1 = (HashWriter{} << 1).GetHash();
     uint256 nKey2 = (HashWriter{} << 2).GetHash();
 
-    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN), 40);
+    // FirstIslamicCoin: the tried bucket hashes CService::GetKey(), which
+    // includes the port. Upstream's 40 is for port 8333; this test uses 15714.
+    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, EMPTY_NETGROUPMAN), 120);
 
     // Test: Make sure key actually randomizes bucket placement. A fail on
     //  this test could be a security issue.
@@ -571,7 +573,8 @@ BOOST_AUTO_TEST_CASE(caddrinfo_get_tried_bucket)
     uint256 nKey1 = (HashWriter{} << 1).GetHash();
     uint256 nKey2 = (HashWriter{} << 2).GetHash();
 
-    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, ngm_asmap), 236);
+    // FirstIslamicCoin: port-dependent, as above (upstream's 236 is for port 8333).
+    BOOST_CHECK_EQUAL(info1.GetTriedBucket(nKey1, ngm_asmap), 53);
 
     // Test: Make sure key actually randomizes bucket placement. A fail on
     //  this test could be a security issue.

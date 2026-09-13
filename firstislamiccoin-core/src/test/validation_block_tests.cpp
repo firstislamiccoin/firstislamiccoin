@@ -96,7 +96,9 @@ std::shared_ptr<CBlock> MinerTestingSetup::FinalizeBlock(std::shared_ptr<CBlock>
 
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
-    while (!CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+    // FirstIslamicCoin: CheckBlockHeader() checks proof of work against the scrypt
+    // GetPoWHash(); GetHash() is SHA256d for version-7+ blocks.
+    while (!CheckProofOfWork(pblock->GetPoWHash(), pblock->nBits, Params().GetConsensus())) {
         ++(pblock->nNonce);
     }
 
@@ -251,7 +253,9 @@ BOOST_AUTO_TEST_CASE(mempool_locks_reorg)
             mtx.vin.emplace_back(COutPoint{last_mined->vtx[0]->GetHash(), 1}, CScript{});
             mtx.vin[0].scriptWitness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
             mtx.vout.push_back(last_mined->vtx[0]->vout[1]);
-            mtx.vout[0].nValue -= 1000;
+            // FirstIslamicCoin: fees are 100x Bitcoin's; 1000 satoshis is below the
+            // consensus minimum (MIN_TX_FEE, bad-txns-fee-not-enough).
+            mtx.vout[0].nValue -= 100000;
             txs.push_back(MakeTransactionRef(mtx));
 
             last_mined = GoodBlock(last_mined->GetHash());

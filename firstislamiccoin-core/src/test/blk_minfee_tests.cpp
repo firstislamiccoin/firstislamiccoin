@@ -14,11 +14,13 @@ BOOST_AUTO_TEST_CASE(minfee_test)
     SelectParams(ChainType::MAIN);
 
     // Check minimum fees before V3_1 fork
+    // FirstIslamicCoin: before V3_1, GetMinFee charges DEFAULT_MIN_RELAY_TX_FEE
+    // per kvB. That is 100000 sat/kvB here (src/policy/policy.h), not Blackcoin's 10000.
     BOOST_CHECK_EQUAL(GetMinFee(0, 0), 0);
-    BOOST_CHECK_EQUAL(GetMinFee(99, 0), 990);
-    BOOST_CHECK_EQUAL(GetMinFee(100, 0), 1000);
-    BOOST_CHECK_EQUAL(GetMinFee(101, 0), 1010);
-    BOOST_CHECK_EQUAL(GetMinFee(10000, 0), 100000);
+    BOOST_CHECK_EQUAL(GetMinFee(99, 0), 9900);
+    BOOST_CHECK_EQUAL(GetMinFee(100, 0), 10000);
+    BOOST_CHECK_EQUAL(GetMinFee(101, 0), 10100);
+    BOOST_CHECK_EQUAL(GetMinFee(10000, 0), 1000000);
 
     BOOST_CHECK(GetMinFee(std::numeric_limits<size_t>::max(), 0) <= MAX_MONEY);
 

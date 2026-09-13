@@ -225,8 +225,22 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup)
         ValidateCheckInputsForAllFlags(CTransaction(spend_tx), SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC, false, m_node.chainman->ActiveChainstate().CoinsTip());
     }
 
-    // And if we produce a block with this tx, it should be valid (DERSIG not
-    // enabled yet), even though there's no cache entry.
+    // FirstIslamicCoin: DERSIG and LOW_S are consensus rules from the first block
+    // (GetBlockScriptFlags() in validation.cpp), unlike Bitcoin where BIP66 activates
+    // at a height, so a block with the non-DER spend is invalid. Re-sign spend_tx
+    // properly; the checks above still exercised the non-DER version, and the new
+    // signature has no script-cache entry either.
+    spend_tx.vin[0].scriptSig = CScript();
+    {
+        std::vector<unsigned char> vchSig;
+        uint256 hash = SignatureHash(p2pk_scriptPubKey, spend_tx, 0, SIGHASH_ALL, 0, SigVersion::BASE);
+        BOOST_CHECK(coinbaseKey.Sign(hash, vchSig));
+        vchSig.push_back((unsigned char)SIGHASH_ALL);
+        spend_tx.vin[0].scriptSig << vchSig;
+    }
+
+    // And if we produce a block with this tx, it should be valid, even though
+    // there's no cache entry.
     CBlock block;
 
     block = CreateAndProcessBlock({spend_tx}, p2pk_scriptPubKey);

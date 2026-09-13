@@ -4,6 +4,8 @@
 
 #include <test/data/bip341_wallet_vectors.json.h>
 
+#include <bech32.h>
+#include <chainparams.h>
 #include <key.h>
 #include <key_io.h>
 #include <script/script.h>
@@ -203,8 +205,10 @@ BOOST_AUTO_TEST_CASE(script_standard_ExtractDestination)
     // TxoutType::PUBKEY
     s.clear();
     s << ToByteVector(pubkey) << OP_CHECKSIG;
-    BOOST_CHECK(!ExtractDestination(s, address));
-    BOOST_CHECK(std::get<PubKeyDestination>(address) == PubKeyDestination(pubkey));
+    // FirstIslamicCoin: P2PK scripts are reinterpreted as PKHash because proof-of-stake uses P2PK
+    // outputs (partial revert of bitcoin/bitcoin#28246, see ExtractDestination() in addresstype.cpp).
+    BOOST_CHECK(ExtractDestination(s, address));
+    BOOST_CHECK(std::get<PKHash>(address) == PKHash(pubkey));
 
     // TxoutType::PUBKEYHASH
     s.clear();
@@ -383,7 +387,7 @@ BOOST_AUTO_TEST_CASE(script_standard_taproot_builder)
     BOOST_CHECK(builder.IsValid() && builder.IsComplete());
     builder.Finalize(key_inner);
     BOOST_CHECK(builder.IsValid() && builder.IsComplete());
-    BOOST_CHECK_EQUAL(EncodeDestination(builder.GetOutput()), "bc1pj6gaw944fy0xpmzzu45ugqde4rz7mqj5kj0tg8kmr5f0pjq8vnaqgynnge");
+    BOOST_CHECK_EQUAL(EncodeDestination(builder.GetOutput()), "fic1pj6gaw944fy0xpmzzu45ugqde4rz7mqj5kj0tg8kmr5f0pjq8vnaqex7qx2");
 }
 
 BOOST_AUTO_TEST_CASE(bip341_spk_test_vectors)
@@ -414,7 +418,12 @@ BOOST_AUTO_TEST_CASE(bip341_spk_test_vectors)
         parse_tree(vec["given"]["scriptTree"], 0);
         spktest.Finalize(XOnlyPubKey(ParseHex(vec["given"]["internalPubkey"].get_str())));
         BOOST_CHECK_EQUAL(HexStr(GetScriptForDestination(spktest.GetOutput())), vec["expected"]["scriptPubKey"].get_str());
-        BOOST_CHECK_EQUAL(EncodeDestination(spktest.GetOutput()), vec["expected"]["bip350Address"].get_str());
+        // FirstIslamicCoin: the BIP341 vectors carry Bitcoin's "bc" HRP. Keep the vector file verbatim
+        // and compare against the same witness program re-encoded with this chain's HRP.
+        const auto bip350{bech32::Decode(vec["expected"]["bip350Address"].get_str())};
+        BOOST_CHECK(bip350.encoding == bech32::Encoding::BECH32M);
+        BOOST_CHECK_EQUAL(bip350.hrp, "bc");
+        BOOST_CHECK_EQUAL(EncodeDestination(spktest.GetOutput()), bech32::Encode(bech32::Encoding::BECH32M, Params().Bech32HRP(), bip350.data));
         auto spend_data = spktest.GetSpendData();
         BOOST_CHECK_EQUAL(vec["intermediary"]["merkleRoot"].isNull(), spend_data.merkle_root.IsNull());
         if (!spend_data.merkle_root.IsNull()) {

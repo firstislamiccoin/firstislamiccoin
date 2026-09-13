@@ -10,6 +10,9 @@ CMutableTransaction BuildCreditingTransaction(const CScript& scriptPubKey, int n
 {
     CMutableTransaction txCredit;
     txCredit.nVersion = 1;
+    // FirstIslamicCoin: nVersion<2 transactions serialize (and sign) nTime, and CMutableTransaction
+    // defaults nTime to the adjusted clock. Pin it so txids and signature hashes are deterministic.
+    txCredit.nTime = 0;
     txCredit.nLockTime = 0;
     txCredit.vin.resize(1);
     txCredit.vout.resize(1);
@@ -26,6 +29,7 @@ CMutableTransaction BuildSpendingTransaction(const CScript& scriptSig, const CSc
 {
     CMutableTransaction txSpend;
     txSpend.nVersion = 1;
+    txSpend.nTime = 0; // FirstIslamicCoin: see BuildCreditingTransaction
     txSpend.nLockTime = 0;
     txSpend.vin.resize(1);
     txSpend.vout.resize(1);

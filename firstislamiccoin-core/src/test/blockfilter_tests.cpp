@@ -127,6 +127,12 @@ BOOST_AUTO_TEST_CASE(blockfilter_basic_test)
     BOOST_CHECK(default_ctor_block_filter_1.GetEncodedFilter() == default_ctor_block_filter_2.GetEncodedFilter());
 }
 
+// FirstIslamicCoin: data/blockfilters.json holds the upstream Bitcoin testnet blocks re-encoded
+// in this chain's wire format (a zero nTime after nVersion for transactions with nVersion < 2,
+// and an empty vchBlockSig after the transactions). Block hashes, and so the filters' SipHash
+// keys, filters and filter headers, were recomputed for the blocks with nVersion <= 6, whose
+// hash is scrypt here (CBlockHeader::GetHash()). The generator reproduced the upstream vectors
+// exactly under Bitcoin's rules before re-encoding.
 BOOST_AUTO_TEST_CASE(blockfilters_json_test)
 {
     UniValue json;

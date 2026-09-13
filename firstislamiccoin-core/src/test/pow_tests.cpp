@@ -17,7 +17,11 @@ BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(get_next_work)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
-    int64_t nLastRetargetTime = 1261130161; // Block #30240
+    // FirstIslamicCoin: CalculateNextTargetRequired() takes the previous block's
+    // time, not a 2016-block retarget time. With upstream's 1261130161 the
+    // spacing is ~134M s, so the result was clamped to powLimit (0x1e0fffff) and
+    // no longer tested an unconstrained retarget. Use a previous block 64 s earlier.
+    int64_t nLastRetargetTime = 1395223285 - 64; // previous block
     CBlockIndex pindexLast;
     pindexLast.nHeight = 32255;
     pindexLast.nTime = 1395223285;  // Block #32255
@@ -27,7 +31,9 @@ BOOST_AUTO_TEST_CASE(get_next_work)
     // CalculateNextWorkRequired(); redoing the calculation here would be just
     // reimplementing the same code that is written in pow.cpp. Rather than
     // copy that code, we just hardcode the expected result.
-    unsigned int expected_nbits = 0x1e029263;
+    // (Pre-V2, so 60 s spacing and a 16-block interval:
+    //  0x1d028699 * (15*60 + 2*64) / (17*60) = 0x1d028bab.)
+    unsigned int expected_nbits = 0x1d028bab;
     // FirstIslamicCoin
     BOOST_CHECK_EQUAL(CalculateNextTargetRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus(), false), expected_nbits);
     // BOOST_CHECK(PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
@@ -42,7 +48,10 @@ BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
     pindexLast.nHeight = 2015;
     pindexLast.nTime = 1393345424;  // Block #2015
     pindexLast.nBits = 0x1c06a7a5;
-    unsigned int expected_nbits = 0x1d06559e;
+    // FirstIslamicCoin: the ~162M s spacing (pre-V3, so uncapped) pushes the new
+    // target above powLimit, which clamps it to powLimit (00000fff...).
+    unsigned int expected_nbits = UintToArith256(chainParams->GetConsensus().powLimit).GetCompact();
+    BOOST_CHECK_EQUAL(expected_nbits, 0x1e0fffffU);
     // FirstIslamicCoin
     BOOST_CHECK_EQUAL(CalculateNextTargetRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus(), false), expected_nbits);
     // BOOST_CHECK(PermittedDifficultyTransition(chainParams->GetConsensus(), pindexLast.nHeight+1, pindexLast.nBits, expected_nbits));
@@ -52,12 +61,17 @@ BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
 BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
 {
     const auto chainParams = CreateChainParams(*m_node.args, ChainType::MAIN);
-    int64_t nLastRetargetTime = 1279008237; // Block #66528
+    // FirstIslamicCoin: the lower-bound constraint here is the
+    // ProtocolV1RetargetingFixed clamp, which replaces negative spacing with the
+    // target spacing. Upstream's 1279008237 gave +118M s and was clamped to
+    // powLimit instead. Put the previous block 60 s *after* the last one.
+    int64_t nLastRetargetTime = 1397374088 + 60;
     CBlockIndex pindexLast;
     pindexLast.nHeight = 68543;
     pindexLast.nTime = 1397374088;  // Block #68543
     pindexLast.nBits = 0x1d055260;
-    unsigned int expected_nbits = 0x1e0428e3;
+    // Clamped spacing == target spacing, so the target is unchanged.
+    unsigned int expected_nbits = 0x1d055260;
     // FirstIslamicCoin
     BOOST_CHECK_EQUAL(CalculateNextTargetRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus(), false), expected_nbits);
     /*

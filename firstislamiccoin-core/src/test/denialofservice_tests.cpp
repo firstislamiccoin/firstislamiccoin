@@ -153,7 +153,11 @@ BOOST_AUTO_TEST_CASE(stale_tip_peer_management)
 
     const auto time_init{GetTime<std::chrono::seconds>()};
     SetMockTime(time_init);
-    const auto time_later{time_init + 3 * std::chrono::seconds{m_node.chainman->GetConsensus().nTargetSpacing} + 1s};
+    // FirstIslamicCoin: CheckForStaleTipAndEvictPeers() only re-checks the tip every
+    // STALE_CHECK_INTERVAL (10 minutes, net_processing.cpp). Bitcoin's 3 * 600 s
+    // spacing already exceeded that; FIC's 3 * 64 s does not, so the second check
+    // below never ran. Wait past both.
+    const auto time_later{time_init + std::max<std::chrono::seconds>(3 * std::chrono::seconds{m_node.chainman->GetConsensus().nTargetSpacing}, 10min) + 1s};
     connman->Init(options);
     std::vector<CNode *> vNodes;
 

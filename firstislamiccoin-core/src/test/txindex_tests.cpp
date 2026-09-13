@@ -35,10 +35,17 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup)
     // Allow tx index to catch up with the block index.
     IndexWaitSynced(txindex);
 
-    // Check that txindex excludes genesis block transactions.
+    // FirstIslamicCoin: check that txindex includes genesis block transactions.
+    // The genesis coinbase carries the spendable premine, and staking looks
+    // kernels up through this index (see TxIndex::CustomAppend).
     const CBlock& genesis_block = Params().GenesisBlock();
     for (const auto& txn : genesis_block.vtx) {
-        BOOST_CHECK(!txindex.FindTx(txn->GetHash(), block_hash, tx_disk));
+        if (!txindex.FindTx(txn->GetHash(), block_hash, tx_disk)) {
+            BOOST_ERROR("FindTx failed for genesis tx");
+        } else {
+            BOOST_CHECK_EQUAL(tx_disk->GetHash(), txn->GetHash());
+            BOOST_CHECK_EQUAL(block_hash, genesis_block.GetHash());
+        }
     }
 
     // Check that txindex has all txs that were in the chain before it started.
