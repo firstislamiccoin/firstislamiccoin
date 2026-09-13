@@ -22,7 +22,13 @@ STAKE_REWARD = Decimal("10")
 # Regtest normally keeps a proof-of-work window so the upstream harness can
 # mine on demand. These arguments restore mainnet's rules instead: no PoW
 # after genesis, so every block must be staked.
-POS_FROM_GENESIS_ARGS = ["-lastpowblock=0", "-txindex=1"]
+#
+# -maxtipage: the regtest genesis block is dated 2026-09-12 00:00 UTC. Once it
+# is more than a day old (the default -maxtipage), a node whose tip is still
+# genesis stays in initial block download: it neither relays transactions nor
+# stakes, so a chain that must be staked from genesis could not start. Ten
+# years keeps these tests independent of the wall clock.
+POS_FROM_GENESIS_ARGS = ["-lastpowblock=0", "-txindex=1", "-maxtipage=315360000"]
 
 
 def import_genesis_key(node, descriptors):
