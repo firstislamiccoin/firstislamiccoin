@@ -1,0 +1,156 @@
+# FirstIslamicCoin testnet validation network (Phase 2).
+#
+# Four testnet nodes. node0, node1 and node2 share the `fic-a` network; node3
+# lives alone on `fic-b`, a separate bridge network (its own network namespace
+# and subnet), and reaches the rest of the chain only through node2, which is
+# attached to both. Every block and transaction node3 sees has crossed that
+# boundary.
+#
+#   node0  fic-a        -txindex=1           wallets: genesis, staker1
+#   node1  fic-a        (restartable with NODE1_EXTRA_ARGS, e.g. -maxmempool=5)
+#                                            wallets: staker2, staker5
+#   node2  fic-a+fic-b  -coinstatsindex=1    wallets: staker3
+#   node3  fic-b                             wallets: staker4
+#
+# Every node runs the transaction index (FIC's default): the staker looks up
+# kernel transactions through it and will not stake without it. TxIndex does
+# not allow pruning, and this fork does not register -prune at all, so no node
+# can be pruned; see docs/testnet-report.md.
+#
+# No RPC port is published to the host and no password exists: the tools and
+# monitor containers mount each node's datadir read-only and authenticate with
+# the node's cookie file. The testnet genesis key is mounted only into the
+# one-shot `tools` container, from ../secrets/ (git-ignored), and is never baked
+# into an image.
+#
+# Usage (from firstislamiccoin-infra/):
+#   docker compose -f docker-compose.testnet.yml build
+#   docker compose -f docker-compose.testnet.yml up -d               # nodes + monitor
+#   docker compose -f docker-compose.testnet.yml run --rm tools testnet/bootstrap.py
+#   docker compose -f docker-compose.testnet.yml run --rm tools testnet/stress.py <step>
+#   docker compose -f docker-compose.testnet.yml run --rm tools testnet/report.py
+#   docker compose -f docker-compose.testnet.yml down -v             # wipe the chain
+#
+# -maxtipage: the testnet genesis block is dated 2026-09-12. A node whose tip is
+# older than -maxtipage stays in initial block download and will not stake, so
+# until the chain has a recent block, nothing could ever produce one. A year
+# covers the bootstrap; see TODO-HUMAN 3 in docs/CHANGELOG-FIC.md.
+
+name: fic-testnet
+
+x-node: &node
+  image: fic-node:latest
+  build:
+    context: ../firstislamiccoin-core
+    dockerfile: ../firstislamiccoin-infra/docker/Dockerfile
+    target: runtime
+  restart: unless-stopped
+  stop_grace_period: 3m
+  # sh -c so optional extra arguments can be injected per node without passing
+  # an empty argv element, which the argument parser would stop at.
+  entrypoint: ["sh", "-c", "exec firstislamiccoind \"$$@\" $$EXTRA_ARGS", "--"]
+
+x-node-args: &node-args
+  - -testnet
+  - -printtoconsole
+  - -server
+  - -listen
+  - -staking=1
+  - -maxtipage=31536000
+  - -dnsseed=0
+  - -fixedseeds=0
+  - -rpcbind=0.0.0.0
+  - -rpcallowip=10.0.0.0/8
+  - -rpcallowip=172.16.0.0/12
+  - -rpcallowip=192.168.0.0/16
+
+x-tools: &tools
+  image: fic-tools:latest
+  build:
+    context: ../firstislamiccoin-core
+    dockerfile: ../firstislamiccoin-infra/docker/Dockerfile
+    target: tools
+  networks: [fic-a, fic-b]
+  working_dir: /work
+  volumes:
+    - ./testnet:/work/testnet:ro
+    - ./testnet/out:/out
+    - node0-data:/data/node0:ro
+    - node1-data:/data/node1:ro
+    - node2-data:/data/node2:ro
+    - node3-data:/data/node3:ro
+
+services:
+  node0:
+    <<: *node
+    hostname: node0
+    networks: [fic-a]
+    environment:
+      EXTRA_ARGS: "-txindex=1 -addnode=node1 -addnode=node2 ${NODE0_EXTRA_ARGS:-}"
+    command: *node-args
+    volumes:
+      - node0-data:/home/firstislamiccoin/.firstislamiccoin
+
+  node1:
+    <<: *node
+    hostname: node1
+    networks: [fic-a]
+    environment:
+      EXTRA_ARGS: "-addnode=node0 -addnode=node2 ${NODE1_EXTRA_ARGS:-}"
+    command: *node-args
+    volumes:
+      - node1-data:/home/firstislamiccoin/.firstislamiccoin
+
+  node2:
+    <<: *node
+    hostname: node2
+    networks: [fic-a, fic-b]
+    environment:
+      EXTRA_ARGS: "-coinstatsindex=1 -addnode=node0 -addnode=node1 ${NODE2_EXTRA_ARGS:-}"
+    command: *node-args
+    volumes:
+      - node2-data:/home/firstislamiccoin/.firstislamiccoin
+
+  node3:
+    <<: *node
+    hostname: node3
+    networks: [fic-b]
+    environment:
+      EXTRA_ARGS: "-addnode=node2 ${NODE3_EXTRA_ARGS:-}"
+    command: *node-args
+    volumes:
+      - node3-data:/home/firstislamiccoin/.firstislamiccoin
+
+  # Samples every node's tip, chain tips, peers and mempool every few seconds
+  # into testnet/out/monitor.jsonl, and records every reorganisation it sees.
+  monitor:
+    <<: *tools
+    restart: unless-stopped
+    depends_on: [node0, node1, node2, node3]
+    command: ["python3", "-u", "/work/testnet/monitor.py"]
+
+  # One-shot operator container: bootstrap, stress steps and the report.
+  tools:
+    <<: *tools
+    profiles: [tools]
+    entrypoint: ["python3", "-u"]
+    volumes:
+      - ./testnet:/work/testnet:ro
+      - ./testnet/out:/out
+      - node0-data:/data/node0:ro
+      - node1-data:/data/node1:ro
+      - node2-data:/data/node2:ro
+      - node3-data:/data/node3:ro
+      - ../secrets/testnet-genesis-key.txt:/run/secrets/testnet-genesis-key.txt:ro
+
+networks:
+  fic-a:
+    driver: bridge
+  fic-b:
+    driver: bridge
+
+volumes:
+  node0-data:
+  node1-data:
+  node2-data:
+  node3-data:

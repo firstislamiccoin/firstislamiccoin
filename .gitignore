@@ -9,6 +9,10 @@
 # Private keys and anything secret (testnet genesis key, signing keys)
 /secrets/
 
+# Testnet run output (monitor samples, bootstrap state, stress logs); the
+# report is copied to docs/testnet-report.md
+/firstislamiccoin-infra/testnet/out/
+
 # Build outputs
 /build/
 *.o
