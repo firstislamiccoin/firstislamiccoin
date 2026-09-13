@@ -10,6 +10,7 @@
 #include <chainparamsbase.h>
 #include <consensus/amount.h>
 #include <consensus/params.h>
+#include <deploymentstatus.h>
 #include <kernel/messagestartchars.h>
 #include <pos.h>
 #include <primitives/block.h>
@@ -108,6 +109,25 @@ BOOST_AUTO_TEST_CASE(genesis_outputs_mature_immediately)
     BOOST_CHECK(!IsStakeMature(1, 2, params));
     BOOST_CHECK(!IsStakeMature(1, params.nCoinbaseMaturity, params));
     BOOST_CHECK(IsStakeMature(1, 1 + params.nCoinbaseMaturity, params));
+}
+
+// SegWit and Taproot are version-bits deployments in this tree: the deployment
+// entry alone decides whether witness programs are script-checked in blocks.
+// CAC left both NEVER_ACTIVE on mainnet and testnet, so native SegWit and
+// Taproot outputs were spendable without a signature by whoever produced the
+// block. They must be enforced from genesis on every network.
+BOOST_AUTO_TEST_CASE(segwit_and_taproot_active_from_genesis)
+{
+    for (const auto& chain : AllNetworks()) {
+        BOOST_TEST_CONTEXT(ChainTypeToString(chain->GetChainType())) {
+            const Consensus::Params& params{chain->GetConsensus()};
+            for (const auto dep : {Consensus::DEPLOYMENT_SEGWIT, Consensus::DEPLOYMENT_TAPROOT}) {
+                BOOST_CHECK_EQUAL(params.vDeployments[dep].nStartTime, Consensus::BIP9Deployment::ALWAYS_ACTIVE);
+                VersionBitsCache cache;
+                BOOST_CHECK(DeploymentActiveAfter(/*pindexPrev=*/nullptr, params, dep, cache));
+            }
+        }
+    }
 }
 
 BOOST_AUTO_TEST_CASE(mainnet_genesis_is_placeholder_until_key_ceremony)
