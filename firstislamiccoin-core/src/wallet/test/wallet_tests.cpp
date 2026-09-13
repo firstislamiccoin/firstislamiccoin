@@ -128,7 +128,8 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
         BOOST_CHECK(result.last_failed_block.IsNull());
         BOOST_CHECK_EQUAL(result.last_scanned_block, newTip->GetBlockHash());
         BOOST_CHECK_EQUAL(*result.last_scanned_height, newTip->nHeight);
-        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 100 * COIN);
+        // FirstIslamicCoin: two immature regtest PoW coinbases (oldTip, newTip) of nPowSubsidy each
+        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 2 * m_node.chainman->GetConsensus().nPowSubsidy);
 
         {
             CBlockLocator locator;
@@ -136,6 +137,12 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
             BOOST_CHECK(!locator.IsNull());
         }
     }
+
+    // Remove the older block file.
+    // FirstIslamicCoin: block pruning (BlockManager::PruneOneBlockFile() and
+    // UnlinkPrunedFiles()) does not exist in this fork, so delete the file
+    // directly. As with pruning, its blocks can no longer be read.
+    fs::remove(m_node.chainman->m_blockman.GetBlockPosFilename(FlatFilePos{WITH_LOCK(::cs_main, return oldTip->GetBlockPos().nFile), 0}));
 
     // Verify ScanForWalletTransactions only picks transactions in the new block
     // file.
@@ -155,8 +162,11 @@ BOOST_FIXTURE_TEST_CASE(scan_for_wallet_transactions, TestChain100Setup)
         BOOST_CHECK_EQUAL(result.last_failed_block, oldTip->GetBlockHash());
         BOOST_CHECK_EQUAL(result.last_scanned_block, newTip->GetBlockHash());
         BOOST_CHECK_EQUAL(*result.last_scanned_height, newTip->nHeight);
-        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, 50 * COIN);
+        BOOST_CHECK_EQUAL(GetBalance(wallet).m_mine_immature, m_node.chainman->GetConsensus().nPowSubsidy);
     }
+
+    // Remove the remaining block file (FirstIslamicCoin: see above).
+    fs::remove(m_node.chainman->m_blockman.GetBlockPosFilename(FlatFilePos{WITH_LOCK(::cs_main, return newTip->GetBlockPos().nFile), 0}));
 
     // Verify ScanForWalletTransactions scans no blocks.
     {
@@ -187,17 +197,10 @@ BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup)
     CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
     CBlockIndex* newTip = m_node.chainman->ActiveChain().Tip();
 
-    // FirstIslamicCoin
-    /*
-    // Prune the older block file.
-    int file_number;
-    {
-        LOCK(cs_main);
-        file_number = oldTip->GetBlockPos().nFile;
-        Assert(m_node.chainman)->m_blockman.PruneOneBlockFile(file_number);
-    }
-    m_node.chainman->m_blockman.UnlinkPrunedFiles({file_number});
-    */
+    // Remove the older block file.
+    // FirstIslamicCoin: block pruning does not exist in this fork, so delete the
+    // file directly. As with pruning, its blocks can no longer be read.
+    fs::remove(m_node.chainman->m_blockman.GetBlockPosFilename(FlatFilePos{WITH_LOCK(::cs_main, return oldTip->GetBlockPos().nFile), 0}));
 
     // Verify importmulti RPC returns failure for a key whose creation time is
     // before the missing block, and success for a key whose creation time is
@@ -236,7 +239,7 @@ BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup)
                       "timestamp %d. There was an error reading a block from time %d, which is after or within %d "
                       "seconds of key creation, and could contain transactions pertaining to the key. As a result, "
                       "transactions and coins using this key may not appear in the wallet. This error could be caused "
-                      "by pruning or data corruption (see bitcoind log for details) and could be dealt with by "
+                      "by pruning or data corruption (see firstislamiccoind log for details) and could be dealt with by "
                       "downloading and rescanning the relevant blocks (see -reindex option and rescanblockchain "
                       "RPC).\"}},{\"success\":true}]",
                               0, oldTip->GetBlockTimeMax(), TIMESTAMP_WINDOW));
@@ -309,10 +312,11 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup)
         RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt);
 
         BOOST_CHECK_EQUAL(wallet->mapWallet.size(), 3U);
-        BOOST_CHECK_EQUAL(m_coinbase_txns.size(), 103U);
+        // FirstIslamicCoin: TestChain100Setup mines 500 blocks and this test adds 3.
+        BOOST_CHECK_EQUAL(m_coinbase_txns.size(), 503U);
         for (size_t i = 0; i < m_coinbase_txns.size(); ++i) {
             bool found = wallet->GetWalletTx(m_coinbase_txns[i]->GetHash());
-            bool expected = i >= 100;
+            bool expected = i >= 500;
             BOOST_CHECK_EQUAL(found, expected);
         }
     }
@@ -344,7 +348,7 @@ BOOST_FIXTURE_TEST_CASE(coin_mark_dirty_immature_credit, TestChain100Setup)
     // credit amount is calculated.
     wtx.MarkDirty();
     AddKey(wallet, coinbaseKey);
-    BOOST_CHECK_EQUAL(CachedTxGetImmatureCredit(wallet, wtx, ISMINE_SPENDABLE), 50*COIN);
+    BOOST_CHECK_EQUAL(CachedTxGetImmatureCredit(wallet, wtx, ISMINE_SPENDABLE), m_node.chainman->GetConsensus().nPowSubsidy);
 }
 
 static int64_t AddTx(ChainstateManager& chainman, CWallet& wallet, uint32_t lockTime, int64_t mockTime, int64_t blockTime)
@@ -575,7 +579,12 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
 {
     std::string coinbaseAddress = coinbaseKey.GetPubKey().GetID().ToString();
 
-    // Confirm ListCoins initially returns 1 coin grouped under coinbaseKey
+    // FirstIslamicCoin: the fixture chain has height 501 (TestChain100Setup's 500
+    // plus one) and regtest coinbase maturity is 10, so the wallet starts with
+    // Height() - nCoinbaseMaturity = 491 mature coinbases, not upstream's 1.
+    const size_t mature_coinbases{WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return static_cast<size_t>(m_node.chainman->ActiveChain().Height() - m_node.chainman->GetConsensus().nCoinbaseMaturity))};
+
+    // Confirm ListCoins initially returns the mature coins grouped under coinbaseKey
     // address.
     std::map<CTxDestination, std::vector<COutput>> list;
     {
@@ -584,28 +593,30 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
-    BOOST_CHECK_EQUAL(list.begin()->second.size(), 1U);
+    BOOST_CHECK_EQUAL(list.begin()->second.size(), mature_coinbases);
 
-    // Check initial balance from one mature coinbase transaction.
-    BOOST_CHECK_EQUAL(50 * COIN, WITH_LOCK(wallet->cs_wallet, return AvailableCoins(*wallet).GetTotalAmount()));
+    // Check initial balance from the mature coinbase transactions.
+    BOOST_CHECK_EQUAL(CAmount(mature_coinbases) * m_node.chainman->GetConsensus().nPowSubsidy, WITH_LOCK(wallet->cs_wallet, return AvailableCoins(*wallet).GetTotalAmount()));
 
     // Add a transaction creating a change address, and confirm ListCoins still
     // returns the coin associated with the change address underneath the
     // coinbaseKey pubkey, even though the change address has a different
     // pubkey.
     AddTx(CRecipient{PubKeyDestination{{}}, 1 * COIN, /*subtract_fee=*/false});
+    // FirstIslamicCoin: one coinbase was spent and replaced by its change, and
+    // the block AddTx() mined matured one more coinbase.
     {
         LOCK(wallet->cs_wallet);
         list = ListCoins(*wallet);
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
-    BOOST_CHECK_EQUAL(list.begin()->second.size(), 2U);
+    BOOST_CHECK_EQUAL(list.begin()->second.size(), mature_coinbases + 1);
 
     // Lock both coins. Confirm number of available coins drops to 0.
     {
         LOCK(wallet->cs_wallet);
-        BOOST_CHECK_EQUAL(AvailableCoinsListUnspent(*wallet).Size(), 2U);
+        BOOST_CHECK_EQUAL(AvailableCoinsListUnspent(*wallet).Size(), mature_coinbases + 1);
     }
     for (const auto& group : list) {
         for (const auto& coin : group.second) {
@@ -625,7 +636,7 @@ BOOST_FIXTURE_TEST_CASE(ListCoinsTest, ListCoinsTestingSetup)
     }
     BOOST_CHECK_EQUAL(list.size(), 1U);
     BOOST_CHECK_EQUAL(std::get<PKHash>(list.begin()->first).ToString(), coinbaseAddress);
-    BOOST_CHECK_EQUAL(list.begin()->second.size(), 2U);
+    BOOST_CHECK_EQUAL(list.begin()->second.size(), mature_coinbases + 1);
 }
 
 void TestCoinsResult(ListCoinsTest& context, OutputType out_type, CAmount amount,
@@ -647,9 +658,11 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, ListCoinsTest)
     std::map<OutputType, size_t> expected_coins_sizes;
     for (const auto& out_type : OUTPUT_TYPES) { expected_coins_sizes[out_type] = 0U; }
 
-    // Verify our wallet has one usable coinbase UTXO before starting
-    // This UTXO is a P2PK, so it should show up in the Other bucket
-    expected_coins_sizes[OutputType::UNKNOWN] = 1U;
+    // Verify our wallet has its usable coinbase UTXOs before starting
+    // These UTXOs are P2PK, so they should show up in the Other bucket
+    // FirstIslamicCoin: Height() - nCoinbaseMaturity (491) of them, see ListCoinsTest.
+    // Each self transfer below spends one and matures another, so the count holds.
+    expected_coins_sizes[OutputType::UNKNOWN] = WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return static_cast<size_t>(m_node.chainman->ActiveChain().Height() - m_node.chainman->GetConsensus().nCoinbaseMaturity));
     CoinsResult available_coins = WITH_LOCK(wallet->cs_wallet, return AvailableCoins(*wallet));
     BOOST_CHECK_EQUAL(available_coins.Size(), expected_coins_sizes[OutputType::UNKNOWN]);
     BOOST_CHECK_EQUAL(available_coins.coins[OutputType::UNKNOWN].size(), expected_coins_sizes[OutputType::UNKNOWN]);
@@ -659,11 +672,15 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, ListCoinsTest)
     //
     // For each OutputType, We expect 2 UTXOs in our wallet following the self transfer:
     //   1. One UTXO as the recipient
-    //   2. One UTXO from the change, due to payment address matching logic
+    //   2. One UTXO from the change
+    // FirstIslamicCoin: DEFAULT_ADDRESS_TYPE is LEGACY, and CWallet::TransactionChangeType()
+    // returns LEGACY for such wallets before any payment address matching, so the change
+    // always lands in the LEGACY bucket.
 
     for (const auto& out_type : OUTPUT_TYPES) {
         if (out_type == OutputType::UNKNOWN) continue;
-        expected_coins_sizes[out_type] = 2U;
+        expected_coins_sizes[out_type] += 1;
+        expected_coins_sizes[OutputType::LEGACY] += 1;
         TestCoinsResult(*this, out_type, 1 * COIN, expected_coins_sizes);
     }
 }

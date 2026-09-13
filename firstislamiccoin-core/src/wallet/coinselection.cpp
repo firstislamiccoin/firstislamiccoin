@@ -406,7 +406,7 @@ void OutputGroup::Insert(const std::shared_ptr<COutput>& output, size_t ancestor
 
     fee += coin.GetFee();
 
-    coin.long_term_fee = coin.input_bytes < 0 ? 0 : GetMinFee(coin.input_bytes, GetAdjustedTimeSeconds());
+    coin.long_term_fee = coin.input_bytes < 0 ? 0 : m_long_term_feerate.GetFee(coin.input_bytes);
     long_term_fee += coin.long_term_fee;
 
     effective_value += coin.GetEffectiveValue();

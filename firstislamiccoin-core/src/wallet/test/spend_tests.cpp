@@ -18,16 +18,26 @@ BOOST_FIXTURE_TEST_SUITE(spend_tests, WalletTestingSetup)
 
 BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 {
-    CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+    // FirstIslamicCoin: TestChain100Setup mines 500 blocks to coinbaseKey and
+    // regtest coinbase maturity is 10, so a coinbaseKey wallet would hold ~490
+    // mature coinbases where upstream's holds one. Pay a single coinbase
+    // (nPowSubsidy, 28,000,000 FIC on regtest) to a fresh key and bury it to
+    // maturity, so the wallet has exactly one spendable coin as upstream.
+    const CAmount coinbase_value{m_node.chainman->GetConsensus().nPowSubsidy};
+    CKey key;
+    key.MakeNewKey(true);
+    CreateAndProcessBlock({}, GetScriptForRawPubKey(key.GetPubKey()));
+    SetMockTime(GetTime() + 1);
+    mineBlocks(m_node.chainman->GetConsensus().nCoinbaseMaturity);
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), key);
 
     // Check that a subtract-from-recipient transaction slightly less than the
     // coinbase input amount does not create a change output (because it would
     // be uneconomical to add and spend the output), and make sure it pays the
     // leftover input amount which would have been change to the recipient
     // instead of the miner.
-    auto check_tx = [&wallet](CAmount leftover_input_amount) {
-        CRecipient recipient{PubKeyDestination({}), 50 * COIN - leftover_input_amount, /*subtract_fee=*/true};
+    auto check_tx = [&wallet, coinbase_value](CAmount leftover_input_amount) {
+        CRecipient recipient{PubKeyDestination({}), coinbase_value - leftover_input_amount, /*subtract_fee=*/true};
         constexpr int RANDOM_CHANGE_POSITION = -1;
         CCoinControl coin_control;
         coin_control.m_feerate.emplace(10000);
@@ -66,20 +76,30 @@ BOOST_FIXTURE_TEST_CASE(wallet_duplicated_preset_inputs_test, TestChain100Setup)
 {
     // Verify that the wallet's Coin Selection process does not include pre-selected inputs twice in a transaction.
 
-    // Add 4 spendable UTXO, 50 BTC each, to the wallet (total balance 200 BTC)
-    for (int i = 0; i < 4; i++) CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), coinbaseKey);
+    // Add 4 spendable coinbase UTXOs of V each to the wallet (total balance 4V).
+    // FirstIslamicCoin: V is nPowSubsidy (28,000,000 FIC on regtest). Pay them to
+    // a fresh key and bury them to maturity, so the fixture's ~490 mature
+    // coinbaseKey outputs stay out of the wallet, which then holds exactly 4 as upstream.
+    const CAmount coinbase_value{m_node.chainman->GetConsensus().nPowSubsidy};
+    CKey key;
+    key.MakeNewKey(true);
+    for (int i = 0; i < 4; i++) {
+        CreateAndProcessBlock({}, GetScriptForRawPubKey(key.GetPubKey()));
+        SetMockTime(GetTime() + 1);
+    }
+    mineBlocks(m_node.chainman->GetConsensus().nCoinbaseMaturity);
+    auto wallet = CreateSyncedWallet(*m_node.chain, WITH_LOCK(Assert(m_node.chainman)->GetMutex(), return m_node.chainman->ActiveChain()), key);
 
     LOCK(wallet->cs_wallet);
     auto available_coins = AvailableCoins(*wallet);
     std::vector<COutput> coins = available_coins.All();
-    // Preselect the first 3 UTXO (150 BTC total)
+    // Preselect the first 3 UTXO (3V total)
     std::set<COutPoint> preset_inputs = {coins[0].outpoint, coins[1].outpoint, coins[2].outpoint};
 
     // Try to create a tx that spends more than what preset inputs + wallet selected inputs are covering for.
-    // The wallet can cover up to 200 BTC, and the tx target is 299 BTC.
+    // The wallet can cover up to 4V, and the tx target is 6V - 1 (upstream: 200 BTC and 299 BTC).
     std::vector<CRecipient> recipients{{*Assert(wallet->GetNewDestination(OutputType::BECH32, "dummy")),
-                                           /*nAmount=*/299 * COIN, /*fSubtractFeeFromAmount=*/true}};
+                                           /*nAmount=*/6 * coinbase_value - 1 * COIN, /*fSubtractFeeFromAmount=*/true}};
     CCoinControl coin_control;
     coin_control.m_allow_other_inputs = true;
     for (const auto& outpoint : preset_inputs) {

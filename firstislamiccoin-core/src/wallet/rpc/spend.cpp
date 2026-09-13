@@ -537,6 +537,12 @@ RPCHelpMan sendtoaddress()
     coin_control.m_avoid_address_reuse = GetAvoidReuseFlag(*pwallet, request.params[5]);
     // We also enable partial spend avoidance if reuse avoidance is set.
     coin_control.m_avoid_partial_spends |= coin_control.m_avoid_address_reuse;
+    // FirstIslamicCoin: honour fee_rate (sat/vB), declared but never read, as
+    // upstream's SetFeeEstimateMode did. GetMinimumFeeRate() still raises it to
+    // the fixed minimum, so it can only increase the fee.
+    if (!request.params[6].isNull()) {
+        coin_control.m_feerate = CFeeRate{AmountFromValue(request.params[6], /*decimals=*/3)};
+    }
 
     EnsureWalletIsUnlocked(*pwallet);
 
@@ -634,6 +640,10 @@ RPCHelpMan sendmany()
         subtractFeeFromAmount = request.params[4].get_array();
 
     CCoinControl coin_control;
+    // FirstIslamicCoin: honour fee_rate (sat/vB); see sendtoaddress.
+    if (!request.params[5].isNull()) {
+        coin_control.m_feerate = CFeeRate{AmountFromValue(request.params[5], /*decimals=*/3)};
+    }
 
     std::vector<CRecipient> recipients;
     ParseRecipients(sendTo, subtractFeeFromAmount, recipients);

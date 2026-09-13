@@ -1017,14 +1017,22 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
     if (coin_control.m_feerate && coin_selection_params.m_effective_feerate > *coin_control.m_feerate) {
         return util::Error{strprintf(_("Fee rate (%s) is lower than the minimum fee rate setting (%s)"), coin_control.m_feerate->ToString(FeeEstimateMode::SAT_VB), coin_selection_params.m_effective_feerate.ToString(FeeEstimateMode::SAT_VB))};
     }
+    // FirstIslamicCoin: no fee estimation exists to give a genuine long-horizon
+    // rate (see wallet/fees.cpp); the effective rate is the best estimate of
+    // what a future spend will also cost.
+    coin_selection_params.m_long_term_feerate = coin_selection_params.m_effective_feerate;
 
     // Calculate the cost of change
     // Cost of change is the cost of creating the change output + cost of spending the change output in the future.
     // For creating the change output now, we use the effective feerate.
     // For spending the change output in the future, we use the discard feerate for now.
     // So cost of change = (change output size * effective feerate) + (size of spending change output * discard feerate)
-    coin_selection_params.m_change_fee = std::max(GetMinFee(coin_selection_params.change_output_size, current_time), coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.change_output_size));
-    coin_selection_params.m_cost_of_change = std::max(GetMinFee(coin_selection_params.change_spend_size, current_time), coin_selection_params.m_discard_feerate.GetFee(coin_selection_params.change_spend_size)) + coin_selection_params.m_change_fee;
+    // FirstIslamicCoin: GetMinFee() is a whole-transaction minimum (max(10000 sat, 100 sat/vB)).
+    // Applying it to each component (change output, change spend, non-input part, every input)
+    // reserves up to 10000 sat per component during selection. It is enforced once, on the
+    // whole transaction, where fee_needed is computed below.
+    coin_selection_params.m_change_fee = coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.change_output_size);
+    coin_selection_params.m_cost_of_change = coin_selection_params.m_discard_feerate.GetFee(coin_selection_params.change_spend_size) + coin_selection_params.m_change_fee;
 
     coin_selection_params.m_min_change_target = GenerateChangeTarget(std::floor(recipients_sum / vecSend.size()), coin_selection_params.m_change_fee, rng_fast);
 
@@ -1053,7 +1061,7 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
     }
 
     // Include the fees for things that aren't inputs, excluding the change output
-    const CAmount not_input_fees = std::max(coin_selection_params.m_subtract_fee_outputs ? 0 : GetMinFee(coin_selection_params.tx_noinputs_size, current_time), coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.m_subtract_fee_outputs ? 0 : coin_selection_params.tx_noinputs_size));
+    const CAmount not_input_fees = coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.m_subtract_fee_outputs ? 0 : coin_selection_params.tx_noinputs_size);
     CAmount selection_target = recipients_sum + not_input_fees;
 
     // This can only happen if feerate is 0, and requested destinations are value of 0 (e.g. OP_RETURN)
@@ -1143,10 +1151,17 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
             return util::Error{Untranslated(STR_INTERNAL_BUG("Change adjustment: Fee needed != fee paid"))};
         }
     }
-    // FirstIslamicCoin: and if we don't pay enough fees, reduce the change
-    else if (nChangePosInOut != -1 && fee_needed > current_fee) {
+    // FirstIslamicCoin: and if we don't pay enough fees, reduce the change.
+    // Not when subtracting the fee from outputs: coin selection never budgeted
+    // the change for fees there, and the recipients pay the shortfall below (as
+    // upstream). Taking it from the change silently ignored SFFO and could leave
+    // a negative change output (bad-txns-vout-negative).
+    else if (nChangePosInOut != -1 && fee_needed > current_fee && !coin_selection_params.m_subtract_fee_outputs) {
         auto& change = txNew.vout.at(nChangePosInOut);
         change.nValue -= fee_needed - current_fee;
+        if (IsDust(change, wallet.chain().relayDustFee())) {
+            return util::Error{_("Insufficient funds")};
+        }
         current_fee = result.GetSelectedValue() - CalculateOutputValue(txNew);
         if (fee_needed != current_fee) {
             return util::Error{Untranslated(STR_INTERNAL_BUG("Change adjustment: Fee needed != fee paid"))};

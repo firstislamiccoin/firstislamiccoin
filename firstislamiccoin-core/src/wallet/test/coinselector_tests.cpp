@@ -3,11 +3,13 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <consensus/amount.h>
+#include <consensus/tx_verify.h>
 #include <node/context.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <test/util/setup_common.h>
+#include <timedata.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
 #include <wallet/coinselection.h>
@@ -363,10 +365,16 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         CoinsResult available_coins;
 
         // single coin should be selected when effective fee > long term fee
-        coin_selection_params_bnb.m_effective_feerate = CFeeRate(5000);
+        // FirstIslamicCoin: OutputGroup::Insert() takes an input's long term fee
+        // from GetMinFee(input_bytes), which is MIN_TX_FEE (10000 sat) for a
+        // 68-byte input, not from a 1 sat/vB long term feerate. Upstream's 5 and
+        // 3 sat/vB are both below that, so pick feerates on either side of it.
+        const CAmount long_term_input_fee{GetMinFee(/*nBytes=*/68, GetAdjustedTimeSeconds())};
+        coin_selection_params_bnb.m_effective_feerate = CFeeRate(200000);
 
         // Add selectable outputs, increasing their raw amounts by their input fee to make the effective value equal to the raw amount
         CAmount input_fee = coin_selection_params_bnb.m_effective_feerate.GetFee(/*num_bytes=*/68); // bech32 input size (default test output type)
+        BOOST_REQUIRE_GT(input_fee, long_term_input_fee);
         add_coin(available_coins, *wallet, 10 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
         add_coin(available_coins, *wallet, 9 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
         add_coin(available_coins, *wallet, 1 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
@@ -379,10 +387,16 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         available_coins.Clear();
 
         // more coins should be selected when effective fee < long term fee
-        coin_selection_params_bnb.m_effective_feerate = CFeeRate(3000);
+        // FirstIslamicCoin: stay within m_cost_of_change of the long term fee.
+        // With a larger per-input saving, SRD's occasional 3-input selection
+        // (waste 3 * (fee - long_term_fee) + cost_of_change) beats the 2-input
+        // BnB result, making the outcome random.
+        coin_selection_params_bnb.m_effective_feerate = CFeeRate(145000);
 
         // Add selectable outputs, increasing their raw amounts by their input fee to make the effective value equal to the raw amount
         input_fee = coin_selection_params_bnb.m_effective_feerate.GetFee(/*num_bytes=*/68); // bech32 input size (default test output type)
+        BOOST_REQUIRE_LT(input_fee, long_term_input_fee);
+        BOOST_REQUIRE_LT(long_term_input_fee - input_fee, coin_selection_params_bnb.m_cost_of_change);
         add_coin(available_coins, *wallet, 10 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
         add_coin(available_coins, *wallet, 9 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
         add_coin(available_coins, *wallet, 1 * CENT + input_fee, coin_selection_params_bnb.m_effective_feerate, 6 * 24, false, 0, true);
@@ -395,7 +409,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         available_coins.Clear();
 
         // pre selected coin should be selected even if disadvantageous
-        coin_selection_params_bnb.m_effective_feerate = CFeeRate(5000);
+        coin_selection_params_bnb.m_effective_feerate = CFeeRate(200000); // FirstIslamicCoin: above the long term fee, see above
 
         // Add selectable outputs, increasing their raw amounts by their input fee to make the effective value equal to the raw amount
         input_fee = coin_selection_params_bnb.m_effective_feerate.GetFee(/*num_bytes=*/68); // bech32 input size (default test output type)
@@ -460,7 +474,11 @@ BOOST_AUTO_TEST_CASE(bnb_sffo_restriction)
             rand,
             /*change_output_size=*/ 31,  // unused value, p2wpkh output size (wallet default change type)
             /*change_spend_size=*/ 68,   // unused value, p2wpkh input size (high-r signature)
-            /*effective_feerate=*/ CFeeRate(3000),
+            // FirstIslamicCoin: above the per-input long term fee (GetMinFee(68) =
+            // MIN_TX_FEE, 10000 sat), so an extra input adds waste as upstream's
+            // 3 sat/vB against a 1 sat/vB long term feerate did. Below it SRD's
+            // random 3-input result has the lowest waste about half the time.
+            /*effective_feerate=*/ CFeeRate(200000),
             /*long_term_feerate=*/ CFeeRate(1000),
             /*tx_noinputs_size=*/ 0,
             /*avoid_partial=*/ false,

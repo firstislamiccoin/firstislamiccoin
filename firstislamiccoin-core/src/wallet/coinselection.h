@@ -156,6 +156,10 @@ struct CoinSelectionParams {
     CAmount m_cost_of_change{0};
     /** The targeted feerate of the transaction being built. */
     CFeeRate m_effective_feerate;
+    /** The feerate estimate used to cost spending a change output in the future
+     * (upstream: a long-horizon fee estimate; FIC has no fee estimation, so
+     * this is set to m_effective_feerate -- see CreateTransactionInternal). */
+    CFeeRate m_long_term_feerate;
     /** If the cost to spend a change output at the discard feerate exceeds its value, drop it to fees. */
     CFeeRate m_discard_feerate;
     /** Size of the transaction before coin selection, consisting of the header and recipient
@@ -247,8 +251,12 @@ struct OutputGroup
     int m_weight{0};
 
     OutputGroup() {}
+    /** The feerate used to estimate the future cost of spending these UTXOs (upstream). */
+    CFeeRate m_long_term_feerate{0};
+
     OutputGroup(const CoinSelectionParams& params) :
-        m_subtract_fee_outputs(params.m_subtract_fee_outputs)
+        m_subtract_fee_outputs(params.m_subtract_fee_outputs),
+        m_long_term_feerate(params.m_long_term_feerate)
     {}
 
     void Insert(const std::shared_ptr<COutput>& output, size_t ancestors, size_t descendants);
