@@ -1,0 +1,21 @@
+[Unit]
+Description=FirstIslamicCoin block explorer backend
+After=network.target firstislamiccoind.service
+Wants=firstislamiccoind.service
+
+[Service]
+Type=simple
+User=__USER__
+Group=__GROUP__
+EnvironmentFile=/etc/fic-explorer.conf
+WorkingDirectory=__BUILD_DIR__
+ExecStart=__BUILD_DIR__/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8081 --access-logfile - app:app
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

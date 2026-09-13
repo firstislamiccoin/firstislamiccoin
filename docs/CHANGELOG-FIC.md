@@ -738,6 +738,90 @@ Domain/registrar access, a Cloudflare account and its two CI secrets, real DNS r
 Arabic/Urdu translation review all need a human with access this environment doesn't have —
 tracked in the `TODO-HUMAN` table below.
 
+---
+
+## Phase 8 — Block explorer
+
+*2026-09-13, done out of order — built right after Phase 9, while Phase 2's testnet run
+continued in the background*
+
+Forked CAC's own explorer (`explorer/` — Flask backend, plain static frontend, same shape as
+the web wallet and website), not `janoside/btc-rpc-explorer`, per the same precedent recorded for
+Phase 9.
+
+### FIC's supply is exact where CAC's couldn't be
+
+CAC's `app.py` could only compute total minted supply up to height 500 (the flat-subsidy PoW
+premine window); past that its reward is coin-age-proportional with no closed-form total, and the
+code says so directly rather than estimating. FIC has no such boundary: **supply at any height is
+`14,000,000,000 + 10 × height` FIC, forever** — `/api/stats`, `/api/supply`, `/api/circulating` and
+`/api/supply-series` all compute this directly rather than scanning anything, matching
+`docs/tokenomics.md`'s "Supply, in one line".
+
+### New, per the prompt's Phase 8 item 2
+
+- `/api/supply`, `/api/circulating`, `/api/blockreward` — the CoinMarketCap/CoinGecko-shaped
+  endpoints the prompt asks for by name. `circulating` equals `total_supply` for FIC: the premine
+  has no vesting/lockup (see `docs/tokenomics.md`), so there's no distinction to compute — the
+  response says this explicitly rather than inventing a schedule. It also reports
+  `premine_spendable: false` on mainnet before the genesis key ceremony, since the placeholder
+  recipient can neither spend nor stake it.
+- `/api/staking-stats` (a `#/staking` page): current block reward (always 10 FIC, by definition),
+  annual emission (constant, from `docs/tokenomics.md`), and blocks/day measured directly from
+  real block timestamps over the last up-to-500 blocks.
+- **Two fields the prompt asked for that genuinely can't be built right now, reported as `null`
+  rather than faked:** `active_stake_weight` would need a staking wallet's `getstakinginfo`
+  RPC (`netstakeweight`), which this deliberately wallet-less, read-only backend doesn't hold —
+  adding a wallet just for one estimate would break the clean separation from any future
+  staking-service backend (same reasoning CAC's own explorer used for why it's a separate
+  service at all). `delegated_staking_p2cs` is `null` because P2CS/cold staking doesn't exist in
+  `firstislamiccoin-core` yet (TODO-HUMAN 2).
+
+### Rebrand and correctness fixes
+
+Field names moved from `_satoshis` to `_fils` (FIC's actual base-unit name). Genesis blocks are
+now flagged `is_genesis` explicitly, rather than falling through the PoW/PoS badge logic that
+never anticipated a non-PoW, non-PoS genesis block with 1,000 premine outputs. `rpc.py` gained
+cookie-file authentication (`FIC_RPC_COOKIEFILE`) alongside CAC's original fixed user/password —
+needed because `firstislamiccoin-infra`'s own testnet nodes run with no fixed RPC password at all
+(see `docker-compose.testnet.yml`), and it's the more standard way to deploy today's node either
+way.
+
+### Verified against the real, live testnet — not assumed
+
+Installed the backend's dependencies into a throwaway container already wired to the running
+Phase 2 testnet's network and read-only cookie mount (the `tools` service in
+`docker-compose.testnet.yml`), pointed it at node2, and checked every endpoint against the node's
+own RPC output directly:
+
+| Check | Result |
+|---|---|
+| `/api/stats` height and best-block hash | Matched `getblockchaininfo` exactly (height 305) |
+| `total_supply_fils` | `1,400,000,305,000,000,000` fils = exactly `14,000,000,000 + 10 × 305` |
+| `/api/block/0` | The known testnet genesis hash; premine total exactly 14,000,000,000 FIC; `is_genesis: true` |
+| `/api/block/1` | Its second transaction correctly flagged `is_coinstake` |
+| `/api/tx/<that coinstake>` | `reward_fils` exactly 10 FIC, `reward_fees_fils` exactly 0 (no other transactions in that block) |
+| `/api/address/<a real funded address>` | Balance in fils matched `getreceivedbyaddress` exactly |
+| `/api/richlist` | Real, plausible balances, correctly scanned from genesis |
+
+Full commands and output in `firstislamiccoin-explorer/README.md`'s "Verification" section.
+
+### Not done in this pass
+
+- **Not deployed.** No `explorer.firstislamiccoin.com` DNS record (`docs/dns.md`), no server.
+  `firstislamiccoin-infra/provisioning/explorer/` (nginx config, systemd unit, provisioning
+  script) is written and ready, adapted from CAC's own, but `provision.sh` needs `REPO_URL` (no
+  public FirstIslamicCoin GitHub org exists yet) or a local checkout.
+- **P2CS delegation stats** — genuinely blocked on TODO-HUMAN 2, not an oversight.
+- **A real address-history index.** Same limitation CAC's explorer had and documented: address
+  pages show current balance/UTXOs via `scantxoutset`, not historical spent transactions. Needs
+  `firstislamiccoin-electrumx` (Phase 4), not built yet.
+
+### `TODO-HUMAN`
+
+A server and `explorer.firstislamiccoin.com`, same access gap as Phase 9's Cloudflare/DNS items —
+tracked in the `TODO-HUMAN` table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -764,3 +848,4 @@ those are removed.
 | 8 | Verify ElectrumX full block indexing end-to-end — never done upstream | Phase 4 |
 | 9 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
 | 10 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |
+| 11 | Explorer: provision a real server and the `explorer.firstislamiccoin.com` DNS record, run `firstislamiccoin-infra/provisioning/explorer/provision.sh` against it once a public repository URL exists | Phase 8 |

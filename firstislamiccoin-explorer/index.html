@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FirstIslamicCoin Explorer</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <img src="assets/fic-icon.svg" alt="" />
+      <h1><a href="#/">FirstIslamicCoin Explorer</a></h1>
+    </div>
+    <nav>
+      <a href="#/">Home</a>
+      <a href="#/richlist">Rich list</a>
+      <a href="#/staking">Staking stats</a>
+    </nav>
+    <div class="subtitle" id="chain-badge">&mdash;</div>
+  </header>
+
+  <div class="search-box">
+    <input id="search-input" placeholder="Block height, block hash, txid, or address" />
+    <button id="search-btn">Search</button>
+  </div>
+
+  <div id="app"></div>
+
+  <footer>
+    Read-only, no wallet keys held by this service. Nothing here is investment advice.
+  </footer>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
