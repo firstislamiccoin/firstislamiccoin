@@ -5670,7 +5670,13 @@ void PeerManagerImpl::MaybeSendFeefilter(CNode& pto, Peer& peer, std::chrono::mi
         }
     }
     if (current_time > peer.m_next_send_feefilter) {
-        CAmount filterToSend = m_fee_filter_rounder.round(currentFilter);
+        // FirstIslamicCoin: currentFilter is the fixed TX_FEE_PER_KB that every
+        // standard wallet transaction pays exactly. FeeFilterRounder picks the
+        // bucket at or above its input one time in three, which can advertise a
+        // filter above that fee (0.00107179 FIC/kvB) and silently stop the peer
+        // from announcing ordinary transactions to us. Rounding is there to
+        // resist fingerprinting; let it lower the filter, never raise it.
+        CAmount filterToSend = std::min(m_fee_filter_rounder.round(currentFilter), currentFilter);
         // We always have a fee filter of at least the min relay fee
         filterToSend = std::max(filterToSend, m_mempool.m_min_relay_feerate.GetFeePerK());
         if (filterToSend != peer.m_fee_filter_sent) {
