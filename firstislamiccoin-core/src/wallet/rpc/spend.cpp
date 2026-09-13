@@ -532,7 +532,9 @@ RPCHelpMan sendtoaddress()
 
     CCoinControl coin_control;
 
-    coin_control.m_avoid_address_reuse = GetAvoidReuseFlag(*pwallet, request.params[8]);
+    // FirstIslamicCoin: sendtoaddress has no replaceable/conf_target/estimate_mode arguments,
+    // so avoid_reuse is positional argument 5 and verbose is 7 (upstream: 8 and 10).
+    coin_control.m_avoid_address_reuse = GetAvoidReuseFlag(*pwallet, request.params[5]);
     // We also enable partial spend avoidance if reuse avoidance is set.
     coin_control.m_avoid_partial_spends |= coin_control.m_avoid_address_reuse;
 
@@ -548,7 +550,7 @@ RPCHelpMan sendtoaddress()
 
     std::vector<CRecipient> recipients;
     ParseRecipients(address_amounts, subtractFeeFromAmount, recipients);
-    const bool verbose{request.params[10].isNull() ? false : request.params[10].get_bool()};
+    const bool verbose{request.params[7].isNull() ? false : request.params[7].get_bool()};
 
     return SendMoney(*pwallet, coin_control, recipients, mapValue, verbose);
 },
@@ -635,7 +637,9 @@ RPCHelpMan sendmany()
 
     std::vector<CRecipient> recipients;
     ParseRecipients(sendTo, subtractFeeFromAmount, recipients);
-    const bool verbose{request.params[9].isNull() ? false : request.params[9].get_bool()};
+    // FirstIslamicCoin: sendmany has no replaceable/conf_target/estimate_mode arguments,
+    // so verbose is positional argument 6 (upstream: 9).
+    const bool verbose{request.params[6].isNull() ? false : request.params[6].get_bool()};
 
     return SendMoney(*pwallet, coin_control, recipients, std::move(mapValue), verbose);
 },
@@ -1253,7 +1257,9 @@ RPCHelpMan send()
             std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
             if (!pwallet) return UniValue::VNULL;
 
-            UniValue options{request.params[4].isNull() ? UniValue::VOBJ : request.params[4]};
+            // FirstIslamicCoin: send() takes only (outputs, options), so the options object is
+            // positional argument 1 (upstream had conf_target, estimate_mode, fee_rate first).
+            UniValue options{request.params[1].isNull() ? UniValue::VOBJ : request.params[1]};
             PreventOutdatedOptions(options);
 
 
@@ -1352,7 +1358,8 @@ RPCHelpMan sendall()
             // the user could have gotten from another RPC command prior to now
             pwallet->BlockUntilSyncedToCurrentChain();
 
-            UniValue options{request.params[4].isNull() ? UniValue::VOBJ : request.params[4]};
+            // FirstIslamicCoin: sendall() takes only (recipients, options).
+            UniValue options{request.params[1].isNull() ? UniValue::VOBJ : request.params[1]};
             PreventOutdatedOptions(options);
 
 

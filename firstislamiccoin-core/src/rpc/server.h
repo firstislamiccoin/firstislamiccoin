@@ -16,7 +16,10 @@
 
 #include <univalue.h>
 
-static const unsigned int DEFAULT_RPC_SERIALIZE_VERSION = 0;
+// FirstIslamicCoin: 1, as upstream. CAC defaulted to 0, which strips witness
+// data from raw transaction and block hex over RPC and REST; with SegWit
+// enforced from genesis that hex no longer verifies if relayed.
+static const unsigned int DEFAULT_RPC_SERIALIZE_VERSION = 1;
 
 class CRPCCommand;
 class ChainstateManager;
