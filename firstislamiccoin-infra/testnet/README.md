@@ -62,6 +62,7 @@ The report is written to `testnet/out/testnet-report.md`, alongside
 | `bootstrap.py` | tools | imports the genesis key, distributes the premine to five staking wallets in tranches; resumable |
 | `stress.py` | tools | fund, 10,000-transaction spray, reindex check, txindex lookups, invalidateblock/reconsiderblock |
 | `run-stress.sh` | host | runs the stress steps and the node restarts between them; records the `-prune` check |
+| `rolling-upgrade.sh` | host | moves the nodes to a new `fic-node` image one at a time while the chain keeps running, recording each node's downtime and catch-up time; non-consensus changes only |
 | `report.py` | tools | re-reads every block to check reward and spacing; merges monitor and stress records into the report |
 
 ## Why `-maxtipage`
