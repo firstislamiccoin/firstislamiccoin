@@ -715,6 +715,10 @@ public:
     // provides no real security
     std::atomic<bool> m_wallet_unlock_staking_only{false};
     int64_t m_last_coin_stake_search_interval{0};
+    //! Last masked coinstake timestamp this wallet searched. Per wallet: with a
+    //! value shared by every staking thread, one wallet's unsuccessful search
+    //! used up the timestamp slot for all the others.
+    int64_t m_last_coin_stake_search_time{0};
     CAmount m_min_staking_amount{DEFAULT_MIN_STAKING_AMOUNT};
     CAmount m_reserve_balance{DEFAULT_RESERVE_BALANCE};
     std::atomic<bool> m_enabled_staking{false};

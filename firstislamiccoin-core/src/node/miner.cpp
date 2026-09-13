@@ -213,9 +213,16 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     // Proof-of-stake block
 #ifdef ENABLE_WALLET
     // peercoin: if coinstake available add coinstake tx
-    static int64_t nLastCoinStakeSearchTime = GetAdjustedTimeSeconds();  // only initialized at startup
-
     if (pwallet) {
+        // FirstIslamicCoin: the last searched timestamp is per wallet. Upstream
+        // kept one static for the whole process, so on a node staking several
+        // wallets, whichever thread reached a timestamp slot first consumed it:
+        // a wallet with no eligible coins searching first made every other
+        // wallet skip that slot silently. On the testnet this held up block 4
+        // for 512 s and 896 s while the only wallet able to stake sat idle.
+        int64_t& nLastCoinStakeSearchTime = pwallet->m_last_coin_stake_search_time;
+        if (nLastCoinStakeSearchTime == 0) nLastCoinStakeSearchTime = GetAdjustedTimeSeconds();
+
         // attempt to find a coinstake
         *pfPoSCancel = true;
         pblock->nBits = GetNextTargetRequired(pindexPrev, chainparams.GetConsensus(), true);
