@@ -88,7 +88,20 @@ bool CheckStakeKernelHash(const CBlockIndex* pindexPrev, unsigned int nBits, uin
     if (nValueIn == 0)
         return error("CheckStakeKernelHash() : nValueIn = 0");
     arith_uint256 bnWeight = arith_uint256(nValueIn);
-    bnTarget *= bnWeight;
+    // FirstIslamicCoin: saturate instead of wrapping. arith_uint256
+    // multiplication discards bits above 2^256, and a single 14,000,000 FIC
+    // genesis output (2^50.3 fils) times an easy PoS target (posLimitV2 is
+    // about 2^208) needs 259 bits. The wrapped product is an arbitrary value
+    // that depends on nBits: at 0x1b00cde1 it is about 1.3e-6 of the hash
+    // space, so outputs of that size could practically never stake, and since
+    // every genesis output has the same value they would all fail together.
+    // A weighted target that would exceed 2^256 means every hash qualifies,
+    // so cap it there.
+    const arith_uint256 bnMaxTarget = ~arith_uint256(0);
+    if (bnTarget > bnMaxTarget / bnWeight)
+        bnTarget = bnMaxTarget;
+    else
+        bnTarget *= bnWeight;
 
     uint256 nStakeModifier = pindexPrev->nStakeModifier;
 

@@ -79,4 +79,37 @@ BOOST_AUTO_TEST_CASE(CheckStakeKernelHash_EligibilityIndependentOfAge)
         "pYoung=" << pYoung << " pOld=" << pOld << " (young passes=" << youngPasses << " old passes=" << oldPasses << " / " << trials << " trials)");
 }
 
+// A genesis-sized output at an easy target: bnTarget * nValueIn needs more than
+// 256 bits. The weighted target must saturate (every hash passes), not wrap.
+// 0x1b00cde1 is chosen because the wrapped product is ~1.3e-6 of the hash
+// space: with wrapping, all but a handful of a million kernels fail.
+BOOST_AUTO_TEST_CASE(CheckStakeKernelHash_WeightedTargetSaturates)
+{
+    const CAmount nValueIn = 14'000'000 * COIN;
+    const unsigned int nBits = 0x1b00cde1;
+
+    arith_uint256 base;
+    base.SetCompact(nBits);
+    BOOST_REQUIRE(base > (~arith_uint256(0)) / arith_uint256(static_cast<uint64_t>(nValueIn)));
+
+    CBlockIndex pindexPrev{};
+    pindexPrev.nStakeModifier = uint256S("9c1e5a7b3d2f4e6a8b0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f2a4b6c8d0e1f3a");
+
+    const arith_uint256 seed = arith_uint256(0xfeedbeef);
+    const uint32_t blockFromTime = 1'789'171'200;
+    int passes = 0;
+    const int trials = 200;
+    for (int i = 0; i < trials; ++i) {
+        const COutPoint prevout(ArithToUint256(seed + arith_uint256(static_cast<uint64_t>(i))), i % 1000);
+        if (CheckStakeKernelHash(&pindexPrev, nBits, blockFromTime, nValueIn, prevout, blockFromTime + 16 * i)) {
+            ++passes;
+        }
+    }
+    BOOST_CHECK_EQUAL(passes, trials);
+
+    // Below the overflow boundary the target still scales with the amount.
+    const CAmount small = 1 * COIN;
+    BOOST_CHECK(base <= (~arith_uint256(0)) / arith_uint256(static_cast<uint64_t>(small)));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
