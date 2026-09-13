@@ -595,6 +595,16 @@ on mainnet or testnet would have hit the ContextualCheckBlock crash before
 this fix existed, with no workaround short of a source change. Worth a
 deliberate crash-recovery drill before mainnet (TODO-HUMAN).
 
+### Unit suites, final tally for this phase
+
+One process per suite, commit `c1d48ed`: **118 of 121 pass**, no regressions
+against the CAC baseline. The three still failing are unchanged from Phase 1
+and already accounted for above: `coinselector_tests` (one pre-existing
+`bnb_search_test` case, not yet diagnosed), `transaction_tests` (JSON vectors
+still signed over Bitcoin's sighash), `validation_block_tests`
+(`mempool_locks_reorg`, which needs a reorg deeper than this fork allows and a
+custom block builder to match).
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
