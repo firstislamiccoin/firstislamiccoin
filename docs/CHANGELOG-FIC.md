@@ -155,6 +155,7 @@ with a Shariah advisory review rather than an engineering rebrand.
 | `8b60f2a` | **GUI: accept amounts of 10 billion FIC and more** |
 | `76af7fd` | Label amounts and fee rates FIC in RPC, not BTC |
 | `e7f2b25` | Use `CURRENCY_UNIT` in the `send` RPC's help examples |
+| `bdf7438` | Add the Phase 1 regtest acceptance script, `contrib/fic/phase1-acceptance.sh` |
 
 ### The fixed reward
 
@@ -294,7 +295,8 @@ old. A new block must be later than genesis, so on a younger genesis the tip is
 never old enough to keep a node in initial block download, and both tests'
 "still in IBD" assertions fail (confirmed at `feature_maxtipage.py:39` with the
 genesis 22 hours old). FIC's regtest genesis is dated 2026-09-12 00:00 UTC, so
-both fail on runs before 2026-09-13 00:00 UTC and should pass after. CAC's July
+both fail on runs before 2026-09-13 00:00 UTC and pass after (confirmed; see
+Verification). CAC's July
 genesis never exposed this.
 
 `headers_sync_chainwork_tests` deliberately still solves headers against
@@ -344,10 +346,10 @@ build of unmodified CAC `50b1dce` in the same container.
 | `make` | clean, exit 0 — `firstislamiccoind`, `-cli`, `-qt`, `test_firstislamiccoin` |
 | `fic_reward_tests`, `fic_genesis_tests`, `pos_tests` | **all pass** |
 | Qt tests (`test_firstislamiccoin-qt`, offscreen) | **21 of 21 pass** across 6 test classes |
-| Unit suites, one process each | **89 of 121 pass** (CAC: 79 of 119). 9 suites fixed that failed in CAC; 31 fail in both; 1 regression, `net_tests`, clock-dependent (see above) |
+| Unit suites, one process each | **89 of 121 pass** (CAC: 79 of 119). 9 suites fixed that failed in CAC; 31 fail in both. `net_tests` failed in this run only because the genesis was under 24 h old; it passes on the re-run below, making **90 of 121** and no regressions |
 | FIC functional tests | **all 3 pass** (`feature_fic_genesis_premine`, `feature_fic_fixed_reward`, `feature_pos_reorg`) |
-| Full functional suite | **69 pass**, 155 fail, 57 skip (CAC: 51 / 173 / 57). 19 fixed that failed in CAC; 154 fail in both; 1 regression, `feature_maxtipage.py`, clock-dependent (see above) |
-| Acceptance script, real regtest node | **PASS** — genesis `360afc3e…d4e712` reported; 14,000,000,000 FIC premine imported and spendable; `generatetoaddress` rejected with `reject-pow`; 3 proof-of-stake blocks staked from genesis outputs; `getstakinginfo` works; supply audit exact at 14,000,000,030 |
+| Full functional suite | **69 pass**, 155 fail, 57 skip (CAC: 51 / 173 / 57). 19 fixed that failed in CAC; 154 fail in both. `feature_maxtipage.py` failed in this run only because the genesis was under 24 h old; it passes on the re-run below, making **70 passed** and no regressions |
+| `contrib/fic/phase1-acceptance.sh`, real regtest node | **PASS** — genesis `360afc3e…d4e712` reported; 14,000,000,000 FIC premine imported and spendable; `generatetoaddress` rejected with `reject-pow`; 3 proof-of-stake blocks staked from genesis outputs; `getstakinginfo` works; supply audit exact at 14,000,000,030 |
 | `git grep -il codexa` in `firstislamiccoin-core/` | `COPYING` only |
 
 Unit suites fixed relative to CAC: `argsman`, `bip32`, `blockencodings`,
@@ -364,11 +366,14 @@ Unit suites fixed relative to CAC: `argsman`, `bip32`, `blockencodings`,
 Bitcoin Core tests that CAC carried over without adapting to proof of stake,
 scrypt proof of work, its own chain parameters or its 500-block regtest
 fixture. Phase 2's "all functional tests green" requires working through them;
-No test that passed on CAC fails on FIC apart from the clock-dependent pair;
+No test that passes on CAC fails on FIC once the clock-dependent pair is re-run;
 the shared failures were not individually re-diagnosed, so some may now fail
 for a different reason than they did on CAC.
 
-Clock-dependent tests re-run once the regtest genesis is more than 24 hours old: *pending*.
+**Clock-dependent tests, re-run 2026-09-13 00:05 UTC** on the same build, with
+the regtest genesis 1,445 minutes old: `net_tests` passes (16 cases) and
+`feature_maxtipage.py` passes. That confirms the explanation above: neither was
+a defect, and FIC has no test regressions relative to CAC.
 
 ---
 
