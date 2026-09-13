@@ -266,21 +266,21 @@ class BIP68Test(BitcoinTestFramework):
         test_nonzero_locks(tx2, self.nodes[0], self.relayfee, use_height_lock=False)
 
         # Now mine some blocks, but make sure tx2 doesn't get mined.
-        # Use prioritisetransaction to lower the effective feerate to 0
-        self.nodes[0].prioritisetransaction(txid=tx2.hash, fee_delta=int(-self.relayfee*COIN))
+        # FirstIslamicCoin has no prioritisetransaction RPC, so mine empty blocks
+        # instead of lowering tx2's effective feerate to 0.
         cur_time = int(time.time())
         for _ in range(10):
             self.nodes[0].setmocktime(cur_time + 600)
-            self.generate(self.wallet, 1, sync_fun=self.no_op)
+            self.generateblock(self.nodes[0], output=self.wallet.get_address(), transactions=[], sync_fun=self.no_op)
             cur_time += 600
+        self.wallet.rescan_utxos()
 
         assert tx2.hash in self.nodes[0].getrawmempool()
 
         test_nonzero_locks(tx2, self.nodes[0], self.relayfee, use_height_lock=True)
         test_nonzero_locks(tx2, self.nodes[0], self.relayfee, use_height_lock=False)
 
-        # Mine tx2, and then try again
-        self.nodes[0].prioritisetransaction(txid=tx2.hash, fee_delta=int(self.relayfee*COIN))
+        # Mine tx2, and then try again (its feerate was never lowered, see above)
 
         # Advance the time on the node so that we can test timelocks
         self.nodes[0].setmocktime(cur_time+600)
@@ -330,7 +330,8 @@ class BIP68Test(BitcoinTestFramework):
         # This would cause tx2 to be added back to the mempool, which in turn causes
         # tx3 to be removed.
         for i in range(2):
-            block = create_block(tmpl=tmpl, ntime=cur_time)
+            # FirstIslamicCoin: never below the template's mintime (parent MTP + 1)
+            block = create_block(tmpl=tmpl, ntime=max(cur_time, tmpl['mintime']))
             block.solve()
             tip = block.sha256
             assert_equal(None if i == 1 else 'inconclusive', self.nodes[0].submitblock(block.serialize().hex()))

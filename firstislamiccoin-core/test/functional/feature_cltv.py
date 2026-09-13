@@ -78,6 +78,8 @@ def cltv_validate(tx, height):
 
 
 CLTV_HEIGHT = 111
+# FirstIslamicCoin: CheckBlockHeader rejects blocks with nVersion < 7 (bad-version, src/validation.cpp)
+MIN_BLOCK_VERSION = 7
 
 
 class BIP65Test(BitcoinTestFramework):
@@ -106,7 +108,10 @@ class BIP65Test(BitcoinTestFramework):
         self.generate(self.nodes[0], CLTV_HEIGHT - 2 - 10)
         assert_equal(self.nodes[0].getblockcount(), CLTV_HEIGHT - 2)
 
-        self.log.info("Test that invalid-according-to-CLTV transactions can still appear in a block")
+        # FirstIslamicCoin: CHECKLOCKTIMEVERIFY is enforced for every block timestamped after nProtocolV3Time
+        # (2015, see GetBlockScriptFlags in src/validation.cpp), so unlike Bitcoin there is no pre-activation
+        # window: invalid-according-to-CLTV transactions are rejected below CLTV_HEIGHT as well.
+        self.log.info("Test that invalid-according-to-CLTV transactions cannot appear in a block below CLTV_HEIGHT")
 
         # create one invalid tx per CLTV failure reason (5 in total) and collect them
         invalid_cltv_txs = []
@@ -117,27 +122,34 @@ class BIP65Test(BitcoinTestFramework):
 
         tip = self.nodes[0].getbestblockhash()
         block_time = self.nodes[0].getblockheader(tip)['mediantime'] + 1
-        block = create_block(int(tip, 16), create_coinbase(CLTV_HEIGHT - 1), block_time, version=3, txlist=invalid_cltv_txs)
+        block = create_block(int(tip, 16), create_coinbase(CLTV_HEIGHT - 1), block_time, version=MIN_BLOCK_VERSION, txlist=invalid_cltv_txs)
         block.solve()
 
-        self.test_cltv_info(is_active=False)  # Not active as of current tip and next block does not need to obey rules
-        peer.send_and_ping(msg_block(block))
-        self.test_cltv_info(is_active=True)  # Not active as of current tip, but next block must obey rules
-        assert_equal(self.nodes[0].getbestblockhash(), block.hash)
+        self.test_cltv_info(is_active=True)
+        with self.nodes[0].assert_debug_log(expected_msgs=[f'CheckInputScripts on {invalid_cltv_txs[0].hash} failed with mandatory-script-verify-flag-failed']):
+            peer.send_and_ping(msg_block(block))
+        assert_equal(self.nodes[0].getbestblockhash(), tip)
 
-        self.log.info("Test that blocks must now be at least version 4")
-        tip = block.sha256
-        block_time += 1
-        block = create_block(tip, create_coinbase(CLTV_HEIGHT), block_time, version=3)
+        # Mine a regular block to reach CLTV_HEIGHT - 1
+        self.generate(self.nodes[0], 1)
+        assert_equal(self.nodes[0].getblockcount(), CLTV_HEIGHT - 1)
+
+        self.log.info("Test that blocks must be at least version %d", MIN_BLOCK_VERSION)
+        tip_hash = self.nodes[0].getbestblockhash()
+        tip = int(tip_hash, 16)
+        block_time = self.nodes[0].getblockheader(tip_hash)['time'] + 1
+        block = create_block(tip, create_coinbase(CLTV_HEIGHT), block_time, version=MIN_BLOCK_VERSION - 1)
         block.solve()
 
-        with self.nodes[0].assert_debug_log(expected_msgs=[f'{block.hash}, bad-version(0x00000003)']):
+        # FirstIslamicCoin: for nVersion <= 6 the node identifies the block by its scrypt hash
+        # (CBlockHeader::GetHash in src/primitives/block.cpp), so match on the reject reason only.
+        with self.nodes[0].assert_debug_log(expected_msgs=['bad-version, bad block version']):
             peer.send_and_ping(msg_block(block))
             assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
             peer.sync_with_ping()
 
         self.log.info("Test that invalid-according-to-CLTV transactions cannot appear in a block")
-        block.nVersion = 4
+        block.nVersion = MIN_BLOCK_VERSION
         block.vtx.append(CTransaction()) # dummy tx after coinbase that will be replaced later
 
         # create and test one invalid tx per CLTV failure reason (5 in total)
@@ -174,7 +186,7 @@ class BIP65Test(BitcoinTestFramework):
                 assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
                 peer.sync_with_ping()
 
-        self.log.info("Test that a version 4 block with a valid-according-to-CLTV transaction is accepted")
+        self.log.info("Test that a version %d block with a valid-according-to-CLTV transaction is accepted", MIN_BLOCK_VERSION)
         cltv_validate(spendtx, CLTV_HEIGHT - 1)
 
         block.vtx.pop(1)

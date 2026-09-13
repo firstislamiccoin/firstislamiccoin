@@ -20,7 +20,7 @@ class MerkleBlockTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [
-            [],
+            ["-txindex=0"],  # FirstIslamicCoin: -txindex defaults to on; this node must run without it
             ["-txindex"],
         ]
 

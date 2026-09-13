@@ -68,8 +68,9 @@ class InvalidBlockRequestTest(BitcoinTestFramework):
         # For more information on merkle-root malleability see src/consensus/merkle.cpp.
         self.log.info("Test merkle root malleability.")
 
-        tx1 = create_tx_with_script(block1.vtx[0], 0, script_sig=bytes([OP_TRUE]), amount=50 * COIN)
-        tx2 = create_tx_with_script(tx1, 0, script_sig=bytes([OP_TRUE]), amount=50 * COIN)
+        # FIC: GetMinFee() is a consensus rule (bad-txns-fee-not-enough), so pay a fee.
+        tx1 = create_tx_with_script(block1.vtx[0], 0, script_sig=bytes([OP_TRUE]), amount=50 * COIN - COIN // 100)
+        tx2 = create_tx_with_script(tx1, 0, script_sig=bytes([OP_TRUE]), amount=50 * COIN - 2 * (COIN // 100))
         block2 = create_block(tip, create_coinbase(height), block_time, txlist=[tx1, tx2])
         block_time += 1
         block2.solve()
@@ -96,7 +97,8 @@ class InvalidBlockRequestTest(BitcoinTestFramework):
 
         self.log.info("Test very broken block.")
 
-        block3 = create_block(tip, create_coinbase(height, nValue=100), block_time)
+        # FIC: regtest proof-of-work subsidy is 28,000,000 coins (consensus.nPowSubsidy).
+        block3 = create_block(tip, create_coinbase(height, nValue=28_000_000 + 1), block_time)
         block_time += 1
         block3.solve()
 

@@ -32,6 +32,9 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         self.num_nodes = 4
         # Node0 has no required chainwork; node1 requires 15 blocks on top of the genesis block; node2 requires 2047
         self.extra_args = [["-minimumchainwork=0x0", "-checkblockindex=0"], ["-minimumchainwork=0x1f", "-checkblockindex=0"], ["-minimumchainwork=0x1000", "-checkblockindex=0"], ["-minimumchainwork=0x1000", "-checkblockindex=0", "-whitelist=noban@127.0.0.1"]]
+        # FIC: regtest rejects proof-of-work blocks above height 500 (reject-pow) unless -lastpowblock is raised.
+        for args in self.extra_args:
+            args.append("-lastpowblock=2147483646")
 
     def setup_network(self):
         self.setup_nodes()
@@ -73,7 +76,7 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
             assert len(chaintips) == 1
             assert {
                 'height': 0,
-                'hash': '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206',
+                'hash': self.nodes[0].getblockhash(0),
                 'branchlen': 0,
                 'status': 'active',
             } in chaintips
@@ -85,7 +88,7 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
 
         assert {
             'height': 0,
-            'hash': '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206',
+            'hash': self.nodes[0].getblockhash(0),
             'branchlen': 0,
             'status': 'active',
         } in self.nodes[2].getchaintips()

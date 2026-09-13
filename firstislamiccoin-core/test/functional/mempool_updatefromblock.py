@@ -20,7 +20,7 @@ class MempoolUpdateFromBlockTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.extra_args = [['-limitdescendantsize=1000', '-limitancestorsize=1000', '-limitancestorcount=100']]
 
-    def transaction_graph_test(self, size, n_tx_to_mine=None, fee=100_000):
+    def transaction_graph_test(self, size, n_tx_to_mine=None, fee=None):
         """Create an acyclic tournament (a type of directed graph) of transactions and use it for testing.
 
         Keyword arguments:
@@ -65,7 +65,9 @@ class MempoolUpdateFromBlockTest(BitcoinTestFramework):
                 from_node=self.nodes[0],
                 utxos_to_spend=inputs,
                 num_outputs=n_outputs,
-                fee_per_output=ceil(fee / n_outputs)
+                # FirstIslamicCoin: a flat 100000 sat is below GetMinFee (100 sat/vbyte)
+                # for these large txs, so by default let MiniWallet pay the minimum.
+                fee_per_output=None if fee is None else ceil(fee / n_outputs),
             )
             tx_id.append(new_tx['txid'])
             tx_size.append(new_tx['tx'].get_vsize())

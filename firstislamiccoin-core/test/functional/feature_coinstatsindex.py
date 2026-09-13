@@ -36,6 +36,12 @@ from test_framework.wallet import (
 )
 
 
+# FirstIslamicCoin: regtest proof-of-work blocks pay a fixed subsidy, and the genesis coinbase (the premine)
+# is spendable and part of the UTXO set instead of being accounted as unspendable.
+POW_BLOCK_SUBSIDY = 28000000
+GENESIS_PREMINE = 14000000000
+
+
 class CoinStatsIndexTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -54,8 +60,7 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         self._test_index_rejects_hash_serialized()
         self._test_init_index_after_reorg()
 
-    def block_sanity_check(self, block_info):
-        block_subsidy = 50
+    def block_sanity_check(self, block_info, block_subsidy=POW_BLOCK_SUBSIDY):
         assert_equal(
             block_info['prevout_spent'] + block_subsidy,
             block_info['new_outputs_ex_coinbase'] + block_info['coinbase'] + block_info['unspendable']
@@ -97,7 +102,7 @@ class CoinStatsIndexTest(BitcoinTestFramework):
 
         for hash_option in index_hash_options:
             # Fetch old stats by height
-            res2 = index_node.gettxoutsetinfo(hash_option, 102)
+            res2 = index_node.gettxoutsetinfo(hash_option, COINBASE_MATURITY + 2)
             del res2['block_info'], res2['total_unspendable_amount']
             res2.pop('muhash', None)
             assert_equal(res0, res2)
@@ -109,39 +114,37 @@ class CoinStatsIndexTest(BitcoinTestFramework):
             assert_equal(res0, res3)
 
             # It does not work without coinstatsindex
-            assert_raises_rpc_error(-8, "Querying specific block heights requires coinstatsindex", node.gettxoutsetinfo, hash_option, 102)
+            assert_raises_rpc_error(-8, "Querying specific block heights requires coinstatsindex", node.gettxoutsetinfo, hash_option, COINBASE_MATURITY + 2)
 
         self.log.info("Test gettxoutsetinfo() with index and verbose flag")
 
         for hash_option in index_hash_options:
-            # Genesis block is unspendable
+            # FirstIslamicCoin: the genesis block coinbase (premine) is spendable
             res4 = index_node.gettxoutsetinfo(hash_option, 0)
-            assert_equal(res4['total_unspendable_amount'], 50)
+            assert_equal(res4['total_unspendable_amount'], 0)
             assert_equal(res4['block_info'], {
-                'unspendable': 50,
+                'unspendable': 0,
                 'prevout_spent': 0,
                 'new_outputs_ex_coinbase': 0,
-                'coinbase': 0,
+                'coinbase': GENESIS_PREMINE,
                 'unspendables': {
-                    'genesis_block': 50,
-                    'bip30': 0,
+                    'genesis_block': 0,
                     'scripts': 0,
                     'unclaimed_rewards': 0
                 }
             })
-            self.block_sanity_check(res4['block_info'])
+            self.block_sanity_check(res4['block_info'], block_subsidy=GENESIS_PREMINE)
 
             # Test an older block height that included a normal tx
-            res5 = index_node.gettxoutsetinfo(hash_option, 102)
-            assert_equal(res5['total_unspendable_amount'], 50)
+            res5 = index_node.gettxoutsetinfo(hash_option, COINBASE_MATURITY + 2)
+            assert_equal(res5['total_unspendable_amount'], 0)
             assert_equal(res5['block_info'], {
                 'unspendable': 0,
-                'prevout_spent': 50,
-                'new_outputs_ex_coinbase': Decimal('49.99968800'),
-                'coinbase': Decimal('50.00031200'),
+                'prevout_spent': POW_BLOCK_SUBSIDY,
+                'new_outputs_ex_coinbase': Decimal('27999999.99968800'),
+                'coinbase': Decimal('28000000.00031200'),
                 'unspendables': {
                     'genesis_block': 0,
-                    'bip30': 0,
                     'scripts': 0,
                     'unclaimed_rewards': 0,
                 }
@@ -153,6 +156,8 @@ class CoinStatsIndexTest(BitcoinTestFramework):
             from_node=node,
             scriptPubKey=self.wallet.get_scriptPubKey(),
             amount=21 * COIN,
+            # FirstIslamicCoin: consensus minimum fee (GetMinFee in src/consensus/tx_verify.cpp) exceeds the 1000 sat default
+            fee=100000,
         )
 
         # Find the right position of the 21 BTC output
@@ -170,16 +175,15 @@ class CoinStatsIndexTest(BitcoinTestFramework):
 
         for hash_option in index_hash_options:
             # Check all amounts were registered correctly
-            res6 = index_node.gettxoutsetinfo(hash_option, 108)
-            assert_equal(res6['total_unspendable_amount'], Decimal('70.99000000'))
+            res6 = index_node.gettxoutsetinfo(hash_option, COINBASE_MATURITY + 8)
+            assert_equal(res6['total_unspendable_amount'], Decimal('20.99000000'))
             assert_equal(res6['block_info'], {
                 'unspendable': Decimal('20.99000000'),
-                'prevout_spent': 71,
-                'new_outputs_ex_coinbase': Decimal('49.99999000'),
-                'coinbase': Decimal('50.01001000'),
+                'prevout_spent': POW_BLOCK_SUBSIDY + 21,
+                'new_outputs_ex_coinbase': Decimal('27999999.99900000'),
+                'coinbase': Decimal('28000000.01100000'),
                 'unspendables': {
                     'genesis_block': 0,
-                    'bip30': 0,
                     'scripts': Decimal('20.99000000'),
                     'unclaimed_rewards': 0,
                 }
@@ -188,7 +192,7 @@ class CoinStatsIndexTest(BitcoinTestFramework):
 
         # Create a coinbase that does not claim full subsidy and also
         # has two outputs
-        cb = create_coinbase(109, nValue=35)
+        cb = create_coinbase(COINBASE_MATURITY + 9, nValue=35)
         cb.vout.append(CTxOut(5 * COIN, CScript([OP_FALSE])))
         cb.rehash()
 
@@ -197,22 +201,22 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         block_time = self.nodes[0].getblock(tip)['time'] + 1
         block = create_block(int(tip, 16), cb, block_time)
         block.solve()
-        self.nodes[0].submitblock(block.serialize().hex())
+        self.nodes[0].submitblock(block.serialize(with_flags=False).hex())
         self.sync_all()
 
         for hash_option in index_hash_options:
-            res7 = index_node.gettxoutsetinfo(hash_option, 109)
-            assert_equal(res7['total_unspendable_amount'], Decimal('80.99000000'))
+            res7 = index_node.gettxoutsetinfo(hash_option, COINBASE_MATURITY + 9)
+            # The coinbase claims only 40 of the 28,000,000 subsidy
+            assert_equal(res7['total_unspendable_amount'], Decimal('20.99000000') + POW_BLOCK_SUBSIDY - 40)
             assert_equal(res7['block_info'], {
-                'unspendable': 10,
+                'unspendable': POW_BLOCK_SUBSIDY - 40,
                 'prevout_spent': 0,
                 'new_outputs_ex_coinbase': 0,
                 'coinbase': 40,
                 'unspendables': {
                     'genesis_block': 0,
-                    'bip30': 0,
                     'scripts': 0,
-                    'unclaimed_rewards': 10
+                    'unclaimed_rewards': POW_BLOCK_SUBSIDY - 40
                 }
             })
             self.block_sanity_check(res7['block_info'])
@@ -246,7 +250,7 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         self.log.info("Test use_index option for nodes running the index")
 
         self.connect_nodes(0, 1)
-        self.nodes[0].waitforblockheight(110)
+        self.nodes[0].waitforblockheight(COINBASE_MATURITY + 10)
         res = self.nodes[0].gettxoutsetinfo('muhash')
         option_res = self.nodes[1].gettxoutsetinfo(hash_type='muhash', hash_or_height=None, use_index=False)
         del res['disk_size'], option_res['disk_size']
@@ -262,14 +266,14 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         self.sync_index_node()
         res_invalid = index_node.gettxoutsetinfo('muhash')
         index_node.invalidateblock(reorg_blocks[0])
-        assert_equal(index_node.gettxoutsetinfo('muhash')['height'], 110)
+        assert_equal(index_node.gettxoutsetinfo('muhash')['height'], COINBASE_MATURITY + 10)
 
         # Add two new blocks
         block = self.generate(index_node, 2, sync_fun=self.no_op)[1]
         res = index_node.gettxoutsetinfo(hash_type='muhash', hash_or_height=None, use_index=False)
 
         # Test that the result of the reorged block is not returned for its old block height
-        res2 = index_node.gettxoutsetinfo(hash_type='muhash', hash_or_height=112)
+        res2 = index_node.gettxoutsetinfo(hash_type='muhash', hash_or_height=COINBASE_MATURITY + 12)
         assert_equal(res["bestblock"], block)
         assert_equal(res["muhash"], res2["muhash"])
         assert res["muhash"] != res_invalid["muhash"]
@@ -284,20 +288,20 @@ class CoinStatsIndexTest(BitcoinTestFramework):
         self.generate(index_node, 1)
 
         # Ensure that removing and re-adding blocks yields consistent results
-        block = index_node.getblockhash(99)
+        block = index_node.getblockhash(COINBASE_MATURITY - 1)
         index_node.invalidateblock(block)
         index_node.reconsiderblock(block)
-        res3 = index_node.gettxoutsetinfo(hash_type='muhash', hash_or_height=112)
+        res3 = index_node.gettxoutsetinfo(hash_type='muhash', hash_or_height=COINBASE_MATURITY + 12)
         assert_equal(res2, res3)
 
     def _test_index_rejects_hash_serialized(self):
         self.log.info("Test that the rpc raises if the legacy hash is passed with the index")
 
         msg = "hash_serialized_3 hash type cannot be queried for a specific block"
-        assert_raises_rpc_error(-8, msg, self.nodes[1].gettxoutsetinfo, hash_type='hash_serialized_3', hash_or_height=111)
+        assert_raises_rpc_error(-8, msg, self.nodes[1].gettxoutsetinfo, hash_type='hash_serialized_3', hash_or_height=COINBASE_MATURITY + 11)
 
         for use_index in {True, False, None}:
-            assert_raises_rpc_error(-8, msg, self.nodes[1].gettxoutsetinfo, hash_type='hash_serialized_3', hash_or_height=111, use_index=use_index)
+            assert_raises_rpc_error(-8, msg, self.nodes[1].gettxoutsetinfo, hash_type='hash_serialized_3', hash_or_height=COINBASE_MATURITY + 11, use_index=use_index)
 
     def _test_init_index_after_reorg(self):
         self.log.info("Test a reorg while the index is deactivated")

@@ -45,9 +45,11 @@ class CompactFiltersTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.rpc_timeout = 480
         self.num_nodes = 2
+        # FirstIslamicCoin: regtest proof-of-work ends at height 500; this test mines
+        # 2000 blocks with generate, so extend the PoW window.
         self.extra_args = [
-            ["-blockfilterindex", "-peerblockfilters"],
-            ["-blockfilterindex"],
+            ["-blockfilterindex", "-peerblockfilters", "-lastpowblock=2000"],
+            ["-blockfilterindex", "-lastpowblock=2000"],
         ]
 
     def run_test(self):

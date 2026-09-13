@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+from decimal import Decimal
 import time
 
 from test_framework.messages import (
@@ -54,6 +55,10 @@ def cleanup(func):
             self.nodes[0].disconnect_p2ps()
             self.nodes[0].bumpmocktime(LONG_TIME_SKIP)
     return wrapper
+
+# FIC: above the consensus minimum fee rate, below the node's -minrelaytxfee.
+LOW_FEE_RATE = Decimal("0.0015")
+
 
 class PeerTxRelayer(P2PTxInvStore):
     """A P2PTxInvStore that also remembers all of the getdata and tx messages it receives."""
@@ -111,7 +116,10 @@ class PeerTxRelayer(P2PTxInvStore):
 class OrphanHandlingTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [[]]
+        # FIC: a fee below GetMinFee() (0.001/kvB) is consensus-invalid and gets
+        # the relaying peer discouraged. Raise -minrelaytxfee so the "low fee"
+        # parents below are rejected by policy only, as the test intends.
+        self.extra_args = [["-minrelaytxfee=0.002"]]
 
     def create_parent_and_child(self):
         """Create package with 1 parent and 1 child, normal fees (no cpfp)."""
@@ -177,7 +185,7 @@ class OrphanHandlingTest(BitcoinTestFramework):
         peer2 = node.add_p2p_connection(PeerTxRelayer())
 
         self.log.info("Test orphan handling when a nonsegwit parent is known to be invalid")
-        parent_low_fee_nonsegwit = self.wallet_nonsegwit.create_self_transfer(fee_rate=0)
+        parent_low_fee_nonsegwit = self.wallet_nonsegwit.create_self_transfer(fee_rate=LOW_FEE_RATE)
         assert_equal(parent_low_fee_nonsegwit["txid"], parent_low_fee_nonsegwit["tx"].getwtxid())
         parent_other = self.wallet_nonsegwit.create_self_transfer()
         child_nonsegwit = self.wallet_nonsegwit.create_self_transfer_multi(
@@ -200,7 +208,7 @@ class OrphanHandlingTest(BitcoinTestFramework):
         peer2.assert_never_requested(int(parent_low_fee_nonsegwit["txid"], 16))
 
         self.log.info("Test orphan handling when a segwit parent was invalid but may be retried with another witness")
-        parent_low_fee = self.wallet.create_self_transfer(fee_rate=0)
+        parent_low_fee = self.wallet.create_self_transfer(fee_rate=LOW_FEE_RATE)
         child_low_fee = self.wallet.create_self_transfer(utxo_to_spend=parent_low_fee["new_utxo"])
 
         # Relay the low fee parent. It should not be accepted.

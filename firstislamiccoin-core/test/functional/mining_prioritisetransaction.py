@@ -11,7 +11,7 @@ from test_framework.messages import (
     COIN,
     MAX_BLOCK_WEIGHT,
 )
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
@@ -22,6 +22,12 @@ from test_framework.wallet import MiniWallet
 
 
 class PrioritiseTransactionTest(BitcoinTestFramework):
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: the prioritisetransaction and getprioritisedtransactions RPCs are not registered
+        # (inherited from Blackcoin More; see RegisterMiningRPCCommands in src/rpc/mining.cpp), so there is
+        # no RPC interface to test.
+        raise SkipTest("prioritisetransaction RPC is not available in FirstIslamicCoin")
+
     def set_test_params(self):
         self.num_nodes = 1
         self.extra_args = [[

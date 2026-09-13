@@ -209,6 +209,14 @@ def from_hex(obj, hex_string):
     return obj
 
 
+def from_rpc_hex(obj, hex_string):
+    """FirstIslamicCoin: deserialize a block or block header as returned by
+    RPC/REST (no nFlags field). Equivalent to from_hex() since deserialize()'s
+    with_flags default is already False, but spells out the intent."""
+    obj.deserialize(BytesIO(bytes.fromhex(hex_string)), with_flags=False)
+    return obj
+
+
 def tx_from_hex(hex_string):
     """Deserialize from hex string to a transaction object"""
     return from_hex(CTransaction(), hex_string)
@@ -703,7 +711,8 @@ class CBlockHeader:
             self.calc_sha256()
 
     def set_null(self):
-        self.nVersion = 4
+        # FirstIslamicCoin: CheckBlockHeader() rejects nVersion < 7 ("bad-version")
+        self.nVersion = 7
         self.hashPrevBlock = 0
         self.hashMerkleRoot = 0
         self.nTime = 0
@@ -713,18 +722,22 @@ class CBlockHeader:
         self.sha256 = None
         self.hash = None
 
-    def deserialize(self, f):
+    # FirstIslamicCoin: nFlags (the peercoin PoS marker) is only serialized on
+    # the P2P wire (SER_POSMARKER). RPC, REST, disk and the compact-block
+    # short-ID key use the plain 80-byte header, which is the default here;
+    # P2P message classes pass with_flags=True.
+    def deserialize(self, f, with_flags=False):
         self.nVersion = struct.unpack("<i", f.read(4))[0]
         self.hashPrevBlock = deser_uint256(f)
         self.hashMerkleRoot = deser_uint256(f)
         self.nTime = struct.unpack("<I", f.read(4))[0]
         self.nBits = struct.unpack("<I", f.read(4))[0]
         self.nNonce = struct.unpack("<I", f.read(4))[0]
-        self.nFlags = struct.unpack("<I", f.read(4))[0]
+        self.nFlags = struct.unpack("<I", f.read(4))[0] if with_flags else 0
         self.sha256 = None
         self.hash = None
 
-    def serialize(self):
+    def serialize(self, with_flags=False):
         r = b""
         r += struct.pack("<i", self.nVersion)
         r += ser_uint256(self.hashPrevBlock)
@@ -732,7 +745,8 @@ class CBlockHeader:
         r += struct.pack("<I", self.nTime)
         r += struct.pack("<I", self.nBits)
         r += struct.pack("<I", self.nNonce)
-        r += struct.pack("<I", self.nFlags)
+        if with_flags:
+            r += struct.pack("<I", self.nFlags)
         return r
 
     def calc_sha256(self):
@@ -747,6 +761,25 @@ class CBlockHeader:
             self.sha256 = uint256_from_str(hash256(r))
             self.hash = hash256(r)[::-1].hex()
 
+    def calc_pow_hash(self):
+        """FirstIslamicCoin: proof-of-work uses scrypt(N=1024, r=1, p=1) of the
+        80-byte header (CBlockHeader::GetPoWHash), not the sha256d block hash."""
+        r = b""
+        r += struct.pack("<i", self.nVersion)
+        r += ser_uint256(self.hashPrevBlock)
+        r += ser_uint256(self.hashMerkleRoot)
+        r += struct.pack("<I", self.nTime)
+        r += struct.pack("<I", self.nBits)
+        r += struct.pack("<I", self.nNonce)
+        return uint256_from_str(hashlib.scrypt(r, salt=r, n=1024, r=1, p=1, dklen=32))
+
+    def solve(self):
+        """Grind nNonce until the scrypt proof-of-work meets nBits."""
+        target = uint256_from_compact(self.nBits)
+        while self.calc_pow_hash() > target:
+            self.nNonce += 1
+        self.rehash()
+
     def rehash(self):
         self.sha256 = None
         self.calc_sha256()
@@ -758,7 +791,10 @@ class CBlockHeader:
                time.ctime(self.nTime), self.nBits, self.nNonce, self.nFlags)
 
 BLOCK_HEADER_SIZE = len(CBlockHeader().serialize())
-assert_equal(BLOCK_HEADER_SIZE, 84)
+assert_equal(BLOCK_HEADER_SIZE, 80)
+# FirstIslamicCoin: the 84-byte P2P wire encoding, with nFlags appended.
+P2P_BLOCK_HEADER_SIZE = len(CBlockHeader().serialize(with_flags=True))
+assert_equal(P2P_BLOCK_HEADER_SIZE, 84)
 
 class CBlock(CBlockHeader):
     __slots__ = ("vtx", "vchBlockSig",)
@@ -768,14 +804,14 @@ class CBlock(CBlockHeader):
         self.vtx = []
         self.vchBlockSig = b""
 
-    def deserialize(self, f):
-        super().deserialize(f)
+    def deserialize(self, f, with_flags=False):
+        super().deserialize(f, with_flags=with_flags)
         self.vtx = deser_vector(f, CTransaction)
         self.vchBlockSig = deser_string(f)
 
-    def serialize(self, with_witness=True):
+    def serialize(self, with_witness=True, with_flags=False):
         r = b""
-        r += super().serialize()
+        r += super().serialize(with_flags=with_flags)
         if with_witness:
             r += ser_vector(self.vtx, "serialize_with_witness")
         else:
@@ -815,7 +851,7 @@ class CBlock(CBlockHeader):
     def is_valid(self):
         self.calc_sha256()
         target = uint256_from_compact(self.nBits)
-        if self.sha256 > target:
+        if self.calc_pow_hash() > target:
             return False
         for tx in self.vtx:
             if not tx.is_valid():
@@ -827,9 +863,9 @@ class CBlock(CBlockHeader):
     def solve(self):
         self.rehash()
         target = uint256_from_compact(self.nBits)
-        while self.sha256 > target:
+        while self.calc_pow_hash() > target:
             self.nNonce += 1
-            self.rehash()
+        self.rehash()
 
     # Calculate the block weight using witness and non-witness
     # serialization size (does NOT use sigops).
@@ -890,7 +926,8 @@ class P2PHeaderAndShortIDs:
         self.prefilled_txn = []
 
     def deserialize(self, f):
-        self.header.deserialize(f)
+        # FirstIslamicCoin: cmpctblock is a P2P message; nFlags is present.
+        self.header.deserialize(f, with_flags=True)
         self.nonce = struct.unpack("<Q", f.read(8))[0]
         self.vchBlockSig = deser_string(f)
         self.shortids_length = deser_compact_size(f)
@@ -904,7 +941,7 @@ class P2PHeaderAndShortIDs:
     # When using version 2 compact blocks, we must serialize with_witness.
     def serialize(self, with_witness=False):
         r = b""
-        r += self.header.serialize()
+        r += self.header.serialize(with_flags=True)
         r += struct.pack("<Q", self.nonce)
         r += ser_string(self.vchBlockSig)
         r += ser_compact_size(self.shortids_length)
@@ -990,7 +1027,9 @@ class HeaderAndShortIDs:
             prefill_list = [0]
         self.header = CBlockHeader(block)
         self.nonce = nonce
-        self.vchBlockSig = vchBlockSig
+        # FirstIslamicCoin: vchBlockSig is not a parameter of this method; take
+        # it from the source block (this was a NameError before the fix).
+        self.vchBlockSig = block.vchBlockSig
         self.prefilled_txn = [ PrefilledTransaction(i, block.vtx[i]) for i in prefill_list ]
         self.shortids = []
         self.use_witness = use_witness
@@ -1108,13 +1147,13 @@ class CMerkleBlock:
         self.header = CBlockHeader()
         self.txn = CPartialMerkleTree()
 
-    def deserialize(self, f):
-        self.header.deserialize(f)
+    def deserialize(self, f, with_flags=False):
+        self.header.deserialize(f, with_flags=with_flags)
         self.txn.deserialize(f)
 
-    def serialize(self):
+    def serialize(self, with_flags=False):
         r = b""
-        r += self.header.serialize()
+        r += self.header.serialize(with_flags=with_flags)
         r += self.txn.serialize()
         return r
 
@@ -1360,10 +1399,11 @@ class msg_block:
             self.block = block
 
     def deserialize(self, f):
-        self.block.deserialize(f)
+        # FirstIslamicCoin: block is a P2P message; nFlags is present.
+        self.block.deserialize(f, with_flags=True)
 
     def serialize(self):
-        return self.block.serialize()
+        return self.block.serialize(with_flags=True)
 
     def __repr__(self):
         return "msg_block(block=%s)" % (repr(self.block))
@@ -1388,7 +1428,7 @@ class msg_generic:
 class msg_no_witness_block(msg_block):
     __slots__ = ()
     def serialize(self):
-        return self.block.serialize(with_witness=False)
+        return self.block.serialize(with_witness=False, with_flags=True)
 
 
 class msg_getaddr:
@@ -1536,13 +1576,18 @@ class msg_headers:
 
     def deserialize(self, f):
         # comment in bitcoind indicates these should be deserialized as blocks
-        blocks = deser_vector(f, CBlock)
-        for x in blocks:
-            self.headers.append(CBlockHeader(x))
+        # FirstIslamicCoin: each is a P2P-serialized block (with nFlags), but
+        # CBlock's vector serializer doesn't take arguments, so loop manually.
+        for _ in range(deser_compact_size(f)):
+            block = CBlock()
+            block.deserialize(f, with_flags=True)
+            self.headers.append(CBlockHeader(block))
 
     def serialize(self):
-        blocks = [CBlock(x) for x in self.headers]
-        return ser_vector(blocks)
+        r = ser_compact_size(len(self.headers))
+        for x in self.headers:
+            r += CBlock(x).serialize(with_flags=True)
+        return r
 
     def __repr__(self):
         return "msg_headers(headers=%s)" % repr(self.headers)
@@ -1559,10 +1604,11 @@ class msg_merkleblock:
             self.merkleblock = merkleblock
 
     def deserialize(self, f):
-        self.merkleblock.deserialize(f)
+        # FirstIslamicCoin: merkleblock is a P2P message; nFlags is present.
+        self.merkleblock.deserialize(f, with_flags=True)
 
     def serialize(self):
-        return self.merkleblock.serialize()
+        return self.merkleblock.serialize(with_flags=True)
 
     def __repr__(self):
         return "msg_merkleblock(merkleblock=%s)" % (repr(self.merkleblock))

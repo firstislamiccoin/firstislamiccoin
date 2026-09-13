@@ -1535,8 +1535,15 @@ class TaprootTest(BitcoinTestFramework):
         coinbase.vin = [CTxIn(COutPoint(0, 0xffffffff), CScript([OP_1, OP_1]), SEQUENCE_FINAL)]
         coinbase.vout = [CTxOut(5000000000, CScript([OP_1]))]
         coinbase.nLockTime = 0
+        # FirstIslamicCoin: version-1 transactions here carry an extra nTime
+        # field (see messages.py), and CTransaction() defaults nTime to the
+        # current wall-clock second, not a fixed value -- unlike every other
+        # field here, which the test sets explicitly. Left at its default,
+        # this synthetic coinbase would hash differently on every run. Pin it
+        # like nLockTime above, so the self-check is actually deterministic.
+        coinbase.nTime = 0
         coinbase.rehash()
-        assert coinbase.hash == "f60c73405d499a956d3162e3483c395526ef78286458a4cb17b125aa92e49b20"
+        assert coinbase.hash == "63b57c7176c17416926badbbe01e99c05d4fc4c39f986aac544109d230d87b86"
         # Mine it
         block = create_block(hashprev=int(self.nodes[0].getbestblockhash(), 16), coinbase=coinbase)
         block.rehash()

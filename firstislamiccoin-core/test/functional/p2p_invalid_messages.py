@@ -22,6 +22,7 @@ from test_framework.messages import (
     msg_ping,
     msg_version,
     ser_string,
+    uint256_from_compact,
 )
 from test_framework.p2p import (
     P2PDataStore,
@@ -266,10 +267,7 @@ class InvalidMessagesTest(BitcoinTestFramework):
         blockheader.hashPrevBlock = int(blockheader_tip_hash, 16)
         blockheader.nTime = int(time.time())
         blockheader.nBits = blockheader_tip.nBits
-        blockheader.rehash()
-        while not blockheader.hash.startswith('0'):
-            blockheader.nNonce += 1
-            blockheader.rehash()
+        blockheader.solve()  # FirstIslamicCoin: scrypt proof-of-work
         peer = self.nodes[0].add_p2p_connection(P2PInterface())
         peer.send_and_ping(msg_headers([blockheader]))
         assert_equal(self.nodes[0].getblockchaininfo()['headers'], 1)
@@ -277,10 +275,10 @@ class InvalidMessagesTest(BitcoinTestFramework):
         assert_equal(chaintips[0]['status'], 'headers-only')
         assert_equal(chaintips[0]['hash'], blockheader.hash)
 
-        # invalidate PoW
-        while not blockheader.hash.startswith('f'):
+        # invalidate PoW (FirstIslamicCoin: scrypt proof-of-work hash above the target)
+        while blockheader.calc_pow_hash() <= uint256_from_compact(blockheader.nBits):
             blockheader.nNonce += 1
-            blockheader.rehash()
+        blockheader.rehash()
         with self.nodes[0].assert_debug_log(['Misbehaving', 'header with invalid proof of work']):
             peer.send_message(msg_headers([blockheader]))
             peer.wait_for_disconnect()

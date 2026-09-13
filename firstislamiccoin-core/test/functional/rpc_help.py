@@ -107,6 +107,8 @@ class HelpRpcTest(BitcoinTestFramework):
 
         if self.is_wallet_compiled():
             components.append('Wallet')
+            # FirstIslamicCoin: the wallet also registers the proof-of-stake RPCs (src/wallet/rpc/staking.cpp)
+            components.append('Staking')
 
         if self.is_external_signer_compiled():
             components.append('Signer')

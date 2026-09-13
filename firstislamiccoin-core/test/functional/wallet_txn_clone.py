@@ -5,8 +5,10 @@
 """Test the wallet accounts properly when there are cloned transactions with malleated scriptsigs."""
 
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.fic import matured_coinbase_value
 from test_framework.util import (
     assert_equal,
+    assert_greater_than,
     find_vout_for_address
 )
 from test_framework.messages import (
@@ -44,14 +46,19 @@ class TxnMallTest(BitcoinTestFramework):
 
     def run_test(self):
         if self.options.segwit:
-            output_type = "p2sh-segwit"
+            # FirstIslamicCoin: getnewaddress rejects p2sh-segwit
+            # (wallet/rpc/addresses.cpp); native segwit is equally non-malleable.
+            output_type = "bech32"
         else:
             output_type = "legacy"
 
-        # All nodes should start with 1,250 BTC:
-        starting_balance = 1250
+        # FirstIslamicCoin: the cached chain pays 28,000,000 per block with a
+        # coinbase maturity of 10, so each node's starting balance depends on
+        # which cache blocks it mined. Record it instead of assuming 1,250 BTC.
+        start_height = self.nodes[0].getblockcount()
+        starting_balance = self.nodes[0].getbalance()
         for i in range(3):
-            assert_equal(self.nodes[i].getbalance(), starting_balance)
+            assert_greater_than(self.nodes[i].getbalance(), 1250)
 
         self.nodes[0].settxfee(.001)
 
@@ -103,7 +110,7 @@ class TxnMallTest(BitcoinTestFramework):
         # matured block, minus tx1 and tx2 amounts, and minus transaction fees:
         expected = starting_balance + node0_tx1["fee"] + node0_tx2["fee"]
         if self.options.mine_block:
-            expected += 50
+            expected += matured_coinbase_value(self.nodes[0], start_height, start_height + 1)
         expected += tx1["amount"] + tx1["fee"]
         expected += tx2["amount"] + tx2["fee"]
         assert_equal(self.nodes[0].getbalance(), expected)
@@ -143,9 +150,9 @@ class TxnMallTest(BitcoinTestFramework):
 
         # Check node0's total balance; should be same as before the clone, + 100 BTC for 2 matured,
         # less possible orphaned matured subsidy
-        expected += 100
+        expected += matured_coinbase_value(self.nodes[0], start_height, start_height + 2)
         if (self.options.mine_block):
-            expected -= 50
+            expected -= matured_coinbase_value(self.nodes[0], start_height, start_height + 1)
         assert_equal(self.nodes[0].getbalance(), expected)
 
 

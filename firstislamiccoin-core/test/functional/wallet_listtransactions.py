@@ -28,7 +28,7 @@ class ListTransactionsTest(BitcoinTestFramework):
         self.num_nodes = 3
         # This test isn't testing txn relay/timing, so set whitelist on the
         # peers for instant txn relay. This speeds up the test run time 2-3x.
-        self.extra_args = [["-whitelist=noban@127.0.0.1", "-walletrbf=0"]] * self.num_nodes
+        self.extra_args = [["-whitelist=noban@127.0.0.1"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -109,7 +109,10 @@ class ListTransactionsTest(BitcoinTestFramework):
                                 {"category": "receive", "amount": Decimal("0.1")},
                                 {"txid": txid, "label": "watchonly"})
 
-        self.run_rbf_opt_in_test()
+        # FirstIslamicCoin: replace-by-fee does not exist (the mempool rejects all
+        # conflicting spends and the wallet has no bip125-replaceable field), so
+        # the opt-in RBF reporting sub-test is skipped.
+        self.log.info("Skipping opt-in RBF test: replace-by-fee is not supported by FirstIslamicCoin")
         self.run_externally_generated_address_test()
         self.run_invalid_parameters_test()
         self.test_op_return()
@@ -244,7 +247,8 @@ class ListTransactionsTest(BitcoinTestFramework):
         self.connect_nodes(2, 0)
 
         addr1 = self.nodes[0].getnewaddress("pizza1", 'legacy')
-        addr2 = self.nodes[0].getnewaddress("pizza2", 'p2sh-segwit')
+        # FirstIslamicCoin: the wallet does not hand out p2sh-segwit addresses, use bech32
+        addr2 = self.nodes[0].getnewaddress("pizza2", 'bech32')
         addr3 = self.nodes[0].getnewaddress("pizza3", 'bech32')
 
         self.log.info("Send to externally generated addresses")

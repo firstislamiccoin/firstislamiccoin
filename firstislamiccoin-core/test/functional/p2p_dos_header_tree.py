@@ -31,6 +31,12 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
             help='Test data file (default: %(default)s)',
         )
 
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: this test feeds Bitcoin testnet3 headers up to a Bitcoin checkpoint; FIC testnet
+        # has a different genesis and no checkpoint beyond genesis, and -prune does not exist.
+        from test_framework.test_framework import SkipTest
+        raise SkipTest('FirstIslamicCoin: this test feeds Bitcoin testnet3 headers up to a Bitcoin checkpoint; FIC testnet')
+
     def run_test(self):
         self.log.info("Read headers data")
         self.headers_file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), self.options.datafile)

@@ -22,6 +22,7 @@ from test_framework.address import (
 )
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.descriptors import descsum_create
+from test_framework.fic import get_min_fee_sat
 from test_framework.key import (
     ECKey,
     compute_xonly_pubkey,
@@ -252,20 +253,24 @@ class MiniWallet:
         self.sendrawtransaction(from_node=from_node, tx_hex=tx['hex'])
         return tx
 
-    def send_to(self, *, from_node, scriptPubKey, amount, fee=1000):
+    def send_to(self, *, from_node, scriptPubKey, amount, fee=None):
         """
         Create and send a tx with an output to a given scriptPubKey/amount,
         plus a change output to our internal address. To keep things simple, a
-        fixed fee given in Satoshi is used.
+        fixed fee given in Satoshi is used. FirstIslamicCoin: by default the fee
+        meets the consensus minimum and every peer's feefilter (fic.get_min_fee_sat).
 
         Note that this method fails if there is no single internal utxo
         available that can cover the cost for the amount and the fixed fee
         (the utxo with the largest value is taken).
         """
         tx = self.create_self_transfer(fee_rate=0)["tx"]
+        tx.vout.append(CTxOut(amount, scriptPubKey))  # arbitrary output -> to be returned
+        if fee is None:
+            fee = get_min_fee_sat(tx.get_vsize())
         assert_greater_than_or_equal(tx.vout[0].nValue, amount + fee)
         tx.vout[0].nValue -= (amount + fee)           # change output -> MiniWallet
-        tx.vout.append(CTxOut(amount, scriptPubKey))  # arbitrary output -> to be returned
+        self.sign_tx(tx)  # outputs changed after signing; needed for RAW_P2PK
         txid = self.sendrawtransaction(from_node=from_node, tx_hex=tx.serialize().hex())
         return {
             "sent_vout": 1,
@@ -289,7 +294,7 @@ class MiniWallet:
         amount_per_output=0,
         locktime=0,
         sequence=0,
-        fee_per_output=1000,
+        fee_per_output=None,
         target_weight=0,
         confirmed_only=False
     ):
@@ -297,10 +302,21 @@ class MiniWallet:
         Create and return a transaction that spends the given UTXOs and creates a
         certain number of outputs with equal amounts. The output amounts can be
         set by amount_per_output or automatically calculated with a fee_per_output.
+        FirstIslamicCoin: without either, the total fee meets the consensus minimum
+        and every peer's feefilter (fic.get_min_fee_sat), split across outputs.
         """
         utxos_to_spend = utxos_to_spend or [self.get_utxo(confirmed_only=confirmed_only)]
         sequence = [sequence] * len(utxos_to_spend) if type(sequence) is int else sequence
         assert_equal(len(utxos_to_spend), len(sequence))
+
+        if fee_per_output is None:
+            fee_per_output = 0
+            if not amount_per_output:
+                # Output values do not change the size, so measure a probe tx.
+                probe = self.create_self_transfer_multi(
+                    utxos_to_spend=utxos_to_spend, num_outputs=num_outputs, amount_per_output=1,
+                    locktime=locktime, sequence=sequence, fee_per_output=0, target_weight=target_weight)
+                fee_per_output = -(-get_min_fee_sat(probe["tx"].get_vsize()) // num_outputs)
 
         # calculate output amount
         inputs_value_total = sum([int(COIN * utxo['value']) for utxo in utxos_to_spend])

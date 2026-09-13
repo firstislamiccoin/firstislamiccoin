@@ -824,13 +824,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
             # block in the cache does not age too much (have an old tip age).
             # This is needed so that we are out of IBD when the test starts,
             # see the tip age check in IsInitialBlockDownload().
-            '''
-            # FirstIslamicCoin: disable Taproot address for now
-            # gen_addresses = [k.address for k in TestNode.PRIV_KEYS][:3] + [create_deterministic_address_bcrt1_p2tr_op_true()[0]]
-            # assert_equal(len(gen_addresses), 4)
-            '''
-            gen_addresses = [k.address for k in TestNode.PRIV_KEYS][:3]
-            assert_equal(len(gen_addresses), 3)
+            # FirstIslamicCoin: Taproot is always active from genesis, so the
+            # 4th address (MiniWallet's default P2TR address) can be used here.
+            gen_addresses = [k.address for k in TestNode.PRIV_KEYS][:3] + [create_deterministic_address_bcrt1_p2tr_op_true()[0]]
+            assert_equal(len(gen_addresses), 4)
             for i in range(8):
                 self.generatetoaddress(
                     cache_node,

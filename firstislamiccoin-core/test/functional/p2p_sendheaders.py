@@ -563,6 +563,10 @@ class SendHeadersTest(BitcoinTestFramework):
 
         # Next header will connect, should re-set our count:
         test_node.send_header_for_blocks([blocks[0]])
+        # FIC: the node requests this block and, with the 1-second regtest block
+        # interval, disconnects a peer that has not delivered it within ~1s
+        # (block download timeout scales with nTargetSpacing). Deliver it.
+        test_node.send_and_ping(msg_block(blocks[0]))
 
         # Remove the first two entries (blocks[1] would connect):
         blocks = blocks[2:]

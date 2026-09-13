@@ -125,6 +125,12 @@ class AssumeutxoTest(BitcoinTestFramework):
         rmtree(chainstate_snapshot_path)
         self.start_node(0)
 
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: assumeutxo is unusable: regtest m_assumeutxo_data is empty (upstream snapshot
+        # hashes do not match this genesis) and node1 needs pruning (-prune/-fastprune), which does not exist.
+        from test_framework.test_framework import SkipTest
+        raise SkipTest('FirstIslamicCoin: assumeutxo is unusable: regtest m_assumeutxo_data is empty (upstream snapshot')
+
     def run_test(self):
         """
         Bring up two (disconnected) nodes, mine some new blocks on the first,

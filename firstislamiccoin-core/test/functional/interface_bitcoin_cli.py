@@ -22,7 +22,9 @@ import time
 # COINBASE_MATURITY (100) blocks. Therefore, after mining 101 blocks we expect
 # node 0 to have a balance of (BLOCKS - COINBASE_MATURITY) * 50 BTC/block.
 BLOCKS = COINBASE_MATURITY + 1
-BALANCE = (BLOCKS - 100) * 50
+# FirstIslamicCoin: regtest proof-of-work blocks pay a fixed 28,000,000 FIC subsidy
+POW_BLOCK_SUBSIDY = 28000000
+BALANCE = (BLOCKS - COINBASE_MATURITY) * POW_BLOCK_SUBSIDY
 
 JSON_PARSING_ERROR = 'error: Error parsing JSON: foo'
 BLOCKS_VALUE_OF_ZERO = 'error: the first argument (number of blocks to generate, default: 1) must be an integer value greater than zero'
@@ -165,7 +167,9 @@ class TestBitcoinCli(BitcoinTestFramework):
 
             # Setup to test -getinfo, -generate, and -rpcwallet= with multiple wallets.
             wallets = [self.default_wallet_name, 'Encrypted', 'secret']
-            amounts = [BALANCE + Decimal('9.999928'), Decimal(9), Decimal(31)]
+            # FirstIslamicCoin: after sending 9 + 31 FIC and mining one block, the default wallet gains another matured
+            # 28,000,000 FIC subsidy and pays 0.00036 FIC in fees (wallet minimum fee), so 28000000 - 40 - 0.00036.
+            amounts = [BALANCE + Decimal('27999959.99964'), Decimal(9), Decimal(31)]
             self.nodes[0].createwallet(wallet_name=wallets[1])
             self.nodes[0].createwallet(wallet_name=wallets[2])
             w1 = self.nodes[0].get_wallet_rpc(wallets[0])

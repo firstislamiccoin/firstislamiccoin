@@ -8,9 +8,6 @@ from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
 )
-from test_framework.blocktools import (
-    TIME_GENESIS_BLOCK,
-)
 
 
 class CreateTxWalletTest(BitcoinTestFramework):
@@ -26,7 +23,8 @@ class CreateTxWalletTest(BitcoinTestFramework):
 
     def run_test(self):
         self.log.info('Create some old blocks')
-        self.nodes[0].setmocktime(TIME_GENESIS_BLOCK)
+        # FirstIslamicCoin: use this chain's genesis time (TIME_GENESIS_BLOCK is Bitcoin's)
+        self.nodes[0].setmocktime(self.nodes[0].getblockheader(self.nodes[0].getblockhash(0))['time'])
         self.generate(self.nodes[0], 200)
         self.nodes[0].setmocktime(0)
 
@@ -49,7 +47,10 @@ class CreateTxWalletTest(BitcoinTestFramework):
 
     def test_tx_size_too_large(self):
         # More than 10kB of outputs, so that we hit -maxtxfee with a high feerate
-        outputs = {self.nodes[0].getnewaddress(address_type='bech32'): 0.000025 for _ in range(400)}
+        # FirstIslamicCoin: DUST_RELAY_TX_FEE is 100000 sat/kvB, so a P2WPKH output
+        # needs > 9800 sat (upstream used 2500 sat). DEFAULT_TRANSACTION_MAXFEE is 1 FIC,
+        # and 400 outputs (> 12 kvB) at 0.1 FIC/kvB still exceed it.
+        outputs = {self.nodes[0].getnewaddress(address_type='bech32'): 0.0001 for _ in range(400)}
         raw_tx = self.nodes[0].createrawtransaction(inputs=[], outputs=outputs)
 
         for fee_setting in ['-minrelaytxfee=0.1', '-paytxfee=0.1']:

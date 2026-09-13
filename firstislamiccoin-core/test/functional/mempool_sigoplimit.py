@@ -29,6 +29,7 @@ from test_framework.script_util import (
     keys_to_multisig_script,
     script_to_p2wsh_script,
 )
+from test_framework.fic import get_min_fee_sat
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -55,7 +56,7 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         fund = self.wallet.send_to(
             from_node=self.nodes[0],
             scriptPubKey=script_to_p2wsh_script(witness_script),
-            amount=1000000,
+            amount=10000000,  # FirstIslamicCoin: enough to pay GetMinFee for the largest sigop-equivalent size
         )
 
         # create spending transaction
@@ -90,6 +91,8 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         vsize_to_pad = sigop_equivalent_vsize - tx.get_vsize()
         tx.vout[0].scriptPubKey = CScript([OP_RETURN, b'X'*(256+vsize_to_pad)])
         assert_equal(sigop_equivalent_vsize, tx.get_vsize())
+        # FirstIslamicCoin: pay GetMinFee (100 sat/vbyte) for the largest size used below
+        tx.vout[0].nValue = 10000000 - get_min_fee_sat(sigop_equivalent_vsize + 1)
 
         res = self.nodes[0].testmempoolaccept([tx.serialize().hex()])[0]
         assert_equal(res['allowed'], True)
@@ -118,7 +121,8 @@ class BytesPerSigOpTest(BitcoinTestFramework):
         # tx by getting rid of the large padding output)
         tx.vout[0].scriptPubKey = CScript([OP_RETURN, b'test123'])
         assert_greater_than(sigop_equivalent_vsize, tx.get_vsize())
-        self.nodes[0].sendrawtransaction(hexstring=tx.serialize().hex(), maxburnamount='1.0')
+        # FirstIslamicCoin: the fee covers GetMinFee for the sigop-adjusted size (see above)
+        self.nodes[0].sendrawtransaction(hexstring=tx.serialize().hex(), maxburnamount='1.0', maxfeerate=0)
 
         # fetch parent tx, which doesn't contain any sigops
         parent_txid = tx.vin[0].prevout.hash.to_bytes(32, 'big').hex()

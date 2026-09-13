@@ -95,8 +95,9 @@ class CreateWalletTest(BitcoinTestFramework):
         else:
             w3.sethdseed()
         assert_equal(w3.getwalletinfo()['keypoolsize'], 1)
-        w3.getnewaddress()
-        w3.getrawchangeaddress()
+        # FirstIslamicCoin: -addresstype defaults to legacy; only wpkh() descriptors were imported
+        w3.getnewaddress(address_type='bech32')
+        w3.getrawchangeaddress('bech32')
 
         self.log.info("Test blank creation with privkeys enabled and then encryption")
         self.nodes[0].createwallet(wallet_name='w4', disable_private_keys=False, blank=True)
@@ -124,8 +125,8 @@ class CreateWalletTest(BitcoinTestFramework):
                 }])
             else:
                 w4.sethdseed()
-            w4.getnewaddress()
-            w4.getrawchangeaddress()
+            w4.getnewaddress(address_type='bech32')
+            w4.getrawchangeaddress('bech32')
 
         self.log.info("Test blank creation with privkeys disabled and then encryption")
         self.nodes[0].createwallet(wallet_name='w5', disable_private_keys=True, blank=True)

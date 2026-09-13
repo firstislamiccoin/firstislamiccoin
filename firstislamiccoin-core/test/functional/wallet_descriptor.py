@@ -62,20 +62,16 @@ class WalletDescriptorTest(BitcoinTestFramework):
         assert addr_info['desc'].startswith('pkh(')
         assert_equal(addr_info['hdkeypath'], 'm/44h/1h/0h/0/0')
 
-        addr = self.nodes[0].getnewaddress("", "p2sh-segwit")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('sh(wpkh(')
-        assert_equal(addr_info['hdkeypath'], 'm/49h/1h/0h/0/0')
+        # FirstIslamicCoin: getnewaddress refuses p2sh-segwit (wallet/rpc/addresses.cpp)
+        assert_raises_rpc_error(-8, "P2SH_SEGWIT addresses are not welcome", self.nodes[0].getnewaddress, "", "p2sh-segwit")
 
         addr = self.nodes[0].getnewaddress("", "bech32")
         addr_info = self.nodes[0].getaddressinfo(addr)
         assert addr_info['desc'].startswith('wpkh(')
         assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/0/0')
 
-        addr = self.nodes[0].getnewaddress("", "bech32m")
-        addr_info = self.nodes[0].getaddressinfo(addr)
-        assert addr_info['desc'].startswith('tr(')
-        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/0/0')
+        # FirstIslamicCoin: getnewaddress refuses bech32m until taproot activates
+        assert_raises_rpc_error(-8, "Taproot addresses (bech32m) are not supported yet", self.nodes[0].getnewaddress, "", "bech32m")
 
         # Check that getrawchangeaddress works
         addr = self.nodes[0].getrawchangeaddress("legacy")
@@ -187,6 +183,11 @@ class WalletDescriptorTest(BitcoinTestFramework):
 
         for addr_type, internal, desc_prefix, deriv_path, int_idx in addr_types:
             int_str = 'internal' if internal else 'external'
+            if addr_type == 'bech32m' or (not internal and addr_type == 'p2sh-segwit'):
+                # FirstIslamicCoin: getnewaddress refuses p2sh-segwit and bech32m (see above),
+                # and tr() descriptors cannot be imported while taproot is inactive, so the
+                # bech32m round trip cannot run. Internal p2sh-segwit is still exercised.
+                continue
 
             self.log.info("Testing descriptor address type for {} {}".format(addr_type, int_str))
             if internal:

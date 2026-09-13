@@ -13,6 +13,7 @@ if uploadtarget has been reached.
 from collections import defaultdict
 import time
 
+from test_framework.blocktools import TIME_GENESIS_BLOCK
 from test_framework.messages import (
     CInv,
     MSG_BLOCK,
@@ -54,7 +55,10 @@ class MaxUploadTest(BitcoinTestFramework):
         # Before we connect anything, we first set the time on the node
         # to be in the past, otherwise things break because the CNode
         # time counters can't be reset backward after initialization
-        old_time = int(time.time() - 2*60*60*24*7)
+        # FirstIslamicCoin: the regtest genesis block is recent, so anchor "now"
+        # at least two weeks after it and keep node time mocked throughout.
+        now = max(int(time.time()), TIME_GENESIS_BLOCK + 2*60*60*24*7)
+        old_time = now - 2*60*60*24*7
         self.nodes[0].setmocktime(old_time)
 
         # Generate some old blocks
@@ -78,7 +82,7 @@ class MaxUploadTest(BitcoinTestFramework):
         big_old_block = int(big_old_block, 16)
 
         # Advance to two days ago
-        self.nodes[0].setmocktime(int(time.time()) - 2*60*60*24)
+        self.nodes[0].setmocktime(now - 2*60*60*24)
 
         # Mine one more block, so that the prior block looks old
         mine_large_block(self, self.wallet, self.nodes[0])
@@ -135,7 +139,7 @@ class MaxUploadTest(BitcoinTestFramework):
 
         # If we advance the time by 24 hours, then the counters should reset,
         # and p2p_conns[2] should be able to retrieve the old block.
-        self.nodes[0].setmocktime(int(time.time()))
+        self.nodes[0].setmocktime(now)
         p2p_conns[2].sync_with_ping()
         p2p_conns[2].send_and_ping(getdata_request)
         assert_equal(p2p_conns[2].block_receive_map[big_old_block], 1)
@@ -145,7 +149,8 @@ class MaxUploadTest(BitcoinTestFramework):
         self.nodes[0].disconnect_p2ps()
 
         self.log.info("Restarting node 0 with download permission and 1MB maxuploadtarget")
-        self.restart_node(0, ["-whitelist=download@127.0.0.1", "-maxuploadtarget=1"])
+        # FirstIslamicCoin: keep node time at "now" (see above); the chain may be ahead of the wall clock
+        self.restart_node(0, ["-whitelist=download@127.0.0.1", "-maxuploadtarget=1", f"-mocktime={now}"])
 
         # Reconnect to self.nodes[0]
         peer = self.nodes[0].add_p2p_connection(TestP2PConn())

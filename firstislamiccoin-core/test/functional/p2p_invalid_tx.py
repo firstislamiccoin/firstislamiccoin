@@ -26,6 +26,9 @@ class InvalidTxRequestTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.extra_args = [[
             "-acceptnonstdtxn=1",
+            # FIC: consensus minimum fee is 0.001/kvB (at least 0.0001); a higher
+            # relay floor lets tx_orphan_2_no_fee be rejected by policy only.
+            "-minrelaytxfee=0.005",
         ]]
         self.setup_clean_chain = True
 
@@ -92,7 +95,7 @@ class InvalidTxRequestTest(BitcoinTestFramework):
         SCRIPT_PUB_KEY_OP_TRUE = b'\x51\x75' * 15 + b'\x51'
         tx_withhold = CTransaction()
         tx_withhold.vin.append(CTxIn(outpoint=COutPoint(block1.vtx[0].sha256, 0)))
-        tx_withhold.vout = [CTxOut(nValue=25 * COIN - 12000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE)] * 2
+        tx_withhold.vout = [CTxOut(nValue=25 * COIN - 100000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE)] * 2
         tx_withhold.calc_sha256()
 
         # Our first orphan tx with some outputs to create further orphan txs
@@ -104,12 +107,13 @@ class InvalidTxRequestTest(BitcoinTestFramework):
         # A valid transaction with low fee
         tx_orphan_2_no_fee = CTransaction()
         tx_orphan_2_no_fee.vin.append(CTxIn(outpoint=COutPoint(tx_orphan_1.sha256, 0)))
-        tx_orphan_2_no_fee.vout.append(CTxOut(nValue=8 * COIN, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
+        # FIC: pays the consensus minimum but stays below -minrelaytxfee.
+        tx_orphan_2_no_fee.vout.append(CTxOut(nValue=8 * COIN - 15000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
 
         # A valid transaction with sufficient fee
         tx_orphan_2_valid = CTransaction()
         tx_orphan_2_valid.vin.append(CTxIn(outpoint=COutPoint(tx_orphan_1.sha256, 1)))
-        tx_orphan_2_valid.vout.append(CTxOut(nValue=8 * COIN - 12000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
+        tx_orphan_2_valid.vout.append(CTxOut(nValue=8 * COIN - 100000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
         tx_orphan_2_valid.calc_sha256()
 
         # An invalid transaction with negative fee
@@ -165,7 +169,8 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             node.p2ps[0].send_txs_and_test([rejected_parent], node, success=False)
 
         self.log.info('Test that a peer disconnection causes erase its transactions from the orphan pool')
-        with node.assert_debug_log(['Erased 100 orphan tx from peer=25']):
+        orphan_peer_id = node.getpeerinfo()[0]['id']  # FIC: template count differs from Bitcoin
+        with node.assert_debug_log(['Erased 100 orphan tx from peer={}'.format(orphan_peer_id)]):
             self.reconnect_p2p(num_connections=1)
 
         self.log.info('Test that a transaction in the orphan pool is included in a new tip block causes erase this transaction from the orphan pool')
@@ -176,7 +181,7 @@ class InvalidTxRequestTest(BitcoinTestFramework):
 
         tx_orphan_include_by_block_A = CTransaction()
         tx_orphan_include_by_block_A.vin.append(CTxIn(outpoint=COutPoint(tx_withhold_until_block_A.sha256, 0)))
-        tx_orphan_include_by_block_A.vout.append(CTxOut(nValue=12 * COIN - 12000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
+        tx_orphan_include_by_block_A.vout.append(CTxOut(nValue=12 * COIN - 100000, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
         tx_orphan_include_by_block_A.calc_sha256()
 
         self.log.info('Send the orphan ... ')
@@ -213,7 +218,8 @@ class InvalidTxRequestTest(BitcoinTestFramework):
 
         tip = int(node.getbestblockhash(), 16)
         height = node.getblockcount() + 1
-        block_B = create_block(tip, create_coinbase(height))
+        # FIC: block time must be greater than the previous block's time (chain.h GetMedianTimePast).
+        block_B = create_block(tip, create_coinbase(height), block_A.nTime + 1)
         block_B.vtx.extend([tx_withhold_until_block_B, tx_orphan_include_by_block_B])
         block_B.hashMerkleRoot = block_B.calc_merkle_root()
         block_B.solve()

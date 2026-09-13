@@ -56,8 +56,11 @@ class P2PLeakTxTest(BitcoinTestFramework):
 
         tx_b = tx_a["tx"]
         tx_b.vout[0].nValue -= 9000
-        self.gen_node.sendrawtransaction(tx_b.serialize().hex())
-        inbound_peer.wait_until(lambda: "tx" in inbound_peer.last_message and inbound_peer.last_message.get("tx").tx.getwtxid() == tx_b.getwtxid())
+        # FirstIslamicCoin has no mempool replacement (RBF), so evict tx_a by
+        # mining the conflicting tx_b instead of relaying it as a replacement.
+        self.generateblock(self.gen_node, output=self.miniwallet.get_address(), transactions=[tx_b.serialize().hex()])
+        assert tx_a["txid"] not in self.gen_node.getrawmempool()
+        self.miniwallet.rescan_utxos()
 
         self.log.info("Re-request of tx_a after replacement is answered with notfound")
         req_vec = [

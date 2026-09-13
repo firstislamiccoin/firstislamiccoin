@@ -387,6 +387,14 @@ def write_config(config_path, *, n, chain, extra_config="", disable_autoconnect=
         f.write("rpcport=" + str(rpc_port(n)) + "\n")
         # Disable server-side timeouts to avoid intermittent issues
         f.write("rpcservertimeout=99000\n")
+        # FirstIslamicCoin: -staking defaults to on (DEFAULT_STAKE=true). On
+        # regtest any mature wallet UTXO finds a kernel within seconds, so a
+        # background-staked block would race the test's own generate calls
+        # and disturb keypools (the staking thread reserves a key for its
+        # "Staking Legacy Address"). Tests that exercise staking pass
+        # -staking=1 explicitly (see fic.POS_FROM_GENESIS_ARGS and
+        # feature_pos_reorg.py).
+        f.write("staking=0\n")
         f.write("rpcdoccheck=1\n")
         f.write("server=1\n")
         f.write("keypool=1\n")
@@ -421,13 +429,13 @@ def get_temp_default_datadir(temp_dir: pathlib.Path) -> Tuple[dict, pathlib.Path
     temp_dir, as well as the complete path it would return."""
     if sys.platform == "win32":
         env = dict(APPDATA=str(temp_dir))
-        datadir = temp_dir / "Bitcoin"
+        datadir = temp_dir / "FirstIslamicCoin"
     else:
         env = dict(HOME=str(temp_dir))
         if sys.platform == "darwin":
-            datadir = temp_dir / "Library/Application Support/Bitcoin"
+            datadir = temp_dir / "Library/Application Support/FirstIslamicCoin"
         else:
-            datadir = temp_dir / ".bitcoin"
+            datadir = temp_dir / ".firstislamiccoin"
     return env, datadir
 
 

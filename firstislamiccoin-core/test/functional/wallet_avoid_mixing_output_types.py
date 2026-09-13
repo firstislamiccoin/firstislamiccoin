@@ -31,10 +31,10 @@ import random
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.blocktools import COINBASE_MATURITY
 
+# FirstIslamicCoin: getnewaddress refuses p2sh-segwit and bech32m (taproot is not
+# active), so the wallet can only receive to these two output types.
 ADDRESS_TYPES = [
-    "bech32m",
     "bech32",
-    "p2sh-segwit",
     "legacy",
 ]
 
@@ -130,7 +130,8 @@ class AddressInputTypeGrouping(BitcoinTestFramework):
         self.skip_if_no_sqlite()
 
     def make_payment(self, A, B, v, addr_type):
-        fee_rate = random.randint(1, 20)
+        # FirstIslamicCoin: the minimum fee rate is 100 sat/vB
+        fee_rate = random.randint(100, 120)
         self.log.debug(f"Making payment of {v} BTC at fee_rate {fee_rate}")
         tx = B.sendtoaddress(
             address=A.getnewaddress(address_type=addr_type),
@@ -151,16 +152,8 @@ class AddressInputTypeGrouping(BitcoinTestFramework):
             A.sendtoaddress(B.getnewaddress(address_type="legacy"), v)
 
         for v in generate_payment_values(3, 10):
-            self.log.debug(f"Making payment of {v} BTC to p2sh")
-            A.sendtoaddress(B.getnewaddress(address_type="p2sh-segwit"), v)
-
-        for v in generate_payment_values(3, 10):
             self.log.debug(f"Making payment of {v} BTC to bech32")
             A.sendtoaddress(B.getnewaddress(address_type="bech32"), v)
-
-        for v in generate_payment_values(3, 10):
-            self.log.debug(f"Making payment of {v} BTC to bech32m")
-            A.sendtoaddress(B.getnewaddress(address_type="bech32m"), v)
 
         self.generate(A, 1)
 
@@ -172,7 +165,8 @@ class AddressInputTypeGrouping(BitcoinTestFramework):
             self.generate(A, 1)
             assert is_same_type(B, tx)
 
-        tx = self.make_payment(A, B, 30.99, random.choice(ADDRESS_TYPES))
+        # Two 10 FIC output types minus the 9 FIC sent above: spending 10.99 needs both.
+        tx = self.make_payment(A, B, 10.99, random.choice(ADDRESS_TYPES))
         assert not is_same_type(B, tx)
 
 

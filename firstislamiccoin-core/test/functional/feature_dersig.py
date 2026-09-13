@@ -42,6 +42,8 @@ def unDERify(tx):
 
 
 DERSIG_HEIGHT = 102
+# FirstIslamicCoin: CheckBlockHeader rejects blocks with nVersion < 7 (bad-version, src/validation.cpp)
+MIN_BLOCK_VERSION = 7
 
 
 class BIP66Test(BitcoinTestFramework):
@@ -71,7 +73,9 @@ class BIP66Test(BitcoinTestFramework):
         self.log.info("Mining %d blocks", DERSIG_HEIGHT - 2)
         self.coinbase_txids = [self.nodes[0].getblock(b)['tx'][0] for b in self.generate(self.miniwallet, DERSIG_HEIGHT - 2)]
 
-        self.log.info("Test that a transaction with non-DER signature can still appear in a block")
+        # FirstIslamicCoin: DERSIG (BIP66) is enforced for every block (GetBlockScriptFlags in src/validation.cpp),
+        # so unlike Bitcoin there is no pre-activation window in which a non-DER signature can still be mined.
+        self.log.info("Test that a transaction with non-DER signature cannot appear in a block below DERSIG_HEIGHT")
 
         spendtx = self.create_tx(self.coinbase_txids[0])
         unDERify(spendtx)
@@ -79,29 +83,38 @@ class BIP66Test(BitcoinTestFramework):
 
         tip = self.nodes[0].getbestblockhash()
         block_time = self.nodes[0].getblockheader(tip)['mediantime'] + 1
-        block = create_block(int(tip, 16), create_coinbase(DERSIG_HEIGHT - 1), block_time, txlist=[spendtx])
+        block = create_block(int(tip, 16), create_coinbase(DERSIG_HEIGHT - 1), block_time, version=MIN_BLOCK_VERSION, txlist=[spendtx])
         block.solve()
 
         assert_equal(self.nodes[0].getblockcount(), DERSIG_HEIGHT - 2)
-        self.test_dersig_info(is_active=False)  # Not active as of current tip and next block does not need to obey rules
+        with self.nodes[0].assert_debug_log(expected_msgs=[f'CheckInputScripts on {spendtx.hash} failed with mandatory-script-verify-flag-failed (Non-canonical DER signature)']):
+            peer.send_and_ping(msg_block(block))
+        assert_equal(self.nodes[0].getblockcount(), DERSIG_HEIGHT - 2)
+
+        # The same block with a DER-compliant spend is accepted
+        block.vtx[1] = self.create_tx(self.coinbase_txids[0])
+        block.hashMerkleRoot = block.calc_merkle_root()
+        block.solve()
         peer.send_and_ping(msg_block(block))
         assert_equal(self.nodes[0].getblockcount(), DERSIG_HEIGHT - 1)
-        self.test_dersig_info(is_active=True)  # Not active as of current tip, but next block must obey rules
+        self.test_dersig_info(is_active=True)
         assert_equal(self.nodes[0].getbestblockhash(), block.hash)
 
-        self.log.info("Test that blocks must now be at least version 3")
+        self.log.info("Test that blocks must be at least version %d", MIN_BLOCK_VERSION)
         tip = block.sha256
         block_time += 1
-        block = create_block(tip, create_coinbase(DERSIG_HEIGHT), block_time, version=2)
+        block = create_block(tip, create_coinbase(DERSIG_HEIGHT), block_time, version=MIN_BLOCK_VERSION - 1)
         block.solve()
 
-        with self.nodes[0].assert_debug_log(expected_msgs=[f'{block.hash}, bad-version(0x00000002)']):
+        # FirstIslamicCoin: for nVersion <= 6 the node identifies the block by its scrypt hash
+        # (CBlockHeader::GetHash in src/primitives/block.cpp), so match on the reject reason only.
+        with self.nodes[0].assert_debug_log(expected_msgs=['bad-version, bad block version']):
             peer.send_and_ping(msg_block(block))
             assert_equal(int(self.nodes[0].getbestblockhash(), 16), tip)
             peer.sync_with_ping()
 
         self.log.info("Test that transactions with non-DER signatures cannot appear in a block")
-        block.nVersion = 4
+        block.nVersion = MIN_BLOCK_VERSION
 
         spendtx = self.create_tx(self.coinbase_txids[1])
         unDERify(spendtx)

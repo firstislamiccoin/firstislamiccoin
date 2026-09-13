@@ -34,7 +34,7 @@ from test_framework.wallet import MiniWallet
 from test_framework.wallet_util import generate_keypair
 
 
-DUST_RELAY_TX_FEE = 3000  # default setting [sat/kvB]
+DUST_RELAY_TX_FEE = 100000  # default setting [sat/kvB] (FirstIslamicCoin: src/policy/policy.h)
 
 
 class DustRelayFeeTest(BitcoinTestFramework):
@@ -53,7 +53,8 @@ class DustRelayFeeTest(BitcoinTestFramework):
         self.log.info(f"-> Test {type_desc} output (size {len(output_script)}, limit {dust_threshold})")
 
         # amount right on the dust threshold should pass
-        tx = self.wallet.create_self_transfer()["tx"]
+        # FirstIslamicCoin: pay enough to cover GetMinFee (100 sat/vbyte) with the largest extra output
+        tx = self.wallet.create_self_transfer(fee_rate=Decimal("0.01"))["tx"]
         tx.vout.append(CTxOut(nValue=dust_threshold, scriptPubKey=output_script))
         tx.vout[0].nValue -= dust_threshold  # keep total output value constant
         tx_good_hex = tx.serialize().hex()

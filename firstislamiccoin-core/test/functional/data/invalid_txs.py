@@ -284,4 +284,7 @@ DisabledOpcodeTemplates = [getDisabledOpcodeTemplate(opcode) for opcode in [
 
 def iter_all_templates():
     """Iterate through all bad transaction template types."""
-    return BadTxTemplate.__subclasses__()
+    # FIC: MAX_MONEY is INT64_MAX (src/consensus/amount.h), so an output value
+    # above MAX_MONEY cannot be serialized and bad-txns-vout-toolarge is
+    # unreachable. CreateTooLarge is kept but not run.
+    return [t for t in BadTxTemplate.__subclasses__() if t is not CreateTooLarge]

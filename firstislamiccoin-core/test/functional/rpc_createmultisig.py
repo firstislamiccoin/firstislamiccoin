@@ -180,7 +180,7 @@ class RpcCreateMultiSigTest(BitcoinTestFramework):
         mredeem = msig["redeemScript"]
         assert_equal(desc, msig['descriptor'])
         if self.output_type == 'bech32':
-            assert madd[0:4] == "blrt"  # actually a bech32 address
+            assert madd[0:5] == "rfic1"  # actually a bech32 address
 
         if self.is_bdb_compiled():
             # compare against addmultisigaddress
@@ -194,7 +194,8 @@ class RpcCreateMultiSigTest(BitcoinTestFramework):
             wmulti.unloadwallet()
 
         spk = address_to_scriptpubkey(madd)
-        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=1300)["txid"]
+        # FIC: DUST_RELAY_TX_FEE is 0.001/kvB (1300 sat is dust), so send more.
+        txid = self.wallet.send_to(from_node=self.nodes[0], scriptPubKey=spk, amount=13000000)["txid"]
         tx = node0.getrawtransaction(txid, True)
         vout = [v["n"] for v in tx["vout"] if madd == v["scriptPubKey"]["address"]]
         assert len(vout) == 1
@@ -205,7 +206,9 @@ class RpcCreateMultiSigTest(BitcoinTestFramework):
 
         self.generate(node0, 1)
 
-        outval = value - decimal.Decimal("0.00001000")
+        # FIC: the minimum fee is a consensus rule (GetMinFee, 0.001/kvB); large
+        # n-of-m multisig spends need well above Bitcoin's 1000 sat.
+        outval = value - decimal.Decimal("0.01")
         rawtx = node2.createrawtransaction([{"txid": txid, "vout": vout}], [{self.final: outval}])
 
         prevtx_err = dict(prevtxs[0])

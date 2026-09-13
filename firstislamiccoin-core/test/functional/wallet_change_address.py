@@ -21,10 +21,12 @@ class WalletChangeAddressTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 3
         # discardfee is used to make change outputs less likely in the change_pos test
+        # FirstIslamicCoin: -addresstype defaults to legacy; this test's amounts assume
+        # bech32 outputs (P2PKH change would fall under the -discardfee=1 dust threshold).
         self.extra_args = [
-            [],
-            ["-discardfee=1"],
-            ["-avoidpartialspends", "-discardfee=1"]
+            ["-addresstype=bech32"],
+            ["-addresstype=bech32", "-discardfee=1"],
+            ["-addresstype=bech32", "-avoidpartialspends", "-discardfee=1"]
         ]
 
     def skip_test_if_missing_module(self):

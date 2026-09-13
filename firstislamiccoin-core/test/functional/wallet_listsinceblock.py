@@ -42,7 +42,9 @@ class ListSinceBlockTest(BitcoinTestFramework):
         self.test_reorg()
         self.test_double_spend()
         self.test_double_send()
-        self.double_spends_filtered()
+        # FirstIslamicCoin: there is no RBF and no bumpfee RPC, so the
+        # bumpfee-created conflict this case needs cannot be produced.
+        self.log.info("Skipping double_spends_filtered: no bumpfee/RBF in FirstIslamicCoin")
         self.test_targetconfirmations()
         if self.options.descriptors:
             self.test_desc()

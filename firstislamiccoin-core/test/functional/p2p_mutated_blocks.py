@@ -33,7 +33,6 @@ class MutatedBlocksTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.extra_args = [
             [
-                "-testactivationheight=segwit@1", # causes unconnected headers/blocks to not have segwit considered deployed
             ],
         ]
 
@@ -72,10 +71,10 @@ class MutatedBlocksTest(BitcoinTestFramework):
                    get_block_txn.block_txn_request.indexes == [1]
         honest_relayer.wait_until(self_transfer_requested, timeout=5)
 
-        # Block at height 101 should be the only one in flight from peer 0
+        # Block at height COINBASE_MATURITY + 1 should be the only one in flight from peer 0
         peer_info_prior_to_attack = self.nodes[0].getpeerinfo()
         assert_equal(peer_info_prior_to_attack[0]['id'], 0)
-        assert_equal([101], peer_info_prior_to_attack[0]["inflight"])
+        assert_equal([COINBASE_MATURITY + 1], peer_info_prior_to_attack[0]["inflight"])
 
         # Attempt to clear the honest relayer's download request by sending the
         # mutated block (as the attacker).
@@ -84,11 +83,11 @@ class MutatedBlocksTest(BitcoinTestFramework):
         # Attacker should get disconnected for sending a mutated block
         attacker.wait_for_disconnect(timeout=5)
 
-        # Block at height 101 should *still* be the only block in-flight from
+        # Block at height COINBASE_MATURITY + 1 should *still* be the only block in-flight from
         # peer 0
         peer_info_after_attack = self.nodes[0].getpeerinfo()
         assert_equal(peer_info_after_attack[0]['id'], 0)
-        assert_equal([101], peer_info_after_attack[0]["inflight"])
+        assert_equal([COINBASE_MATURITY + 1], peer_info_after_attack[0]["inflight"])
 
         # The honest relayer should be able to complete relaying the block by
         # sending the blocktxn that was requested.
@@ -107,7 +106,9 @@ class MutatedBlocksTest(BitcoinTestFramework):
         # Attacker gets a DoS score of 10, not immediately disconnected, so we do it 10 times to get to 100
         for _ in range(10):
             assert_equal(len(self.nodes[0].getpeerinfo()), 2)
-            with self.nodes[0].assert_debug_log(expected_msgs=["AcceptBlock FAILED (prev-blk-not-found)"]):
+            # FirstIslamicCoin: ProcessNetBlock validates the header first, so an unconnecting block is
+            # rejected (DoS score 10) in AcceptBlockHeader before AcceptBlock is reached.
+            with self.nodes[0].assert_debug_log(expected_msgs=["has prev block not found"]):
                 attacker.send_message(msg_block(block_missing_prev))
         attacker.wait_for_disconnect(timeout=5)
 

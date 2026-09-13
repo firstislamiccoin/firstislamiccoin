@@ -76,7 +76,11 @@ class RpcMiscTest(BitcoinTestFramework):
         assert_equal(node.echoipc("hello"), "hello")
 
         self.log.info("test getindexinfo")
+        # FirstIslamicCoin: txindex is enabled by default (DEFAULT_TXINDEX=true)
+        assert_equal(node.getindexinfo(), {"txindex": {"synced": True, "best_block_height": 200}})
+
         # Without any indices running the RPC returns an empty object
+        self.restart_node(0, ["-txindex=0"])
         assert_equal(node.getindexinfo(), {})
 
         # Restart the node with indices and wait for them to sync

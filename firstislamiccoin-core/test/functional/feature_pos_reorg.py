@@ -49,6 +49,9 @@ class PosReorgTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
+        # Both nodes stake their own forks; the framework disables staking by
+        # default (see util.write_config), so opt back in here.
+        self.extra_args = [["-staking=1"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

@@ -6,8 +6,10 @@
 from decimal import Decimal
 
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.fic import matured_coinbase_value
 from test_framework.util import (
     assert_equal,
+    assert_greater_than,
     find_output,
     find_vout_for_address
 )
@@ -39,8 +41,12 @@ class TxnMallTest(BitcoinTestFramework):
         return self.nodes[0].sendrawtransaction(tx['hex'])
 
     def run_test(self):
-        # All nodes should start with 1,250 BTC:
-        starting_balance = 1250
+        # FirstIslamicCoin: the cached chain pays 28,000,000 per block with a
+        # coinbase maturity of 10, so each node's starting balance depends on
+        # which cache blocks it mined. Record it instead of assuming 1,250 BTC.
+        start_height = self.nodes[0].getblockcount()
+        starting_balances = [n.getbalance() for n in self.nodes]
+        starting_balance = starting_balances[0]
 
         # All nodes should be out of IBD.
         # If the nodes are not all out of IBD, that can interfere with
@@ -50,7 +56,7 @@ class TxnMallTest(BitcoinTestFramework):
             assert n.getblockchaininfo()["initialblockdownload"] == False
 
         for i in range(3):
-            assert_equal(self.nodes[i].getbalance(), starting_balance)
+            assert_greater_than(starting_balances[i], 1250)
 
         # Assign coins to foo and bar addresses:
         node0_address_foo = self.nodes[0].getnewaddress()
@@ -101,7 +107,7 @@ class TxnMallTest(BitcoinTestFramework):
         # matured block, minus 40, minus 20, and minus transaction fees:
         expected = starting_balance + fund_foo_tx["fee"] + fund_bar_tx["fee"]
         if self.options.mine_block:
-            expected += 50
+            expected += matured_coinbase_value(self.nodes[0], start_height, start_height + 1)
         expected += tx1["amount"] + tx1["fee"]
         expected += tx2["amount"] + tx2["fee"]
         assert_equal(self.nodes[0].getbalance(), expected)
@@ -110,7 +116,7 @@ class TxnMallTest(BitcoinTestFramework):
             assert_equal(tx1["confirmations"], 1)
             assert_equal(tx2["confirmations"], 1)
             # Node1's balance should be both transaction amounts:
-            assert_equal(self.nodes[1].getbalance(), starting_balance - tx1["amount"] - tx2["amount"])
+            assert_equal(self.nodes[1].getbalance(), starting_balances[1] + matured_coinbase_value(self.nodes[1], start_height, start_height + 1) - tx1["amount"] - tx2["amount"])
         else:
             assert_equal(tx1["confirmations"], 0)
             assert_equal(tx2["confirmations"], 0)
@@ -138,11 +144,11 @@ class TxnMallTest(BitcoinTestFramework):
         # Node0's total balance should be starting balance, plus 100BTC for
         # two more matured blocks, minus 1240 for the double-spend, plus fees (which are
         # negative):
-        expected = starting_balance + 100 - 1240 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
+        expected = starting_balance + matured_coinbase_value(self.nodes[0], start_height, start_height + 2) - 1240 + fund_foo_tx["fee"] + fund_bar_tx["fee"] + doublespend_fee
         assert_equal(self.nodes[0].getbalance(), expected)
 
         # Node1's balance should be its initial balance (1250 for 25 block rewards) plus the doublespend:
-        assert_equal(self.nodes[1].getbalance(), 1250 + 1240)
+        assert_equal(self.nodes[1].getbalance(), starting_balances[1] + matured_coinbase_value(self.nodes[1], start_height, start_height + 2) + 1240)
 
 
 if __name__ == '__main__':

@@ -49,8 +49,9 @@ WITNESS_SCALE_FACTOR = 4
 MAX_BLOCK_SIGOPS = 20000
 MAX_BLOCK_SIGOPS_WEIGHT = MAX_BLOCK_SIGOPS * WITNESS_SCALE_FACTOR
 
-# Genesis block time (regtest)
-TIME_GENESIS_BLOCK = 1393221600
+# Genesis block time (regtest). FirstIslamicCoin: FIC_GENESIS_TIME in
+# src/kernel/chainparams.cpp (2026-09-12 00:00:00 UTC).
+TIME_GENESIS_BLOCK = 1789171200
 
 MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60
 
@@ -61,7 +62,10 @@ COINBASE_MATURITY = 10
 WITNESS_COMMITMENT_HEADER = b"\xaa\x21\xa9\xed"
 
 NORMAL_GBT_REQUEST_PARAMS = {"rules": ["segwit"]}
-VERSIONBITS_LAST_OLD_BLOCK_VERSION = 4
+# FirstIslamicCoin: CheckBlockHeader() rejects nVersion < 7 ("bad-version") --
+# see primitives/block.h/CBlockHeader and validation.cpp -- so 7 is the lowest
+# valid version; it still does not signal any versionbits deployment.
+VERSIONBITS_LAST_OLD_BLOCK_VERSION = 7
 MIN_BLOCKS_TO_KEEP = 288
 
 
@@ -70,7 +74,10 @@ def create_block(hashprev=None, coinbase=None, ntime=None, *, version=None, tmpl
     block = CBlock()
     if tmpl is None:
         tmpl = {}
-    block.nVersion = version or tmpl.get('version') or VERSIONBITS_LAST_OLD_BLOCK_VERSION
+    # FirstIslamicCoin: default to a versionbits-style version (as returned by
+    # getblocktemplate) rather than VERSIONBITS_LAST_OLD_BLOCK_VERSION, which
+    # is reserved for tests that specifically want a pre-versionbits version.
+    block.nVersion = version or tmpl.get('version') or 0x20000000
     block.nTime = ntime or tmpl.get('curtime') or int(time.time() + 600)
     block.hashPrevBlock = hashprev or int(tmpl['previousblockhash'], 0x10)
     if tmpl and not tmpl.get('bits') is None:

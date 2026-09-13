@@ -16,14 +16,16 @@ class BlockstoreReindexTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
-        self.extra_args = [["-fastprune"]]
+        self.extra_args = [[]]
 
     def reindex_readonly(self):
-        self.log.debug("Generate block big enough to start second block file")
-        fastprune_blockfile_size = 0x10000
+        # FirstIslamicCoin: -fastprune (64 KiB block files) does not exist, so fill the
+        # regular MAX_BLOCKFILE_SIZE (128 MiB) block file with near-maximum-weight blocks.
+        self.log.debug("Generate blocks big enough to start second block file")
         opreturn = "6a"
-        nulldata = fastprune_blockfile_size * "ff"
-        self.generateblock(self.nodes[0], output=f"raw({opreturn}{nulldata})", transactions=[])
+        nulldata = 990_000 * "ff"
+        while not (self.nodes[0].chain_path / "blocks" / "blk00001.dat").exists():
+            self.generateblock(self.nodes[0], output=f"raw({opreturn}{nulldata})", transactions=[])
         self.stop_node(0)
 
         assert (self.nodes[0].chain_path / "blocks" / "blk00000.dat").exists()
@@ -75,7 +77,7 @@ class BlockstoreReindexTest(BitcoinTestFramework):
         if undo_immutable:
             self.log.info("Attempt to restart and reindex the node with the unwritable block file")
             with self.nodes[0].assert_debug_log(expected_msgs=['FlushStateToDisk', 'failed to open file'], unexpected_msgs=[]):
-                self.nodes[0].assert_start_raises_init_error(extra_args=['-reindex', '-fastprune'],
+                self.nodes[0].assert_start_raises_init_error(extra_args=['-reindex'],
                     expected_msg="Error: A fatal internal error occurred, see debug.log for details")
             undo_immutable()
 

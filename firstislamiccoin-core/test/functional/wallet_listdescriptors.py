@@ -124,11 +124,14 @@ class ListDescriptorsTest(BitcoinTestFramework):
             'desc': descsum_create('combo(' + node.get_deterministic_priv_key().key + ')'),
             'timestamp': TIME_GENESIS_BLOCK,
         }])
+        # FirstIslamicCoin: the deterministic test keys differ from upstream's,
+        # so derive the expected public key instead of hard-coding it.
+        pubkey = wallet.getaddressinfo(node.get_deterministic_priv_key().address)['pubkey']
         expected = {
             'wallet_name': 'w4',
             'descriptors': [
                 {'active': False,
-                 'desc': 'combo(0227d85ba011276cf25b51df6a188b75e604b38770a462b2d0e9fb2fc839ef5d3f)#np574htj',
+                 'desc': descsum_create(f'combo({pubkey})'),
                  'timestamp': TIME_GENESIS_BLOCK},
             ]
         }

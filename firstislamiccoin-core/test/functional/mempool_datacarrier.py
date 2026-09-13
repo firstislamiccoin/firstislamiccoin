@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test datacarrier functionality"""
+from test_framework.fic import get_min_fee_sat
 from test_framework.messages import (
     CTxOut,
     MAX_OP_RETURN_RELAY,
@@ -34,7 +35,7 @@ class DataCarrierTest(BitcoinTestFramework):
         tx = self.wallet.create_self_transfer(fee_rate=0)["tx"]
         data = [] if data is None else [data]
         tx.vout.append(CTxOut(nValue=0, scriptPubKey=CScript([OP_RETURN] + data)))
-        tx.vout[0].nValue -= tx.get_vsize()  # simply pay 1sat/vbyte fee
+        tx.vout[0].nValue -= get_min_fee_sat(tx.get_vsize())  # FirstIslamicCoin: pay the minimum fee (GetMinFee)
 
         tx_hex = tx.serialize().hex()
 

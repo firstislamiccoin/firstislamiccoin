@@ -468,7 +468,10 @@ class UnconfirmedInputTest(BitcoinTestFramework):
 
     def run_test(self):
         self.log.info("Starting UnconfirmedInputTest!")
-        self.target_fee_rate = 30
+        # FirstIslamicCoin: the wallet never pays less than the fixed minimum
+        # fee (GetMinFee: 100 sat/vB), so "low" parents created with
+        # fee_rate=1 actually pay 100 sat/vB. Keep the target well above that.
+        self.target_fee_rate = 300
         self.def_wallet  = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         self.generate(self.nodes[0], 110)
 

@@ -31,7 +31,6 @@ Start three nodes:
 """
 
 from test_framework.blocktools import (
-    COINBASE_MATURITY,
     create_block,
     create_coinbase,
 )
@@ -72,7 +71,8 @@ class AssumeValidTest(BitcoinTestFramework):
         # Start node0. We don't start the other nodes yet since
         # we need to pre-mine a block with an invalid transaction
         # signature so we can pass in the block hash as assumevalid.
-        self.start_node(0)
+        # FIC: regtest rejects proof-of-work blocks above height 500 (reject-pow) unless -lastpowblock is raised.
+        self.start_node(0, extra_args=["-lastpowblock=2147483646"])
 
     def send_blocks_until_disconnected(self, p2p_conn):
         """Keep sending blocks to the node until we're disconnected."""
@@ -139,8 +139,8 @@ class AssumeValidTest(BitcoinTestFramework):
             height += 1
 
         # Start node1 and node2 with assumevalid so they accept a block with a bad signature.
-        self.start_node(1, extra_args=["-assumevalid=" + hex(block102.sha256)])
-        self.start_node(2, extra_args=["-assumevalid=" + hex(block102.sha256)])
+        self.start_node(1, extra_args=["-assumevalid=" + hex(block102.sha256), "-lastpowblock=2147483646"])
+        self.start_node(2, extra_args=["-assumevalid=" + hex(block102.sha256), "-lastpowblock=2147483646"])
 
         p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
         p2p0.send_header_for_blocks(self.blocks[0:2000])
@@ -148,8 +148,10 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # Send blocks to node0. Block 102 will be rejected.
         self.send_blocks_until_disconnected(p2p0)
-        self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
-        assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
+        # FIC: the test buries block 1 under exactly 100 blocks; the framework's
+        # coinbase maturity constant is 10 on FIC, so use the real height 101.
+        self.wait_until(lambda: self.nodes[0].getblockcount() >= 101)
+        assert_equal(self.nodes[0].getblockcount(), 101)
 
         p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
         p2p1.send_header_for_blocks(self.blocks[0:2000])
@@ -167,8 +169,8 @@ class AssumeValidTest(BitcoinTestFramework):
 
         # Send blocks to node2. Block 102 will be rejected.
         self.send_blocks_until_disconnected(p2p2)
-        self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
-        assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
+        self.wait_until(lambda: self.nodes[2].getblockcount() >= 101)
+        assert_equal(self.nodes[2].getblockcount(), 101)
 
 
 if __name__ == '__main__':

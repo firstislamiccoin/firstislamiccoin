@@ -126,7 +126,8 @@ class KeyPoolTest(BitcoinTestFramework):
         wi = nodes[0].getwalletinfo()
         kp_size_before = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
         # the next one should fail
-        assert_raises_rpc_error(-12, "Error: Keypool ran out, please call keypoolrefill first", nodes[0].getnewaddress)
+        # FirstIslamicCoin: -addresstype defaults to legacy, so name the drained type explicitly
+        assert_raises_rpc_error(-12, "Error: Keypool ran out, please call keypoolrefill first", nodes[0].getnewaddress, address_type="bech32")
         # check that keypool sizes did not change
         wi = nodes[0].getwalletinfo()
         kp_size_after = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]
@@ -142,8 +143,8 @@ class KeyPoolTest(BitcoinTestFramework):
 
         # drain the keypool
         for _ in range(3):
-            nodes[0].getnewaddress()
-        assert_raises_rpc_error(-12, "Keypool ran out", nodes[0].getnewaddress)
+            nodes[0].getnewaddress(address_type="bech32")
+        assert_raises_rpc_error(-12, "Keypool ran out", nodes[0].getnewaddress, address_type="bech32")
 
         with WalletUnlock(nodes[0], 'test'):
             nodes[0].keypoolrefill(100)
@@ -186,36 +187,39 @@ class KeyPoolTest(BitcoinTestFramework):
         assert_equal(res[0]['success'], True)
 
         with WalletUnlock(w1, 'test'):
-            res = w1.sendtoaddress(address=address, amount=0.00010000)
+            # FirstIslamicCoin: amounts and fee rates below are 10x upstream's: the minimum
+            # fee rate is 100 sat/vB (TX_FEE_PER_KB) and the P2WPKH dust threshold is
+            # 9800 sat (DUST_RELAY_TX_FEE 100000 sat/kvB), versus 1 sat/vB and 294 sat.
+            res = w1.sendtoaddress(address=address, amount=0.00100000)
         self.generate(nodes[0], 1)
         destination = addr.pop()
 
-        # Using a fee rate (10 sat / byte) well above the minimum relay rate
-        # creating a 5,000 sat transaction with change should not be possible
-        assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.00005000}], subtractFeeFromOutputs=[0], feeRate=0.00010)
+        # Using a fee rate (100 sat / byte) at the minimum rate
+        # creating a 50,000 sat transaction with change should not be possible
+        assert_raises_rpc_error(-4, "Transaction needs a change address, but we can't generate it.", w2.walletcreatefundedpsbt, inputs=[], outputs=[{addr.pop(): 0.00050000}], subtractFeeFromOutputs=[0], feeRate=0.00100)
 
-        # creating a 10,000 sat transaction without change, with a manual input, should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.00010000}], subtractFeeFromOutputs=[0], feeRate=0.00010)
+        # creating a 100,000 sat transaction without change, with a manual input, should still be possible
+        res = w2.walletcreatefundedpsbt(inputs=w2.listunspent(), outputs=[{destination: 0.00100000}], subtractFeeFromOutputs=[0], feeRate=0.00100)
         assert_equal("psbt" in res, True)
 
-        # creating a 10,000 sat transaction without change should still be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], subtractFeeFromOutputs=[0], feeRate=0.00010)
+        # creating a 100,000 sat transaction without change should still be possible
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00100000}], subtractFeeFromOutputs=[0], feeRate=0.00100)
         assert_equal("psbt" in res, True)
         # should work without subtractFeeFromOutputs if the exact fee is subtracted from the amount
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00008900}], feeRate=0.00010)
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00089000}], feeRate=0.00100)
         assert_equal("psbt" in res, True)
 
         # dust change should be removed
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00008800}], feeRate=0.00010)
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00088000}], feeRate=0.00100)
         assert_equal("psbt" in res, True)
 
         # create a transaction without change at the maximum fee rate, such that the output is still spendable:
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], subtractFeeFromOutputs=[0], feeRate=0.0008823)
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00100000}], subtractFeeFromOutputs=[0], feeRate=0.0082)
         assert_equal("psbt" in res, True)
-        assert_equal(res["fee"], Decimal("0.00009706"))
+        assert_equal(res["fee"], Decimal("0.00090200"))
 
-        # creating a 10,000 sat transaction with a manual change address should be possible
-        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00010000}], subtractFeeFromOutputs=[0], feeRate=0.00010, changeAddress=addr.pop())
+        # creating a 100,000 sat transaction with a manual change address should be possible
+        res = w2.walletcreatefundedpsbt(inputs=[], outputs=[{destination: 0.00100000}], subtractFeeFromOutputs=[0], feeRate=0.00100, changeAddress=addr.pop())
         assert_equal("psbt" in res, True)
 
         if not self.options.descriptors:

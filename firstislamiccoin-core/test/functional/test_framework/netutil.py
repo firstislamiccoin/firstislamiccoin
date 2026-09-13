@@ -157,4 +157,14 @@ def test_ipv6_local():
         s.connect(('::1', 1))
     except socket.error:
         have_ipv6 = False
+    if have_ipv6:
+        # The node resolves addresses (e.g. -proxy=[::1]:port) and libevent
+        # binds the RPC server with AI_ADDRCONFIG. On hosts where ::1 exists
+        # but no non-loopback IPv6 address is configured (common in
+        # containers), getaddrinfo with AI_ADDRCONFIG refuses IPv6, so the
+        # node cannot use ::1 even though a plain socket can.
+        try:
+            socket.getaddrinfo('::1', None, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_ADDRCONFIG)
+        except socket.gaierror:
+            have_ipv6 = False
     return have_ipv6

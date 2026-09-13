@@ -48,6 +48,8 @@ class P2PIBDStallingTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
+        # FIC: regtest rejects proof-of-work blocks above height 500 (reject-pow) unless -lastpowblock is raised.
+        self.extra_args = [["-lastpowblock=2147483646"]]
 
     def run_test(self):
         NUM_BLOCKS = 1025
@@ -80,7 +82,9 @@ class P2PIBDStallingTest(BitcoinTestFramework):
 
         # Need to wait until 1023 blocks are received - the magic total bytes number is a workaround in lack of an rpc
         # returning the number of downloaded (but not connected) blocks.
-        self.wait_until(lambda: self.total_bytes_recv_for_blocks() == 172761)
+        # FIC: each block message carries 5 more bytes than Bitcoin's (4-byte header
+        # nFlags + 1-byte empty vchBlockSig): 172761 + 5 * 1023 blocks.
+        self.wait_until(lambda: self.total_bytes_recv_for_blocks() == 177876)
 
         self.all_sync_send_with_ping(peers)
         # If there was a peer marked for stalling, it would get disconnected

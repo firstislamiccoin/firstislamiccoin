@@ -40,9 +40,8 @@ class MempoolExpiryTest(BitcoinTestFramework):
         parent_utxo = self.wallet.get_utxo(txid=parent_txid)
         independent_utxo = self.wallet.get_utxo()
 
-        # Add prioritisation to this transaction to check that it persists after the expiry
-        node.prioritisetransaction(parent_txid, 0, COIN)
-        assert_equal(node.getprioritisedtransactions()[parent_txid], { "fee_delta" : COIN, "in_mempool" : True})
+        # FirstIslamicCoin has no prioritisetransaction/getprioritisedtransactions RPCs,
+        # so upstream's check that prioritisation survives expiry does not apply.
 
         # Ensure the transactions we send to trigger the mempool check spend utxos that are independent of
         # the transactions being tested for expiration.
@@ -85,9 +84,6 @@ class MempoolExpiryTest(BitcoinTestFramework):
             timedelta(seconds=(expiry_time-entry_time))))
         assert_raises_rpc_error(-5, 'Transaction not in mempool',
                                 node.getmempoolentry, parent_txid)
-
-        # Prioritisation does not disappear when transaction expires
-        assert_equal(node.getprioritisedtransactions()[parent_txid], { "fee_delta" : COIN, "in_mempool" : False})
 
         # The child transaction should be removed from the mempool as well.
         self.log.info('Test child tx is evicted as well.')

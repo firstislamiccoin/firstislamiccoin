@@ -102,18 +102,14 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(hww.getwalletinfo()["keypoolsize"], 40)
 
         address1 = hww.getnewaddress(address_type="bech32")
-        assert_equal(address1, "bcrt1qm90ugl4d48jv8n6e5t9ln6t9zlpm5th68x4f8g")
+        assert_equal(address1, "rfic1qm90ugl4d48jv8n6e5t9ln6t9zlpm5th6qnz7ng")
         address_info = hww.getaddressinfo(address1)
         assert_equal(address_info['solvable'], True)
         assert_equal(address_info['ismine'], True)
         assert_equal(address_info['hdkeypath'], "m/84h/1h/0h/0/0")
 
-        address2 = hww.getnewaddress(address_type="p2sh-segwit")
-        assert_equal(address2, "2N2gQKzjUe47gM8p1JZxaAkTcoHPXV6YyVp")
-        address_info = hww.getaddressinfo(address2)
-        assert_equal(address_info['solvable'], True)
-        assert_equal(address_info['ismine'], True)
-        assert_equal(address_info['hdkeypath'], "m/49h/1h/0h/0/0")
+        # FirstIslamicCoin: getnewaddress refuses p2sh-segwit (wallet/rpc/addresses.cpp).
+        assert_raises_rpc_error(-8, "P2SH_SEGWIT addresses are not welcome", hww.getnewaddress, address_type="p2sh-segwit")
 
         address3 = hww.getnewaddress(address_type="legacy")
         assert_equal(address3, "n1LKejAadN6hg2FrBXoU1KrwX4uK16mco9")
@@ -123,7 +119,7 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(address_info['hdkeypath'], "m/44h/1h/0h/0/0")
 
         address4 = hww.getnewaddress(address_type="bech32m")
-        assert_equal(address4, "bcrt1phw4cgpt6cd30kz9k4wkpwm872cdvhss29jga2xpmftelhqll62ms4e9sqj")
+        assert_equal(address4, "rfic1phw4cgpt6cd30kz9k4wkpwm872cdvhss29jga2xpmftelhqll62ms0uvvmf")
         address_info = hww.getaddressinfo(address4)
         assert_equal(address_info['solvable'], True)
         assert_equal(address_info['ismine'], True)
@@ -167,7 +163,8 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(result[1], {'success': True})
         assert_equal(mock_wallet.getwalletinfo()["txcount"], 1)
         dest = self.nodes[0].getnewaddress(address_type='bech32')
-        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {'replaceable': True}, True)['psbt']
+        # FirstIslamicCoin: no RBF, so no 'replaceable' option.
+        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {}, True)['psbt']
         mock_psbt_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt, sign=True, sighashtype="ALL", bip32derivs=True)
         mock_tx = mock_psbt_signed["hex"]
         assert mock_wallet.testmempoolaccept([mock_tx])[0]["allowed"]
@@ -219,22 +216,8 @@ class WalletSignerTest(BitcoinTestFramework):
         # Broadcast transaction so we can bump the fee
         hww.sendrawtransaction(res["hex"])
 
-        self.log.info('Prepare fee bumped mock PSBT')
-
-        # Now that the transaction is broadcast, bump fee in mock wallet:
-        orig_tx_id = res["txid"]
-        mock_psbt_bumped = mock_wallet.psbtbumpfee(orig_tx_id)["psbt"]
-        mock_psbt_bumped_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt_bumped, sign=True, sighashtype="ALL", bip32derivs=True)
-
-        with open(os.path.join(self.nodes[1].cwd, "mock_psbt"), "w", encoding="utf8") as f:
-            f.write(mock_psbt_bumped_signed["psbt"])
-
-        self.log.info('Test bumpfee using hww1')
-
-        # Bump fee
-        res = hww.bumpfee(orig_tx_id)
-        assert_greater_than(res["fee"], res["origfee"])
-        assert_equal(res["errors"], [])
+        # FirstIslamicCoin: there is no RBF, and the bumpfee/psbtbumpfee RPCs
+        # do not exist, so the upstream fee-bump signer flow is not applicable.
 
         # # Handle error thrown by script
         # self.set_mock_result(self.nodes[4], "2")

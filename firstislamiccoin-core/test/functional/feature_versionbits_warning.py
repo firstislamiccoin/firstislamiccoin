@@ -15,8 +15,8 @@ from test_framework.messages import msg_block
 from test_framework.p2p import P2PInterface
 from test_framework.test_framework import BitcoinTestFramework
 
-VB_PERIOD = 144           # versionbits period length for regtest
-VB_THRESHOLD = 108        # versionbits activation threshold for regtest
+VB_PERIOD = 150           # versionbits period length for FirstIslamicCoin regtest (nMinerConfirmationWindow)
+VB_THRESHOLD = 120        # versionbits activation threshold for FirstIslamicCoin regtest (nRuleChangeActivationThreshold)
 VB_TOP_BITS = 0x20000000
 VB_UNKNOWN_BIT = 27       # Choose a bit unassigned to any deployment
 VB_UNKNOWN_VERSION = VB_TOP_BITS | (1 << VB_UNKNOWN_BIT)
@@ -34,7 +34,8 @@ class VersionBitsWarningTest(BitcoinTestFramework):
         # Open and close to create zero-length file
         with open(self.alert_filename, 'w', encoding='utf8'):
             pass
-        self.extra_args = [[f"-alertnotify=echo %s >> \"{self.alert_filename}\""]]
+        # FirstIslamicCoin: this test mines more than the default 500 regtest proof-of-work blocks
+        self.extra_args = [[f"-alertnotify=echo %s >> \"{self.alert_filename}\"", "-lastpowblock=1000"]]
         self.setup_nodes()
 
     def send_blocks_with_version(self, peer, numblocks, version):

@@ -46,6 +46,12 @@ class NodeNetworkLimitedTest(BitcoinTestFramework):
         self.add_nodes(self.num_nodes, self.extra_args)
         self.start_nodes()
 
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: pruning is not supported, so a node can never be NODE_NETWORK_LIMITED-only
+        # (init.cpp always adds NODE_NETWORK and -prune is not a registered option).
+        from test_framework.test_framework import SkipTest
+        raise SkipTest('FirstIslamicCoin: pruning is not supported, so a node can never be NODE_NETWORK_LIMITED-only')
+
     def run_test(self):
         node = self.nodes[0].add_p2p_connection(P2PIgnoreInv())
 

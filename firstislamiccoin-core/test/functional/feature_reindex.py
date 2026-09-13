@@ -41,7 +41,7 @@ class ReindexTest(BitcoinTestFramework):
         blk0 = self.nodes[0].blocks_path / "blk00000.dat"
         with open(blk0, 'r+b') as bf:
             # Read at least the first few blocks (including genesis)
-            b = bf.read(2000)
+            b = bf.read()
 
             # Find the offsets of blocks 2, 3, and 4 (the first 3 blocks beyond genesis)
             # by searching for the regtest marker bytes (see pchMessageStart).

@@ -87,7 +87,7 @@ class TransactionTimeRescanTest(BitcoinTestFramework):
 
         # generate blocks and check blockcount
         self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 300)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + COINBASE_MATURITY)
 
         # synchronize nodes and time
         self.sync_all()
@@ -98,7 +98,7 @@ class TransactionTimeRescanTest(BitcoinTestFramework):
 
         # generate blocks and check blockcount
         self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 400)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + 2 * COINBASE_MATURITY)
 
         # synchronize nodes and time
         self.sync_all()
@@ -109,7 +109,7 @@ class TransactionTimeRescanTest(BitcoinTestFramework):
 
         # generate more blocks and check blockcount
         self.generatetoaddress(minernode, COINBASE_MATURITY, m1)
-        assert_equal(minernode.getblockcount(), initial_mine + 500)
+        assert_equal(minernode.getblockcount(), initial_mine + 200 + 3 * COINBASE_MATURITY)
 
         self.log.info('Check user\'s final balance and transaction count')
         assert_equal(wo_wallet.getbalance(), 16)
@@ -150,7 +150,9 @@ class TransactionTimeRescanTest(BitcoinTestFramework):
 
         # proceed to rescan, first with an incomplete one, then with a full rescan
         self.log.info('Rescan last history part')
-        restorewo_wallet.rescanblockchain(initial_mine + 350)
+        # Start between the blocks confirming wo2 and wo3 (upstream: 350 of
+        # 400 blocks above the cache with COINBASE_MATURITY = 100).
+        restorewo_wallet.rescanblockchain(initial_mine + 200 + COINBASE_MATURITY + COINBASE_MATURITY // 2)
         self.log.info('Rescan all history')
         restorewo_wallet.rescanblockchain()
 

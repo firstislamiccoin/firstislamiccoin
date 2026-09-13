@@ -241,7 +241,9 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         )
 
         self.log.info("Testing we detect funds sent to one of them")
-        addr = self.ms_wo_wallet.getnewaddress()
+        # FirstIslamicCoin: default -addresstype is legacy, so ask for the
+        # descriptor's own address type.
+        addr = self.ms_wo_wallet.getnewaddress(address_type=addr_type)
         txid = self.funder.sendtoaddress(addr, 0.01)
         self.wait_until(
             lambda: len(self.ms_wo_wallet.listunspent(minconf=0, addresses=[addr])) == 1

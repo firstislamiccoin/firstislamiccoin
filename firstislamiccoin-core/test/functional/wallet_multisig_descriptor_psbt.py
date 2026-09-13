@@ -23,7 +23,9 @@ class WalletMultisigDescriptorPSBTTest(BitcoinTestFramework):
         self.num_nodes = 3
         self.setup_clean_chain = True
         self.wallet_names = []
-        self.extra_args = [["-keypool=100"]] * self.num_nodes
+        # FirstIslamicCoin: the wallet's default -addresstype is legacy
+        # (wallet.h DEFAULT_ADDRESS_TYPE); these multisigs are wsh().
+        self.extra_args = [["-keypool=100", "-addresstype=bech32"]] * self.num_nodes
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()

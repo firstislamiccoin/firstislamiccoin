@@ -257,16 +257,19 @@ class AddressTypeTest(BitcoinTestFramework):
         for explicit_type, multisig, from_node in itertools.product([False, True], do_multisigs, range(4)):
             address_type = None
             if explicit_type and not multisig:
-                if from_node == 1:
+                # FirstIslamicCoin: getnewaddress refuses an explicit p2sh-segwit type
+                # (nodes 1 and 2 still produce p2sh-segwit through -addresstype), so
+                # nodes 0 and 3 override their default with the other supported type.
+                if from_node == 1 or from_node == 0:
                     address_type = 'bech32'
-                elif from_node == 0 or from_node == 3:
-                    address_type = 'p2sh-segwit'
                 else:
                     address_type = 'legacy'
             self.log.info("Sending from node {} ({}) with{} multisig using {}".format(from_node, self.extra_args[from_node], "" if multisig else "out", "default" if address_type is None else address_type))
             old_balances = self.get_balances()
             self.log.debug("Old balances are {}".format(old_balances))
-            to_send = (old_balances[from_node] / (COINBASE_MATURITY + 1)).quantize(Decimal("0.00000001"))
+            # Sends below total 100 * to_send, so keep it under the balance. (Upstream divided by
+            # COINBASE_MATURITY + 1 == 101; FirstIslamicCoin regtest maturity is 10.)
+            to_send = (old_balances[from_node] / 101).quantize(Decimal("0.00000001"))
             sends = {}
             addresses = {}
 
@@ -380,7 +383,8 @@ class AddressTypeTest(BitcoinTestFramework):
 
         if self.options.descriptors:
             self.log.info("Descriptor wallets have bech32m addresses")
-            self.test_address(4, self.nodes[4].getnewaddress("", "bech32m"), multisig=False, typ="bech32m")
+            # FirstIslamicCoin: getnewaddress refuses bech32m until taproot activates
+            assert_raises_rpc_error(-8, "Taproot addresses (bech32m) are not supported yet", self.nodes[4].getnewaddress, "", "bech32m")
             self.test_address(4, self.nodes[4].getrawchangeaddress("bech32m"), multisig=False, typ="bech32m")
         else:
             self.log.info("Legacy wallets cannot make bech32m addresses")

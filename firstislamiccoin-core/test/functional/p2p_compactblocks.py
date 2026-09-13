@@ -147,6 +147,10 @@ class CompactBlocksTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.extra_args = [[
             "-acceptnonstdtxn=1",
+            # FIC: getblock hex omits witnesses unless -rpcserialversion=1.
+            "-rpcserialversion=1",
+            # FIC: regtest rejects PoW blocks above height 500 unless raised.
+            "-lastpowblock=2147483646",
         ]]
         self.utxos = []
 
@@ -163,7 +167,8 @@ class CompactBlocksTest(BitcoinTestFramework):
         self.generate(self.wallet, COINBASE_MATURITY)
 
         total_value = block.vtx[0].vout[0].nValue
-        out_value = total_value // 10
+        # FIC: GetMinFee() is a consensus rule (bad-txns-fee-not-enough), so leave a fee.
+        out_value = (total_value - 1000000) // 10
         tx = CTransaction()
         tx.vin.append(CTxIn(COutPoint(block.vtx[0].sha256, 0), b''))
         for _ in range(10):
@@ -423,7 +428,8 @@ class CompactBlocksTest(BitcoinTestFramework):
         for _ in range(num_transactions):
             tx = CTransaction()
             tx.vin.append(CTxIn(COutPoint(utxo[0], utxo[1]), b''))
-            tx.vout.append(CTxOut(utxo[2] - 1000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
+            # FIC: fee must cover the consensus minimum (GetMinFee: >= 10000 sat).
+            tx.vout.append(CTxOut(utxo[2] - 100000, CScript([OP_TRUE, OP_DROP] * 15 + [OP_TRUE])))
             tx.rehash()
             utxo = [tx.sha256, 0, tx.vout[0].nValue]
             block.vtx.append(tx)
@@ -909,6 +915,9 @@ class CompactBlocksTest(BitcoinTestFramework):
 
         # We will need UTXOs to construct transactions in later tests.
         self.make_utxos()
+        # FIC: test_low_work_compactblocks forks 150 blocks below the tip; with
+        # COINBASE_MATURITY=10 the chain would otherwise be too short.
+        self.generate(self.nodes[0], 150)
 
         assert softfork_active(self.nodes[0], "segwit")
 

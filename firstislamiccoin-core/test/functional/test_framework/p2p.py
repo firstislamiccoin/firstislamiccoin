@@ -88,11 +88,9 @@ MIN_P2P_VERSION_SUPPORTED = 60001
 # Version 70016 supports wtxid relay
 P2P_VERSION = 70016
 # The services that this test framework offers in its `version` message
-'''
-# FirstIslamicCoin
-# NODE_NETWORK | NODE_WITNESS
-'''
-P2P_SERVICES = NODE_NETWORK
+# FirstIslamicCoin: SegWit is always active from genesis, so the framework
+# advertises witness relay support like real peers do.
+P2P_SERVICES = NODE_NETWORK | NODE_WITNESS
 # The P2P user agent string that this test framework sends in its `version` message
 P2P_SUBVERSION = "/python-p2p-tester:0.0.3/"
 # Value for relay that this test framework sends in its `version` message

@@ -21,7 +21,8 @@ class WalletHDTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 2
-        self.extra_args = [[], ['-keypool=0']]
+        # FirstIslamicCoin: -addresstype defaults to legacy; this test asserts m/84h paths
+        self.extra_args = [['-addresstype=bech32'], ['-addresstype=bech32', '-keypool=0']]
         # whitelist peers to speed up tx relay / mempool sync
         for args in self.extra_args:
             args.append("-whitelist=noban@127.0.0.1")
@@ -45,7 +46,7 @@ class WalletHDTest(BitcoinTestFramework):
             assert_equal(change_addrV["hdkeypath"], "m/0'/1'/0'")  #first internal child key
 
         # Import a non-HD private key in the HD wallet
-        non_hd_add = 'bcrt1qmevj8zfx0wdvp05cqwkmr6mxkfx60yezwjksmt'
+        non_hd_add = 'rfic1qmevj8zfx0wdvp05cqwkmr6mxkfx60yezf8p80t'
         non_hd_key = 'cS9umN9w6cDMuRVYdbkfE4c7YUFLJRoXMfhQ569uY4odiQbVN8Rt'
         self.nodes[1].importprivkey(non_hd_key)
 
@@ -88,6 +89,8 @@ class WalletHDTest(BitcoinTestFramework):
         # otherwise node1 would auto-recover all funds in flag the keypool keys as used
         shutil.rmtree(self.nodes[1].blocks_path)
         shutil.rmtree(self.nodes[1].chain_path / "chainstate")
+        # FirstIslamicCoin: -txindex defaults to on; drop its index along with the chain
+        shutil.rmtree(self.nodes[1].chain_path / "indexes", ignore_errors=True)
         shutil.copyfile(
             self.nodes[1].datadir_path / "hd.bak",
             self.nodes[1].wallets_path / self.default_wallet_name / self.wallet_data_filename
@@ -116,6 +119,8 @@ class WalletHDTest(BitcoinTestFramework):
         self.stop_node(1)
         shutil.rmtree(self.nodes[1].blocks_path)
         shutil.rmtree(self.nodes[1].chain_path / "chainstate")
+        # FirstIslamicCoin: -txindex defaults to on; drop its index along with the chain
+        shutil.rmtree(self.nodes[1].chain_path / "indexes", ignore_errors=True)
         shutil.copyfile(
             self.nodes[1].datadir_path / "hd.bak",
             self.nodes[1].wallets_path / self.default_wallet_name / self.wallet_data_filename

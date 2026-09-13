@@ -38,7 +38,8 @@ class MempoolUnbroadcastTest(BitcoinTestFramework):
             self.import_deterministic_coinbase_privkeys()
             # generate a wallet txn
             addr = node.getnewaddress()
-            wallet_tx_hsh = node.sendtoaddress(addr, 0.0001)
+            # FirstIslamicCoin: 0.0001 is dust for a P2PKH output at the 100000 sat/kvB dust fee
+            wallet_tx_hsh = node.sendtoaddress(addr, 0.001)
 
         # generate a txn using sendrawtransaction
         txFS = self.wallet.create_self_transfer()

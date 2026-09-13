@@ -28,8 +28,11 @@ from test_framework.p2p import (
 )
 from test_framework.test_framework import BitcoinTestFramework
 
-MAX_FEE_FILTER = Decimal(9170997) / COIN
+# FIC: MAX_MONEY is INT64_MAX, so the rounded IBD fee filter differs from Bitcoin's 9170997.
+MAX_FEE_FILTER = Decimal(9452957) / COIN
 NORMAL_FEE_FILTER = Decimal(100) / COIN
+# FIC: outside IBD the fee filter is round(TX_FEE_PER_KB = 0.001/kvB) (randomized bucket).
+FIC_FIXED_FEE_FILTER_MAX = Decimal(100000) / COIN
 
 
 class P2PIBDTxRelayTest(BitcoinTestFramework):
@@ -61,7 +64,8 @@ class P2PIBDTxRelayTest(BitcoinTestFramework):
         self.log.info("Check that nodes don't process unsolicited transactions while still in IBD")
         # A transaction hex pulled from tx_valid.json. There are no valid transactions since no UTXOs
         # exist yet, but it should be a well-formed transaction.
-        rawhex = "0100000001b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba260000000004a01ff473" + \
+        # FIC: version-1 transactions serialize a 4-byte nTime after nVersion.
+        rawhex = "01000000" + "00000000" + "01b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba260000000004a01ff473" + \
             "04402203f16c6f40162ab686621ef3000b04e75418a0c0cb2d8aebeac894ae360ac1e780220ddc15ecdfc3507ac48e168" + \
             "1a33eb60996631bf6bf5bc0a0682c4db743ce7ca2b01ffffffff0140420f00000000001976a914660d4ef3a743e3e696a" + \
             "d990364e555c271ad504b88ac00000000"
@@ -78,7 +82,8 @@ class P2PIBDTxRelayTest(BitcoinTestFramework):
         self.log.info("Check that nodes reset minfilter after coming out of IBD")
         for node in self.nodes:
             assert not node.getblockchaininfo()['initialblockdownload']
-            self.wait_until(lambda: all(peer['minfeefilter'] == NORMAL_FEE_FILTER for peer in node.getpeerinfo()))
+            # FIC: FeeFilterRounder rounds up to the next ~10% bucket a third of the time.
+            self.wait_until(lambda: all(NORMAL_FEE_FILTER <= peer['minfeefilter'] <= FIC_FIXED_FEE_FILTER_MAX * Decimal("1.1") for peer in node.getpeerinfo()))
 
         self.log.info("Check that nodes process the same transaction, even when unsolicited, when no longer in IBD")
         peer_txer = self.nodes[0].add_p2p_connection(P2PInterface())

@@ -96,7 +96,7 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = Decimal('0.000007')
+        fee = Decimal('0.0001')  # FirstIslamicCoin: GetMinFee is 10000 sat for a tx of <= 100 vbytes
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 BTC UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)
@@ -109,14 +109,16 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
 
         self.log.info('A final transaction not in the mempool')
         output_amount = Decimal('0.025')
-        tx = self.wallet.create_self_transfer(
+        tx_final = self.wallet.create_self_transfer(
             sequence=SEQUENCE_FINAL,
             locktime=node.getblockcount() + 2000,  # Can be anything
-        )['tx']
+        )
+        tx = tx_final['tx']
         tx.vout[0].nValue = int(output_amount * COIN)
         raw_tx_final = tx.serialize().hex()
         tx = tx_from_hex(raw_tx_final)
-        fee_expected = Decimal('50.0') - output_amount
+        # FirstIslamicCoin: coinbase outputs are not 50 coins, so use the spent coin's value
+        fee_expected = tx_final['new_utxo']['value'] + tx_final['fee'] - output_amount
         self.check_mempool_result(
             result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': fee_expected}}],
             rawtxs=[tx.serialize().hex()],
@@ -134,20 +136,18 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         )
 
         self.log.info('A transaction that replaces a mempool transaction')
+        # FirstIslamicCoin has no mempool replacement (RBF): a double-spend of a
+        # mempool transaction is rejected whatever its fee or nSequence, so the
+        # original raw_tx_0 stays in the mempool for the rest of the test.
         tx = tx_from_hex(raw_tx_0)
         tx.vout[0].nValue -= int(fee * COIN)  # Double the fee
         tx.vin[0].nSequence = MAX_BIP125_RBF_SEQUENCE + 1  # Now, opt out of RBF
-        raw_tx_0 = tx.serialize().hex()
-        txid_0 = tx.rehash()
         self.check_mempool_result(
-            result_expected=[{'txid': txid_0, 'allowed': True, 'vsize': tx.get_vsize(), 'fees': {'base': (2 * fee)}}],
-            rawtxs=[raw_tx_0],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'txn-mempool-conflict'}],
+            rawtxs=[tx.serialize().hex()],
         )
 
         self.log.info('A transaction that conflicts with an unconfirmed tx')
-        # Send the transaction that replaces the mempool transaction and opts out of replaceability
-        node.sendrawtransaction(hexstring=tx.serialize().hex(), maxfeerate=0)
-        # take original raw_tx_0
         tx = tx_from_hex(raw_tx_0)
         tx.vout[0].nValue -= int(4 * fee * COIN)  # Set more fee
         self.check_mempool_result(
@@ -226,14 +226,10 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             rawtxs=[tx.serialize().hex()],
         )
 
-        # The following two validations prevent overflow of the output amounts (see CVE-2010-5139).
-        self.log.info('A transaction with too large output value')
-        tx = tx_from_hex(raw_tx_reference)
-        tx.vout[0].nValue = MAX_MONEY + 1
-        self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'bad-txns-vout-toolarge'}],
-            rawtxs=[tx.serialize().hex()],
-        )
+        # The following validations prevent overflow of the output amounts (see CVE-2010-5139).
+        # FirstIslamicCoin: MAX_MONEY is INT64_MAX (src/consensus/amount.h), so a single
+        # output value above it cannot be serialized and "bad-txns-vout-toolarge" is
+        # unreachable; only the sum-of-outputs check can be exercised.
 
         self.log.info('A transaction with too large sum of output values')
         tx = tx_from_hex(raw_tx_reference)
@@ -364,10 +360,10 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         )
 
         self.log.info('Minimally-small transaction(in non-witness bytes) that is allowed')
-        tx.vout[0] = CTxOut(COIN - 1000, DUMMY_MIN_OP_RETURN_SCRIPT)
+        tx.vout[0] = CTxOut(COIN - 10000, DUMMY_MIN_OP_RETURN_SCRIPT)  # FirstIslamicCoin: GetMinFee minimum
         assert_equal(len(tx.serialize_without_witness()), MIN_STANDARD_TX_NONWITNESS_SIZE)
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00001000')}}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'vsize': tx.get_vsize(), 'fees': { 'base': Decimal('0.00010000')}}],
             rawtxs=[tx.serialize().hex()],
             maxfeerate=0,
         )

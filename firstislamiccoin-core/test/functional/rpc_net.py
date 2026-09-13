@@ -91,8 +91,11 @@ class NetTest(BitcoinTestFramework):
         # the address bound to on one side will be the source address for the other node
         assert_equal(peer_info[0][0]['addrbind'], peer_info[1][0]['addr'])
         assert_equal(peer_info[1][0]['addrbind'], peer_info[0][0]['addr'])
-        assert_equal(peer_info[0][0]['minfeefilter'], Decimal("0.00000500"))
-        assert_equal(peer_info[1][0]['minfeefilter'], Decimal("0.00001000"))
+        # FirstIslamicCoin: the feefilter sent is the fixed TX_FEE_PER_KB (0.001/kvB, see
+        # MaybeSendFeefilter), not -minrelaytxfee, after FeeFilterRounder's randomized
+        # ~10% bucketing, so only its range is deterministic.
+        for node in range(2):
+            assert Decimal("0.00090000") <= peer_info[node][0]['minfeefilter'] <= Decimal("0.00110000")
         # check the `servicesnames` field
         for info in peer_info:
             assert_net_servicesnames(int(info[0]["services"], 0x10), info[0]["servicesnames"])
@@ -267,7 +270,9 @@ class NetTest(BitcoinTestFramework):
         assert_greater_than(10000, len(node_addresses))
         for a in node_addresses:
             assert_greater_than(a["time"], 1527811200)  # 1st June 2018
-            assert_equal(a["services"], P2P_SERVICES)
+            # FirstIslamicCoin: addpeeraddress assigns NODE_NETWORK | NODE_WITNESS, while the
+            # framework's own P2P_SERVICES is NODE_NETWORK only (see test_framework/p2p.py)
+            assert_equal(a["services"], test_framework.messages.NODE_NETWORK | test_framework.messages.NODE_WITNESS)
             assert a["address"] in imported_addrs
             assert_equal(a["port"], 15714)
             assert_equal(a["network"], "ipv4")
@@ -278,7 +283,8 @@ class NetTest(BitcoinTestFramework):
         assert_equal(res[0]["address"], ipv6_addr)
         assert_equal(res[0]["network"], "ipv6")
         assert_equal(res[0]["port"], 15714)
-        assert_equal(res[0]["services"], P2P_SERVICES)
+        # FirstIslamicCoin: see the IPv4 check above
+        assert_equal(res[0]["services"], test_framework.messages.NODE_NETWORK | test_framework.messages.NODE_WITNESS)
 
         # Test for the absence of onion, I2P and CJDNS addresses.
         for network in ["onion", "i2p", "cjdns"]:
