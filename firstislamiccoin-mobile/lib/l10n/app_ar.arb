@@ -1,0 +1,34 @@
+{
+  "@@locale": "ar",
+  "appTitle": "محفظة FirstIslamicCoin",
+
+  "navSend": "إرسال",
+  "navReceive": "استلام",
+  "navHistory": "السجل",
+  "navStaking": "الستاكينج",
+  "navMultisig": "التوقيع المتعدد",
+  "navWatch": "المراقبة",
+  "navReferrals": "الإحالات",
+  "navPriceAlerts": "تنبيهات السعر",
+  "navOfflineSend": "إرسال دون اتصال",
+  "navSignOffline": "توقيع دون اتصال",
+  "navSettings": "الإعدادات",
+
+  "settingsSectionNetwork": "الشبكة",
+  "settingsNetworkMainnet": "الشبكة الرئيسية",
+  "settingsNetworkTestnet": "الشبكة التجريبية",
+  "settingsSectionTheme": "المظهر",
+  "settingsThemeSystem": "النظام",
+  "settingsThemeDark": "داكن",
+  "settingsThemeLight": "فاتح",
+  "settingsWipeWallet": "مسح المحفظة",
+
+  "onboardingCreateWallet": "إنشاء محفظة جديدة",
+  "onboardingRestoreWallet": "استعادة من عبارة الاسترداد",
+  "onboardingConfirmedBackup": "لقد قمت بتدوين عبارة الاسترداد الخاصة بي",
+  "onboardingContinue": "متابعة",
+
+  "commonCancel": "إلغاء",
+  "commonCopy": "نسخ",
+  "commonShare": "مشاركة"
+}

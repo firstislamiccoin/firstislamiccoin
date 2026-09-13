@@ -1,0 +1,35 @@
+{
+  "@@locale": "en",
+  "appTitle": "FirstIslamicCoin Wallet",
+  "@appTitle": {"description": "Shown in the OS task switcher / window title, not on any in-app screen."},
+
+  "navSend": "Send",
+  "navReceive": "Receive",
+  "navHistory": "History",
+  "navStaking": "Staking",
+  "navMultisig": "Multisig",
+  "navWatch": "Watch",
+  "navReferrals": "Referrals",
+  "navPriceAlerts": "Price Alerts",
+  "navOfflineSend": "Offline Send",
+  "navSignOffline": "Sign Offline",
+  "navSettings": "Settings",
+
+  "settingsSectionNetwork": "Network",
+  "settingsNetworkMainnet": "Mainnet",
+  "settingsNetworkTestnet": "Testnet",
+  "settingsSectionTheme": "Theme",
+  "settingsThemeSystem": "System",
+  "settingsThemeDark": "Dark",
+  "settingsThemeLight": "Light",
+  "settingsWipeWallet": "Wipe wallet",
+
+  "onboardingCreateWallet": "Create a new wallet",
+  "onboardingRestoreWallet": "Restore from recovery phrase",
+  "onboardingConfirmedBackup": "I have written down my recovery phrase",
+  "onboardingContinue": "Continue",
+
+  "commonCancel": "Cancel",
+  "commonCopy": "Copy",
+  "commonShare": "Share"
+}

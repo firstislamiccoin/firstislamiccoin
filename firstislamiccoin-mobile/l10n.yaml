@@ -1,0 +1,12 @@
+# Flutter's built-in `flutter gen-l10n` codegen (triggered by pubspec.yaml's
+# `flutter: generate: true`), producing lib/l10n/generated/app_localizations*.dart
+# from the ARB files in lib/l10n/. See docs/localization.md for what's
+# actually wired up to these strings today versus still hardcoded English,
+# and why only Arabic has a human-reviewable translation so far.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+output-dir: lib/l10n/generated
+synthetic-package: false
+nullable-getter: false

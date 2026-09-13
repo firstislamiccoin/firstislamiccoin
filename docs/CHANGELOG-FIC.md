@@ -822,6 +822,145 @@ Full commands and output in `firstislamiccoin-explorer/README.md`'s "Verificatio
 A server and `explorer.firstislamiccoin.com`, same access gap as Phase 9's Cloudflare/DNS items —
 tracked in the `TODO-HUMAN` table below.
 
+## Phase 5 — Mobile wallet
+
+Forked from `codexacoin/cac_wallet/` (Flutter, Android + iOS) into `firstislamiccoin-mobile/`
+per `docs/repo-map.md`. The crypto layer (BIP39/BIP32 key derivation, Base58Check/bech32 address
+encoding, legacy transaction building/signing, N-of-M multisig, air-gapped offline signing,
+message sign/verify) is fully parameterized by `NetworkConfig` and needed no logic changes at
+all — every fix in this phase is either a chain-parameter correction, a scope decision (drop or
+keep a CAC feature), or new work (localization, iOS permission fix) this phase added.
+
+### Chain parameters corrected
+
+`lib/config/network_config.dart` now carries FIC's real values from `firstislamiccoin-core/src/kernel/chainparams.cpp`,
+not CAC's: mainnet P2PKH `36`/P2SH `28`/WIF `164`, bech32 HRP `fic`; testnet P2PKH `111`/P2SH
+`196`/WIF `239`, bech32 HRP `tfic`. BIP44 coin type is `9770` on **both** networks — unlike CAC
+(and unlike SLIP-44 convention generally), `docs/CHANGELOG-FIC.md`'s own earlier chainparams work
+established FIC uses 9770 uniformly rather than the standard testnet index `1`. The message-signing
+magic string changed to match `firstislamiccoin-core/src/util/message.cpp` exactly:
+`"FirstIslamicCoin Signed Message:\n"`.
+
+### Decision 3 removed the wrapped-token/DEX surface entirely
+
+CAC's wallet embedded a "Buy / Sell CAC (PancakeSwap)" external link, a full WalletConnect-based
+in-app swap screen (`wallet_connect_swap_screen.dart` + `services/pancake_swap.dart`, BNB Chain
+Router ABI encoding), and a live FIC/USD-equivalent price feed sourced from that same PancakeSwap
+pool plus a Stellar DEX order book (`services/price_service.dart`). All of it existed only because
+CAC issues wrapped BEP-20/Stellar tokens (`bnb-issuer/`, `stellar-issuer/`) — components this
+project already decided to drop (`Decision 3` above, `docs/repo-map.md`'s "Components with no FIC
+target"). FIC has no token on any other chain for a swap screen to point at, so all three files
+were deleted rather than rebranded, along with `reown_appkit`/`web3dart` from `pubspec.yaml`.
+`lib/widgets/fiat_placeholder.dart` now shows an honest "unavailable" message instead of fetching
+a real (if thin) number — there is nothing to fetch it from.
+
+### P2CS gap handled the same honest way as the explorer/website
+
+TODO-HUMAN item 2 (P2CS/cold-staking doesn't exist in `firstislamiccoin-core`) means the staking
+screen can only expose the custodial pool flow CAC also has — `lib/screens/staking_screen.dart`
+and `GatewayApi` carry that over unchanged. CAC's own wallet never built the P2CS delegate/revoke
+UI either (its gateway client methods exist but nothing calls them — see CAC's own
+`docs/store-compliance.md`), so there was nothing FIC-specific to strip here; `docs/mobile-api.md`
+§5 documents the gap explicitly instead of silently dropping CAC's delegate/revoke endpoint specs.
+
+### Gateway architecture kept, not replaced with a raw Electrum client
+
+The master prompt's Phase 5 spec describes an Electrum-protocol client. CAC's actual wallet talks
+REST to a custodial gateway service instead (`docs/mobile-api.md`), and neither backend exists for
+FIC yet (ElectrumX is Phase 4, the gateway is Phase 6 — see `docs/repo-map.md`). Building a new
+Electrum client against a Phase 4 service that also doesn't exist would trade one unbuilt backend
+for a different, more expensive one to build, for no benefit visible from the wallet side (both are
+equally "not deployed" today). Kept CAC's gateway-client architecture, documented as a deviation
+here rather than silently diverging from the prompt.
+
+### Reward-model correction in the gateway contract
+
+`docs/mobile-api.md` §5 (staking status) is CAC's contract with one substantive fix: CAC's
+`effective_monthly_rate_bp` assumed a coin-age reward rate (`nStakeRewardAnnualBP`); FIC's reward
+is a fixed 10 FIC + fees per block with no such rate (Phase 1). The field name is kept for wire-shape
+stability but the doc now says plainly that nothing computes a real value for it yet.
+
+### Localization — real infrastructure, partial coverage
+
+`flutter gen-l10n` wired up for real (`l10n.yaml`, `pubspec.yaml`'s `generate: true`,
+`lib/main.dart`'s `localizationsDelegates`/`supportedLocales`), with English and Arabic ARB files
+and a representative sample of screens (home navigation, settings, onboarding) actually reading
+through `AppLocalizations`. The other ~90% of screens' strings are still English literals, and
+Urdu/Bahasa Indonesia/Malay/Turkish have no ARB file at all yet — see `docs/localization.md` for
+exactly what's covered and why only Arabic got a (unreviewed) translation: every string needed so
+far is generic wallet vocabulary with no religious terminology to get wrong, unlike a future pass
+that touches anything Shariah-related.
+
+### A real (non-rebrand) fix: iOS `Info.plist` usage descriptions
+
+CAC's `Info.plist` has no `NSCameraUsageDescription` or `NSFaceIDUsageDescription` — iOS
+terminates an app on first use of either API without its usage-description key, rather than
+failing gracefully. `mobile_scanner` (QR scanning) and `local_auth` (Face ID app lock) both need
+one. Added both, since a fresh FIC wallet build would otherwise crash on first QR scan or app
+unlock — a real bug inherited from the source, not something a rebrand pass would normally touch.
+
+### Android minSdk lowered from 23 to 21
+
+CAC's `minSdkVersion 23` existed only for `reown_appkit`'s `coinbase_wallet_sdk` dependency, now
+removed along with the rest of the WalletConnect swap screen. `mobile_scanner` and
+`firebase_messaging` both need `>=21`; nothing else in this dependency set needs 23.
+
+### Verification
+
+**`flutter analyze`/`flutter test` were not run — honestly, not just "not yet".** No Flutter/Dart
+SDK exists on this Windows development host, and getting one proved genuinely blocked in this
+environment: `docker pull` of any image (tried `ghcr.io/cirruslabs/flutter:stable`, then a plain
+`hello-world` to isolate the cause) hangs indefinitely with no error — Docker Hub/GHCR registry
+access appears unreachable from here, unlike the `apt`/`pip` mirrors the Phase 8 explorer work
+relied on successfully. A direct download of the official Flutter SDK tarball from
+`storage.googleapis.com` (confirmed reachable) worked but at roughly 120-200 KB/s against a
+1.46 GB archive — 3+ hours, impractical to block this phase on. That download was left running
+unattended in the background in case it finishes later, but this phase's correctness claims do
+not depend on it finishing.
+
+What was done instead, to compensate honestly rather than skip verification entirely:
+
+- A crude but real static check across every `.dart` file in `lib/` and `test/`: brace-balance
+  count and a script confirming every relative `import '../...'` resolves to a real file (the
+  three `l10n/generated/app_localizations.dart` imports are the sole, expected exceptions —
+  `flutter gen-l10n` codegen output, not yet generated).
+- Careful manual re-reading of every edited file's full content, not just the diff, after each
+  batch of edits.
+- `test/crypto/address_test.dart` and `test/crypto/xpub_test.dart`'s testnet vectors are not
+  invented: they were captured live from `firstislamiccoin-cli -testnet
+  getnewaddress`/`getaddressinfo`/`createmultisig`/`decodescript` against the running Phase 2
+  testnet (`fic-testnet-node0-1`) — a real value even without a Dart compiler to run the test
+  against yet, and the same live-network verification standard the explorer (Phase 8) was held
+  to. Mainnet address vectors are self-generated (encode/decode round-trip only) since mainnet's
+  genesis premine is still the placeholder that refuses the node to start (`docs/genesis.md`) —
+  no live mainnet node exists to capture a cross-checked sample from yet.
+- CAC's own golden vectors that depended on a second, independent implementation (a signature
+  captured from `web-wallet/message.js`, an xpub captured from `web-wallet/crypto.js`) were
+  removed rather than reused, since FIC has no web wallet yet (Phase 7) and both CAC vectors
+  depend on values (the message magic string, the BIP44 coin type) that changed for FIC anyway —
+  see `test/crypto/message_test.dart` and `test/crypto/xpub_test.dart`'s own comments.
+
+`.github/workflows/ci.yml`'s `analyze-and-test` job runs the real commands on every push — this
+gap is specific to the interactive development environment this phase was built in, not a gap in
+the project's actual CI coverage going forward.
+
+### Not done in this pass
+
+- **`flutter analyze`/`flutter test`/`flutter build` never actually ran** — see "Verification"
+  above for exactly why and what stood in for them.
+- **No Android APK/AAB or iOS build actually produced.** No Android SDK or Xcode toolchain in this
+  development environment either. `.github/workflows/ci.yml`'s `build-android` job will do this
+  on push once a real GitHub Actions runner picks it up.
+- **Not signed, not submitted to either store.** No Play Console/App Store Connect account, no
+  signing keystore/certificate, no published privacy-policy URL — see `store/` and this phase's
+  `TODO-HUMAN` rows below.
+- **Full-app string externalization and Urdu/Bahasa/Malay/Turkish translation** — see
+  `docs/localization.md`.
+
+### `TODO-HUMAN`
+
+Signing keys, store accounts, and translation review — tracked in the `TODO-HUMAN` table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -849,3 +988,7 @@ those are removed.
 | 9 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
 | 10 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |
 | 11 | Explorer: provision a real server and the `explorer.firstislamiccoin.com` DNS record, run `firstislamiccoin-infra/provisioning/explorer/provision.sh` against it once a public repository URL exists | Phase 8 |
+| 12 | Mobile: Google Play Console + App Store Connect accounts, Android release keystore, iOS distribution certificate/provisioning profile, and the four `ANDROID_*`/Apple signing secrets `.github/workflows/ci.yml`'s release jobs need | Phase 5 |
+| 13 | Mobile: publish `firstislamiccoin-mobile/store/privacy-policy.md` at a real, reachable URL (both stores require one) and have it reviewed by a lawyer | Phase 5 |
+| 14 | Mobile: native-speaker review of `lib/l10n/app_ar.arb`'s Arabic strings, plus real Urdu/Bahasa Indonesia/Malay/Turkish translations — see `firstislamiccoin-mobile/docs/localization.md` | Phase 5 |
+| 15 | Mobile: real Android/iOS device or emulator build (`flutter build apk`/`flutter build ios`), plus a physical-device check of the Face ID/fingerprint app-lock flow and camera QR scanning now that `Info.plist` declares them | Phase 5 |

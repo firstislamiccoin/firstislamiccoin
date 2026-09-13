@@ -15,6 +15,8 @@ read as "already configured."
 | `www.firstislamiccoin.com` | CNAME | `firstislamiccoin.com` | Redirect to the apex | Phase 9 |
 | `explorer.firstislamiccoin.com` | CNAME | Explorer hosting target | Block explorer | Phase 8 |
 | `wallet.firstislamiccoin.com` | CNAME | Web wallet hosting target | Browser wallet | Phase 7 |
+| `staking-api.firstislamiccoin.com` | CNAME | Staking-service gateway hosting target | REST backend the mobile + web wallets both call for balance/history/broadcast/staking (see `firstislamiccoin-mobile/docs/mobile-api.md`) | Phase 6 |
+| `staking-api.testnet.firstislamiccoin.com` | CNAME | Staking-service gateway hosting target (testnet) | Same, against testnet | Phase 6 |
 | `electrum1.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 1 IP | Light-client backend | Phase 4 |
 | `electrum2.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 2 IP | Light-client backend | Phase 4 |
 | `seed1.firstislamiccoin.com` | `A`/`AAAA` (a real DNS seed also needs the domain's NS delegated for it, or a seeder like `dnsseed` returning peer IPs over DNS) | Seed node 1 IP | P2P bootstrap | Phase 6 infra / seed nodes |
