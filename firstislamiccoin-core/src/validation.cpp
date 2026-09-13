@@ -3956,7 +3956,21 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
  */
 static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev)
 {
-    const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
+    // FirstIslamicCoin: genesis has no parent to check anything "contextually"
+    // against. Mainnet and testnet set CSVHeight = 0 (active from genesis), so
+    // DeploymentActiveAfter(nullptr, ..., DEPLOYMENT_CSV) below is true at
+    // height 0 and the code unconditionally dereferences pindexPrev right
+    // after -- a crash, not just a failed check. A normal startup bootstraps
+    // genesis directly and never calls this; -reindex walks every block on
+    // disk through AcceptBlock(), genesis included, which is how this was
+    // found. Genesis is exempted from contextual rules everywhere else in this
+    // fork (no PoW check, no coinbase maturity, no coinstake requirement), and
+    // its hash is fixed and checked independently of this function.
+    if (pindexPrev == nullptr) {
+        return true;
+    }
+
+    const int nHeight = pindexPrev->nHeight + 1;
     const Consensus::Params& consensusParams = chainman.GetConsensus();
 
     // Enforce BIP113 (Median Time Past).

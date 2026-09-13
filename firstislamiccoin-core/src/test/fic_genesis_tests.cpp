@@ -130,6 +130,28 @@ BOOST_AUTO_TEST_CASE(segwit_and_taproot_active_from_genesis)
     }
 }
 
+// Mainnet and testnet set CSVHeight = 0 ("fresh chain, active from genesis"),
+// unlike upstream, where a buried deployment is never active at height 0.
+// ContextualCheckBlock() used to assert pindexPrev != nullptr as soon as it
+// judged CSV active, then dereference it two lines later regardless of the
+// assert -- both unconditionally true for the genesis block itself, whose
+// pindexPrev is null by definition. AcceptBlock() calls ContextualCheckBlock()
+// for every block on disk during -reindex, genesis included, which is how
+// this was found: a real -reindex of a running testnet node crashed
+// ("Assertion `pindexPrev != nullptr' failed") a few seconds in. A normal
+// startup never reaches it, and regtest and signet (CSVHeight = 1) never
+// trigger the condition, which is why it went undetected until an operator
+// actually reindexed a mainnet/testnet-shaped chain.
+BOOST_AUTO_TEST_CASE(csv_active_from_genesis_on_main_and_testnet)
+{
+    VersionBitsCache cache;
+    BOOST_CHECK(DeploymentActiveAfter(/*pindexPrev=*/nullptr, CChainParams::Main()->GetConsensus(), Consensus::DEPLOYMENT_CSV, cache));
+    BOOST_CHECK(DeploymentActiveAfter(/*pindexPrev=*/nullptr, CChainParams::TestNet()->GetConsensus(), Consensus::DEPLOYMENT_CSV, cache));
+    // Contrast: regtest and signet don't hit this until height 1.
+    BOOST_CHECK(!DeploymentActiveAfter(/*pindexPrev=*/nullptr, CChainParams::RegTest({})->GetConsensus(), Consensus::DEPLOYMENT_CSV, cache));
+    BOOST_CHECK(!DeploymentActiveAfter(/*pindexPrev=*/nullptr, CChainParams::SigNet({})->GetConsensus(), Consensus::DEPLOYMENT_CSV, cache));
+}
+
 BOOST_AUTO_TEST_CASE(mainnet_genesis_is_placeholder_until_key_ceremony)
 {
     BOOST_CHECK(CChainParams::Main()->GenesisPremineIsPlaceholder());
