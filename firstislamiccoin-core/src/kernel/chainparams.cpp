@@ -575,9 +575,20 @@ public:
         };
 
         m_assumeutxo_data = {
-            // Upstream's regtest assumeutxo snapshot hashes are meaningless for
-            // this genesis block; cleared pending regeneration if
-            // feature_assumeutxo.py is brought back into use.
+            // FirstIslamicCoin: the UTXO set at height 510 of the unit-test chain --
+            // TestChain100Setup's 500 blocks plus mineBlocks(10), as used by
+            // validation_chainstatemanager_tests and validation_chainstate_tests.
+            // Its 1510 coins include the 1000 spendable genesis premine outputs.
+            // Regenerate from CreateUTXOSnapshot()'s txoutset_hash/nchaintx/base_hash
+            // if that fixture's chain changes. Upstream's regtest entries were
+            // meaningless for this genesis block; feature_assumeutxo.py would need
+            // its own entry.
+            {
+                .height = 510,
+                .hash_serialized = AssumeutxoHash{uint256S("0xd5de4dc7bed0e1def21c094cea1a77e62bb3c1256156ec0b5b9f536ae5b5a2a2")},
+                .nChainTx = 511,
+                .blockhash = uint256S("0xa067e50a2d85cd01a0ce0a167f53e8173f088670016366aae9bb33b4f90b3bb9")
+            },
         };
 
         chainTxData = ChainTxData{
