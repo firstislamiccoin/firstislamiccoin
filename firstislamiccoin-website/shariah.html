@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shariah design notes — FirstIslamicCoin (FIC)</title>
+<meta name="description" content="Not a fatwa. Plain-English notes from the engineering team on how FirstIslamicCoin's fixed staking reward was designed with Islamic finance questions in mind, and the open questions still awaiting a real Shariah advisory review." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html" class="current">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="section wrap" style="border-top:none; padding-bottom:0;">
+    <p class="section-eyebrow">Shariah design notes</p>
+    <h2>FirstIslamicCoin and Shariah: design notes</h2>
+
+    <div class="notice">
+      <strong>This document is not a fatwa.</strong> It is not a religious ruling, a legal
+      opinion, or a certification of any kind. It was written by the project's engineers to
+      explain, in plain English, what the software does and why it was designed that way. No
+      scholar, Shariah board or certification body has reviewed or endorsed FirstIslamicCoin. The
+      project intends to seek review from a qualified Shariah advisory board; until that review
+      happens, nothing here should be relied on as a statement that FIC is permissible.
+    </div>
+
+    <div class="prose">
+      <h3>What "Shariah-conscious" means here</h3>
+      <p>
+        It means that questions of Islamic finance shaped the design, and that where the
+        engineering could avoid something widely considered problematic, it tries to. It does
+        not mean those questions have been answered.
+      </p>
+      <p>The most important of these choices is how staking rewards work.</p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>How staking rewards work</h2>
+    <div class="prose">
+      <p>
+        FirstIslamicCoin is a proof-of-stake network. Instead of miners spending electricity,
+        people who hold FIC keep a wallet online and take turns producing the blocks that record
+        transactions. The protocol chooses who produces each block at random, weighted by how
+        many coins each participant has put forward.
+      </p>
+      <p>
+        Whoever produces a block receives <strong>a fixed 10 FIC, plus the fees paid by the
+        transactions in that block</strong>. This is enforced by every node on the network: a
+        block that pays itself any other amount is rejected.
+      </p>
+
+      <h3>A reward for work, not a return on money held</h3>
+      <p>
+        The 10 FIC is paid for doing something: checking transactions, assembling them into a
+        block, signing it and publishing it to the network. A participant who does not run a
+        node and produce blocks receives nothing, however many coins they hold.
+      </p>
+
+      <h3>The amount does not grow with the balance</h3>
+      <p>
+        Every block pays the same 10 FIC. Someone staking 100 FIC and someone staking 100
+        million FIC receive exactly the same reward <em>for each block they produce</em>. There
+        is no percentage, no annual rate and no figure calculated from the size of anyone's
+        holding.
+      </p>
+      <p>
+        This is a deliberate change from the project FIC was built from, which paid stakers
+        roughly 13.7% a year on the value of their coins, multiplied by how long the coins had
+        been held. That model was removed completely because it resembled interest on a
+        deposit.
+      </p>
+      <p>
+        Holding coins for longer earns nothing extra either. Coin age has no effect on the
+        reward, or on the chance of being chosen.
+      </p>
+
+      <h3>A larger stake wins more often</h3>
+      <p>
+        What a larger stake does change is <strong>how often</strong> a participant is chosen. A
+        participant who puts forward twice as many coins can expect, over time, to produce about
+        twice as many blocks.
+      </p>
+      <p>
+        One way to think about this is as proportional participation in a shared undertaking:
+        each participant contributes coins and the work of running a node, and the rewards of the
+        undertaking are shared in proportion to what each put in — in some ways like the profit
+        share in a <em>mudarabah</em>-style joint venture. Whether that comparison actually holds
+        up is exactly the kind of question for a Shariah advisory board, not for engineers; it is
+        offered here only to explain the intent.
+      </p>
+
+      <h3>Rewards are uncertain and not guaranteed</h3>
+      <p>
+        Block production is random. A participant may produce many blocks in a day or none for a
+        long time. The network does not promise anyone any reward, at any rate, over any period.
+        If a participant's node is offline, out of date or connected to the wrong chain, it
+        produces nothing.
+      </p>
+      <p>
+        FIC's value in other currencies is not fixed either, and can fall as well as rise.
+        Nothing about the protocol guarantees the worth of a reward.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Other design choices</h2>
+    <div class="prose">
+      <ul>
+        <li><strong>No developer fund or tax.</strong> No part of any reward goes to the developers or anyone else. The project this was built from had an optional donation to a developer fund; FIC removed it from the code.</li>
+        <li><strong>No hidden supply.</strong> The premine is recorded openly in the first block, and new coins come into existence only as the fixed per-block reward. The total at any height can be checked by anyone — see <a href="/tokenomics.html">Tokenomics</a>.</li>
+        <li><strong>No wrapped tokens or exchange listings at launch.</strong> The project this was built from issued wrapped versions of its coin on other blockchains and listed them on decentralised exchanges. FIC does not carry that over; any such step would be a separate, deliberate decision.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Open questions for review</h2>
+    <div class="prose">
+      <p>These have not been resolved and are not claimed to be. They are listed so an advisory board can see them plainly.</p>
+      <ol>
+        <li><strong>The premine.</strong> 14 billion FIC exist from the first block. Who controls them, how they are used, and how that is governed are not yet decided.</li>
+        <li><strong>Whether the staking reward is permissible</strong>, given the reasoning above.</li>
+        <li><strong>Custodial staking.</strong> A planned optional service would stake on users' behalf and pool rewards. Its terms would need their own review.</li>
+        <li><strong>Speculation and uncertainty</strong> (<em>gharar</em> and <em>maysir</em>) in holding and trading a cryptocurrency whose price can change sharply.</li>
+        <li><strong>Transaction fees</strong>, and whether their treatment raises any concern.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Status</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <tbody>
+          <tr><td>Shariah advisory board appointed</td><td><strong>No</strong></td></tr>
+          <tr><td>Review of this document</td><td>Not yet requested</td></tr>
+          <tr><td>Fatwa or certification</td><td>None</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="specs-note">
+      This page will be updated only with the outcome of a real review, and will never name a
+      scholar or board that has not agreed to be named.
+    </p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>

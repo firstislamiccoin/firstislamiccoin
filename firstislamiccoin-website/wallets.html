@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wallets — FirstIslamicCoin (FIC)</title>
+<meta name="description" content="What exists today for running FirstIslamicCoin, and what's still in development: the full node builds now, mobile, web and packaged desktop wallets are on the roadmap." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html" class="current">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="section wrap" style="border-top:none; padding-bottom:0;">
+    <p class="section-eyebrow">Wallets</p>
+    <h2>What exists today, honestly</h2>
+    <div class="prose">
+      <p>
+        No packaged, downloadable wallet has been released yet — this page will start linking to
+        real installers and app-store listings the moment they exist, and not before.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <div class="cards-grid">
+      <div class="card">
+        <span class="card-status status-building">Source builds now</span>
+        <div class="card-icon">🖥️</div>
+        <h3>Full node (<code>firstislamiccoind</code>)</h3>
+        <p>The reference implementation, including a graphical (Qt) wallet, builds from source today on Linux, macOS and Windows.</p>
+        <p class="card-note">No signed installers or GitHub release binaries yet — build it yourself from the public source once the repository is published (see the roadmap).</p>
+      </div>
+      <div class="card">
+        <span class="card-status status-planned">In development</span>
+        <div class="card-icon">🌐</div>
+        <h3>Web wallet</h3>
+        <p>A browser-based wallet is planned, forked from and rebuilt against the same web-wallet approach used by the project FIC was built from.</p>
+        <p class="card-note">Not deployed.</p>
+      </div>
+      <div class="card">
+        <span class="card-status status-planned">In development</span>
+        <div class="card-icon">📱</div>
+        <h3>Mobile (Android / iOS)</h3>
+        <p>A single Flutter codebase is planned for both platforms.</p>
+        <p class="card-note">Not built.</p>
+      </div>
+      <div class="card">
+        <span class="card-status status-planned">In development</span>
+        <div class="card-icon">📦</div>
+        <h3>Packaged desktop installers</h3>
+        <p>Signed <code>.dmg</code>, <code>.exe</code>, and Linux packages, built and tested through CI.</p>
+        <p class="card-note">Not yet published.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Verifying a download, once releases exist</h2>
+    <div class="prose">
+      <p>
+        When binaries are published, they'll ship with SHA256 checksums and a detached GPG
+        signature over those checksums — the same scheme Bitcoin Core itself uses — so anyone can
+        verify a downloaded file is exactly what the project published, independent of whether
+        the OS itself shows an "unidentified developer" warning (which depends on paid
+        code-signing, a separate thing entirely). This page will publish the real signing key
+        fingerprint here once one exists — not before.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Staking — FirstIslamicCoin (FIC)</title>
+<meta name="description" content="How staking works on FirstIslamicCoin today: run a full node with a funded wallet on testnet. Delegated (non-custodial) staking and a custodial pool are both still in development." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html" class="current">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="section wrap" style="border-top:none; padding-bottom:0;">
+    <p class="section-eyebrow">Staking</p>
+    <h2>How staking works</h2>
+    <div class="prose">
+      <p>
+        Any FIC held in a spendable, mature output can stake. There's no minimum balance, no
+        lock-up commitment, and no separate "staking" transaction — a wallet with
+        <code>-staking=1</code> set simply becomes eligible to produce the next block whenever
+        the network's random selection favors one of its outputs, weighted by how much that
+        output holds.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Running a node today (testnet)</h2>
+    <div class="prose">
+      <p>
+        The way to stake right now is to run the full node yourself, on the public testnet, with
+        a wallet that holds tFIC:
+      </p>
+      <ol>
+        <li>Build or download <code>firstislamiccoind</code> (see <a href="/wallets.html">Wallets</a> for build/download status).</li>
+        <li>Start it with <code>-testnet -staking=1</code>.</li>
+        <li>Create or load a wallet, and get some tFIC — testnet coins have no value and exist purely for testing.</li>
+        <li>Wait for your coins to mature (about 53 minutes on testnet), then leave the node running.</li>
+      </ol>
+      <p>
+        <code>getstakinginfo</code> reports whether your wallet is actively staking and its
+        current weight; the reward for any block you produce is always the fixed
+        <a href="/tokenomics.html">10 FIC + fees</a> — never more, and the network rejects a
+        block that claims otherwise.
+      </p>
+    </div>
+    <div class="notice">
+      <strong>Testnet only.</strong> Nothing described on this page has value. Mainnet staking
+      opens after the genesis key ceremony described on the <a href="/roadmap.html">roadmap</a>.
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Two staking modes still in development</h2>
+    <div class="cards-grid">
+      <div class="card">
+        <span class="card-status status-planned">Not built yet</span>
+        <h3>Delegated (non-custodial) staking</h3>
+        <p>
+          A cold wallet delegates the right to stake — but never to spend — its coins to a
+          separate signing key, so a balance can stay in cold storage while still producing
+          blocks. This depends on a consensus feature (commonly called cold staking or P2CS)
+          that does not exist in this project's codebase yet. It's a real, open engineering
+          question, not a rebrand — see the roadmap.
+        </p>
+      </div>
+      <div class="card">
+        <span class="card-status status-planned">Not built yet</span>
+        <h3>Custodial staking pool</h3>
+        <p>
+          A hosted service that stakes on a user's behalf and distributes rewards, for people who
+          don't want to run a node themselves. Not yet built for FIC. Its terms, and whether
+          pooled staking of this kind raises its own Shariah questions, are both listed as open
+          items on the <a href="/shariah.html">Shariah design notes</a> page.
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>

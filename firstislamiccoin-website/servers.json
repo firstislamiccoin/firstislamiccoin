@@ -1,0 +1,36 @@
+{
+  "_comment": "Public server directory for FirstIslamicCoin wallets and light clients. Every entry below is planned infrastructure, not yet live -- see docs/dns.md and the roadmap. Update the \"status\" field to \"live\" only once a server actually answers, and never list a host that isn't running.",
+  "updated": "2026-09-13",
+  "network": "testnet",
+  "electrum": [
+    {
+      "host": "electrum1.firstislamiccoin.com",
+      "tcp_port": 50001,
+      "ssl_port": 50002,
+      "status": "planned",
+      "note": "ElectrumX backend is Phase 4 of the roadmap; not deployed yet."
+    },
+    {
+      "host": "electrum2.firstislamiccoin.com",
+      "tcp_port": 50001,
+      "ssl_port": 50002,
+      "status": "planned",
+      "note": "ElectrumX backend is Phase 4 of the roadmap; not deployed yet."
+    }
+  ],
+  "dns_seeds": [
+    { "host": "seed1.firstislamiccoin.com", "status": "planned" },
+    { "host": "seed2.firstislamiccoin.com", "status": "planned" },
+    { "host": "seed3.firstislamiccoin.com", "status": "planned" }
+  ],
+  "explorer": {
+    "url": "https://explorer.firstislamiccoin.com",
+    "status": "planned",
+    "note": "Block explorer is Phase 8 of the roadmap; not deployed yet."
+  },
+  "web_wallet": {
+    "url": "https://wallet.firstislamiccoin.com",
+    "status": "planned",
+    "note": "Web wallet is Phase 7 of the roadmap; not deployed yet."
+  }
+}

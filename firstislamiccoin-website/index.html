@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FirstIslamicCoin (FIC) — a Proof-of-Stake network with a fixed, transparent block reward</title>
+<meta name="description" content="FirstIslamicCoin (FIC) is a Proof-of-Stake Layer-1 network where every block pays a fixed reward instead of a rate of return on holdings. Currently on public testnet — every parameter is documented in the open source." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/" class="current">Home</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+    <span class="badge">Public testnet live</span>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero wrap">
+    <img src="/assets/fic-coin-full.svg" alt="FirstIslamicCoin" class="hero-logo" />
+    <p class="hero-eyebrow">Proof-of-Stake &middot; Open source &middot; Fixed block reward</p>
+    <h1>A reward for the work<br class="br-mobile" /> of staking — not a return on holding.</h1>
+    <p class="hero-tag">FirstIslamicCoin pays every block the same fixed amount, however large or
+      small the stake that produced it. No coin-age multiplier, no percentage yield calculated
+      from a balance. The project is on public testnet today, building in the open toward mainnet.</p>
+    <div class="hero-actions">
+      <a class="btn btn-lg" href="/shariah.html">Read the Shariah design notes</a>
+      <a class="btn btn-lg btn-outline" href="/tokenomics.html">See the tokenomics</a>
+    </div>
+  </section>
+
+  <section class="trust-strip wrap" aria-label="Project credibility signals">
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg>
+      <div><strong>100% open source</strong><span>Node, chain parameters, and every test are public under the MIT license — nothing here is asserted without code to check it against.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+      <div><strong>Reward enforced exactly</strong><span>A block that mints a single fil more or less than the fixed reward is rejected by every node — not a policy, a consensus rule.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <div><strong>No developer fund</strong><span>No allocation, tax, or donation to the project team is built into any block, anywhere in the code.</span></div>
+    </div>
+    <div class="trust-item">
+      <svg class="trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19h16M4 15l4-4 4 4 6-6"/></svg>
+      <div><strong>Honest about its stage</strong><span>Testnet, not mainnet. No exchange listing, no price, no wallets shipped yet. This page says so plainly, below.</span></div>
+    </div>
+  </section>
+
+  <section id="how-it-works" class="section wrap">
+    <p class="section-eyebrow">How it works</p>
+    <h2>Proof of Stake, with one deliberate difference</h2>
+    <div class="prose">
+      <p>
+        Instead of miners burning electricity, people who hold FIC run a node and take turns
+        producing the blocks that record transactions — the network picks who produces each
+        block at random, weighted by how many coins they've put forward. That part is ordinary
+        Proof-of-Stake.
+      </p>
+      <p>
+        What's different is the reward. Whoever produces a block receives <strong>a fixed
+        10 FIC, plus that block's transaction fees</strong> — never more, never less, and never
+        scaled by the size or age of the stake that won it. A larger stake wins blocks more
+        <em>often</em>, in proportion to its size; it does not earn more <em>per block</em>. That
+        distinction is the whole reason the reward model looks the way it does — read why on the
+        <a href="/shariah.html">Shariah design notes</a> page.
+      </p>
+    </div>
+    <div class="specs-grid">
+      <div class="spec"><span class="spec-label">Reward per block</span><span class="spec-value">10 FIC + fees, fixed</span></div>
+      <div class="spec"><span class="spec-label">Depends on stake size or age</span><span class="spec-value">No</span></div>
+      <div class="spec"><span class="spec-label">Target block spacing</span><span class="spec-value">64 seconds</span></div>
+      <div class="spec"><span class="spec-label">Genesis premine</span><span class="spec-value">14,000,000,000 FIC</span></div>
+      <div class="spec"><span class="spec-label">Annual inflation (premine share)</span><span class="spec-value">≈ 0.035%, falling every year</span></div>
+      <div class="spec"><span class="spec-label">Developer fund / tax</span><span class="spec-value">None</span></div>
+    </div>
+    <p class="specs-note">
+      Full detail, including how the premine is structured and why, on the
+      <a href="/tokenomics.html">tokenomics page</a> — sourced directly from the same
+      <code>docs/tokenomics.md</code> the engineering team keeps in the repository.
+    </p>
+  </section>
+
+  <section id="honesty" class="section wrap">
+    <p class="section-eyebrow">Where things actually stand</p>
+    <h2>What we won't quietly leave out</h2>
+    <div class="prose">
+      <p>A lot of crypto projects blur the line between "built" and "planned." This one draws it plainly:</p>
+    </div>
+    <div class="honesty-grid">
+      <div class="honesty-item">
+        <h3>Testnet, not mainnet</h3>
+        <p>FirstIslamicCoin is currently a public testnet. Mainnet launches only after a genesis key ceremony and a security review — see the <a href="/roadmap.html">roadmap</a>. There is no live mainnet, no price, and no exchange listing.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>No wallets shipped yet</h3>
+        <p>The desktop node builds; mobile, web, and packaged desktop wallets are still in development. The <a href="/wallets.html">wallets page</a> says exactly what exists today and what doesn't.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>No Shariah endorsement</h3>
+        <p>"Shariah-conscious" describes design intent, not a certification. No scholar or advisory board has reviewed or endorsed this project. The <a href="/shariah.html">design notes</a> say this directly and will keep saying it until that changes.</p>
+      </div>
+      <div class="honesty-item">
+        <h3>This is not investment advice</h3>
+        <p>Nothing on this site is an offer, solicitation, or recommendation to buy, hold, or trade any asset. Evaluate the code and the risks yourself — see the <a href="/legal/risk-disclosure.html">risk disclosure</a>.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>

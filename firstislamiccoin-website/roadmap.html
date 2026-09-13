@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roadmap — FirstIslamicCoin (FIC)</title>
+<meta name="description" content="Where FirstIslamicCoin actually stands: what's built, what's in progress, and what's still ahead, phase by phase." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html" class="current">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="section wrap" style="border-top:none; padding-bottom:0;">
+    <p class="section-eyebrow">Roadmap</p>
+    <h2>Where things actually stand</h2>
+    <div class="prose">
+      <p>
+        No dates below — this project doesn't publish launch-date promises it can't guarantee.
+        What it does publish is status, kept current as work lands.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <div class="roadmap-list">
+
+      <div class="roadmap-item done">
+        <h3>Phase 0 — Discovery and brand kit <span class="roadmap-tag tag-done">Done</span></h3>
+        <p>Audited the codebase this project forks from, and built the FirstIslamicCoin brand kit: logo, palette, typography, icon sets.</p>
+      </div>
+
+      <div class="roadmap-item done">
+        <h3>Phase 1 — Core node rebrand and chain parameters <span class="roadmap-tag tag-done">Done</span></h3>
+        <p>Rebranded the node, set FIC's own chain parameters, converted the premine into a true spendable genesis output, replaced the coin-age reward with the fixed 10 FIC model, and removed the developer donation. Verified with a full unit and functional test pass.</p>
+      </div>
+
+      <div class="roadmap-item active">
+        <h3>Phase 2 — Testnet validation <span class="roadmap-tag tag-active">In progress</span></h3>
+        <p>A multi-node public testnet is live and staking now: reward and block-spacing correctness are being checked block by block, alongside stress testing (high transaction volume, reindexing, reorg handling) and the functional test suite.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 3 — Desktop wallets, CI and release pipeline <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>Signed, CI-built installers for macOS, Windows and Linux, with GPG-signed checksums for every release.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 4 — ElectrumX light-wallet backend <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>The indexing server that lets mobile and web wallets sync quickly without running a full node themselves.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 5 — Mobile wallets (Android + iOS) <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>A single Flutter codebase for both platforms.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 6 — Staking service <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>A custodial staking pool, plus non-custodial delegated ("cold") staking — the latter needs a consensus feature this project doesn't have yet; see <a href="/staking.html">Staking</a>.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 7 — Web wallet <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>A browser-based wallet needing no install.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 8 — Block explorer <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>Public search over blocks, transactions and addresses, plus a supply chart.</p>
+      </div>
+
+      <div class="roadmap-item active">
+        <h3>Phase 9 — Website <span class="roadmap-tag tag-active">In progress</span></h3>
+        <p>This site. Core pages are live; Arabic and Urdu localization, a downloads page wired to real releases, and a production deploy are still ahead.</p>
+      </div>
+
+      <div class="roadmap-item">
+        <h3>Phase 10 — Mainnet launch <span class="roadmap-tag tag-planned">Planned</span></h3>
+        <p>Frozen parameters, a security review pass, the genesis key ceremony, and a public launch runbook — only after every earlier phase, including a long testnet track record, is solid.</p>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>

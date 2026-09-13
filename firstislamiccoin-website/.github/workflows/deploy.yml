@@ -1,0 +1,49 @@
+name: Deploy to Cloudflare Pages
+
+# Publishes firstislamiccoin-website/ (plain static HTML/CSS, no build step)
+# to Cloudflare Pages on every push to main that touches this directory.
+#
+# Requires two repository secrets that do not exist yet -- see
+# docs/dns.md and TODO-HUMAN in docs/CHANGELOG-FIC.md:
+#   CLOUDFLARE_API_TOKEN   a token scoped to Cloudflare Pages:Edit
+#   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account that owns the
+#                          firstislamiccoin.com zone
+# Until both are set, this workflow will fail at the deploy step, which is
+# expected: it is committed as ready-to-run infrastructure, not proof a
+# deployment has happened.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firstislamiccoin-website/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify every internal link resolves
+        working-directory: firstislamiccoin-website
+        run: |
+          set -euo pipefail
+          missing=0
+          for f in *.html legal/*.html; do
+            grep -oE '(href|src)="/[^"#]+"' "$f" | sed -E 's/^(href|src)="//; s/"$//' | while read -r p; do
+              [ -f ".${p}" ] || { echo "MISSING: $p (referenced from $f)"; exit 1; }
+            done || missing=1
+          done
+          exit $missing
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy firstislamiccoin-website --project-name=firstislamiccoin-website --branch=main

@@ -658,6 +658,86 @@ still signed over Bitcoin's sighash), `validation_block_tests`
 (`mempool_locks_reorg`, which needs a reorg deeper than this fork allows and a
 custom block builder to match).
 
+---
+
+## Phase 9 — Website
+
+*2026-09-13, started while Phase 2's testnet run continues in the background*
+
+### Deviation from the prompt: static HTML, not Astro/Next.js
+
+The prompt specifies "Astro or Next.js static export." `docs/repo-map.md` already recorded, from
+the Phase 0 audit, that CAC's own website is plain static HTML/CSS with no build step or
+framework — the same call already made for the web wallet ("no build step — not React/Vite") and
+the explorer ("Flask + static frontend, not `btc-rpc-explorer`"). `firstislamiccoin-website/`
+follows that precedent: hand-written HTML and one shared `style.css`, no framework, no build step.
+
+### What was built
+
+Nine pages, all real content, none of it a stub:
+
+| Page | Content |
+|---|---|
+| `index.html` | Hero, how the fixed reward differs from a typical PoS yield, and an honesty section stating plainly that this is testnet, not mainnet |
+| `tokenomics.html` | Every table from `docs/tokenomics.md`, carried over faithfully (premine, fixed reward, halving, emission, PoW window, supply constants) |
+| `shariah.html` | `docs/shariah-compliance.md` in full, including its **not-a-fatwa disclaimer preserved verbatim**, as the prompt requires |
+| `staking.html` | How to stake today (run a node on testnet) versus the two modes still unbuilt (delegated/cold staking, which needs a consensus feature — P2CS — that doesn't exist yet; a custodial pool) |
+| `wallets.html` | What actually exists (the node builds from source) versus what's planned (web, mobile, packaged desktop) — no download links to binaries that don't exist |
+| `roadmap.html` | All 11 phases from the master prompt, marked done / in progress / planned against this project's actual state, no invented dates |
+| `faq.html` | Nine real questions, each answered honestly (no mainnet, no listing, no Shariah certification, no team allocation) |
+| `legal/privacy.html`, `legal/terms.html`, `legal/risk-disclosure.html` | Scoped to what actually exists today (a static website, no accounts, no wallets) rather than copying CAC's policies, which cover services (a custodial gateway, a mobile app) FIC hasn't built |
+| `servers.json` | The planned ElectrumX/seed/explorer/web-wallet hosts from the brand constants table, every entry marked `"status": "planned"` — none of them answer yet |
+
+Brand assets (`fic-icon.svg`, `fic-coin-full.svg`, favicons) copied from
+`firstislamiccoin-brand/`; the stylesheet's color tokens are copied by hand from
+`firstislamiccoin-brand/tokens/theme.css` (light and dark, matching its `prefers-color-scheme`
+behaviour) — kept in sync manually, since there is no build step to import them.
+
+**No external links anywhere on the site.** No GitHub org is confirmed pushed yet (`git remote
+-v` returns nothing for this repository), so linking to `github.com/FirstIslamicCoin/...` would be
+a dead link — the acceptance checklist requires every link to resolve. Every `href` is a relative
+path within the site; a grep-based link check (also wired into
+`.github/workflows/deploy.yml`, below) confirms all of them do.
+
+**No fabricated GPG key, no live-stats widget, no download buttons.** CAC's site fetches
+`/api/stats` and lists signed binaries with a real key fingerprint; FIC has neither an API nor a
+signing key yet, so carrying either over would mean either dead JavaScript or an invented
+fingerprint. Both are simply absent until the real things exist.
+
+### CI and DNS: written, not run
+
+- `firstislamiccoin-website/.github/workflows/deploy.yml` — a GitHub Actions workflow that link-
+  checks the site and deploys it to Cloudflare Pages via `wrangler`. It needs
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets that don't exist in this
+  environment; committed as ready-to-run infrastructure, not as proof anything has deployed.
+- [`docs/dns.md`](dns.md) — every subdomain from the brand constants table (explorer, wallet,
+  electrum1/2, seed1/2/3, the apex and `www`), what it's for, and which phase it depends on. No
+  record has actually been created; registrar/DNS access isn't available here.
+
+### Not done in this pass
+
+- **Arabic and Urdu localization with RTL.** The prompt calls for both. Machine-translating
+  Shariah-adjacent and financial content without review risks misrepresenting it, which matters
+  more here than in most localization work; left for a pass with a reviewer rather than done
+  half-right.
+- **A downloads page pulling live GitHub release assets + checksums.** There are no releases yet
+  (see `wallets.html`); building the pull logic against a repository that doesn't exist yet was
+  skipped rather than pointed at a placeholder.
+- **Lighthouse ≥ 90 verification.** Lighthouse audits a served URL; nothing is deployed yet (no
+  Cloudflare credentials — see above). The pages were built for the fundamentals a Lighthouse run
+  checks (semantic HTML, alt text, a real viewport meta tag, no render-blocking third-party
+  scripts, documented color-contrast ratios in the brand kit), but the actual score is unverified
+  until there's a URL to point Lighthouse at.
+- **OpenGraph images from the brand kit.** `og-image.svg` is copied into `assets/` but not yet
+  wired into `<meta property="og:image">` tags or rasterized to PNG (most crawlers don't render
+  SVG OpenGraph images).
+
+### `TODO-HUMAN`
+
+Domain/registrar access, a Cloudflare account and its two CI secrets, real DNS records, and
+Arabic/Urdu translation review all need a human with access this environment doesn't have —
+tracked in the `TODO-HUMAN` table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -683,3 +763,4 @@ those are removed.
 | 7 | `generate.py` in the brand kit hardcodes `/home/claude/fic-brand` and Linux font paths | — |
 | 8 | Verify ElectrumX full block indexing end-to-end — never done upstream | Phase 4 |
 | 9 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
+| 10 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |

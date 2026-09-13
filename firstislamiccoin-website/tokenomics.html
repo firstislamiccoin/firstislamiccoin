@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tokenomics — FirstIslamicCoin (FIC)</title>
+<meta name="description" content="Every constant that affects how many FIC exist or how they come into existence: the genesis premine, the fixed 10 FIC staking reward, halving, emission, and the parameters behind them." />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/fic-icon.svg" alt="" class="brand-mark" />
+      <span class="brand-word">First<b>Islamic</b>Coin</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/tokenomics.html" class="current">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="section wrap" style="border-top:none; padding-bottom:0;">
+    <p class="section-eyebrow">Tokenomics</p>
+    <h2>Every constant that affects supply</h2>
+    <div class="prose">
+      <p>
+        If a consensus constant that touches supply isn't on this page, that's a bug in this
+        page. The source of truth is the node's own source code
+        (<code>src/kernel/chainparams.cpp</code> and <code>src/consensus/params.h</code>), and a
+        unit test fails automatically if this document and the code ever drift apart.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Supply, in one line</h2>
+    <div class="prose">
+      <p style="font-size:19px; color:var(--ink);">
+        <strong>Supply at height N = 14,000,000,000 + 10 &times; N FIC</strong>, less anything
+        provably burned. Fees move existing coins between people and create none.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>The premine</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <tbody>
+          <tr><td>Total</td><td class="num">14,000,000,000 FIC (1.4 &times; 10<sup>18</sup> fils)</td></tr>
+          <tr><td>Where it lives</td><td>The genesis block's coinbase, as ordinary spendable outputs</td></tr>
+          <tr><td>Shape</td><td>1,000 outputs of 14,000,000 FIC each</td></tr>
+          <tr><td>When it's spendable</td><td>Immediately — genesis outputs are exempt from coinbase maturity</td></tr>
+          <tr><td>Mainnet recipient</td><td>Placeholder, pending the genesis key ceremony</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>
+        There is no other premine output, no founder reward, no developer fund, and no tax on
+        staking rewards. The project this was forked from had an opt-in developer donation; it
+        was removed from the code entirely, not merely disabled.
+      </p>
+      <p>
+        <strong>Why 1,000 outputs rather than one.</strong> A coin must wait for coinbase
+        maturity before it can stake again. Genesis outputs are exempt so the chain can start,
+        but each staked block turns the output it used into a new coinstake output that must then
+        wait out the full maturity period. With a single premine output, the chain would produce
+        one block and then stop — nothing else could stake. With 1,000, a mature genesis output
+        stays available until the first coinstake outputs come of age, after which the chain
+        sustains itself.
+      </p>
+      <p>
+        <strong>Why the mainnet recipient is still a placeholder.</strong> It currently pays a
+        provably unspendable public key — a "nothing up my sleeve" point whose private key nobody
+        knows. A mainnet started from it could neither spend nor stake the premine, so it could
+        never produce a block; the node refuses to start mainnet while this placeholder is in
+        place. The real recipient is set at a genesis key ceremony, and mainnet's genesis block is
+        re-mined at that point. The staking kernel accepts only single-key outputs, so the
+        ceremony also has to decide how much of the premine sits in single-key hot outputs to
+        bootstrap the chain, versus cold storage — a decision for people, not code.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>The staking reward</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <tbody>
+          <tr><td>Per proof-of-stake block</td><td><strong>10 FIC + the fees of that block's transactions</strong></td></tr>
+          <tr><td>Depends on stake amount</td><td>No</td></tr>
+          <tr><td>Depends on stake age</td><td>No</td></tr>
+          <tr><td>Enforced as</td><td>An exact amount — a block minting a single fil more or less is invalid</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>
+        A larger stake wins blocks <em>more often</em>, in proportion to its size. It does not
+        earn more per block. There is no rate of return on a balance anywhere in the protocol,
+        and no maximum stake age. Why that distinction matters is covered on the
+        <a href="/shariah.html">Shariah design notes</a> page.
+      </p>
+    </div>
+  </section>
+
+  <section class="section wrap">
+    <h2>Halving</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <tbody>
+          <tr><td>At launch</td><td><strong>Disabled on every network</strong></td></tr>
+          <tr><td>If enabled at interval <em>k</em></td><td>Reward at height <em>h</em> becomes 10 FIC &gt;&gt; (h / k), reaching zero after 30 halvings</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="specs-note">
+      The code path exists and is tested so it can be switched on later, but doing so changes
+      consensus — it would need a scheduled activation height and a coordinated network upgrade,
+      not a silent flip.
+    </p>
+  </section>
+
+  <section class="section wrap">
+    <h2>Emission</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <tbody>
+          <tr><td>Target block spacing</td><td class="num">64 seconds</td></tr>
+          <tr><td>Blocks per year</td><td class="num">31,536,000 s &divide; 64 s &asymp; 492,750</td></tr>
+          <tr><td>New FIC per year</td><td class="num">492,750 &times; 10 &asymp; 4,927,500 FIC</td></tr>
+          <tr><td>As a share of the premine</td><td class="num">&asymp; 0.035% a year</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="specs-note">
+      Emission is per block, not per unit of time, so the real figure follows the real block
+      count and difficulty retargeting toward 64-second blocks. Because the reward is a fixed
+      number of coins, annual inflation falls every year as a share of total supply.
+    </p>
+  </section>
+
+  <section class="section wrap">
+    <h2>Proof of work</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th></th><th>Mainnet</th><th>Testnet</th><th>Regtest</th></tr></thead>
+        <tbody>
+          <tr><td>Last PoW block</td><td class="num">0</td><td class="num">0</td><td class="num">500 (override for testing)</td></tr>
+          <tr><td>PoW subsidy</td><td class="num">0</td><td class="num">0</td><td class="num">28,000,000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="specs-note">
+      Mainnet and testnet reject proof-of-work from block 1 onward — the entire supply beyond the
+      genesis premine is minted by staking. Regtest keeps a short proof-of-work window purely
+      because the inherited test harness needs to mine blocks on demand in automated tests.
+    </p>
+  </section>
+
+  <section class="section wrap">
+    <h2>Other constants that bear on supply</h2>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Constant</th><th>Mainnet</th><th>Testnet</th><th>Regtest</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>Coinbase/coinstake maturity</td><td class="num">500</td><td class="num">50</td><td class="num">10</td><td>Confirmations before an output can be spent or staked (genesis outputs excepted)</td></tr>
+          <tr><td>Minimum stake age</td><td class="num">&asymp; 8.9 h</td><td class="num">&asymp; 53 min</td><td class="num">10 blocks</td><td>Enforced as confirmation depth, not a timestamp</td></tr>
+          <tr><td>Target spacing</td><td class="num">64 s</td><td class="num">64 s</td><td class="num">1 s</td><td>&mdash;</td></tr>
+          <tr><td>Unit</td><td colspan="3">1 FIC = 100,000,000 fils</td><td>&mdash;</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="specs-note">
+      Minimum transaction fees are paid entirely to the staker who produces the block — they are
+      never burned.
+    </p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-links">
+      <a href="/tokenomics.html">Tokenomics</a>
+      <a href="/shariah.html">Shariah notes</a>
+      <a href="/staking.html">Staking</a>
+      <a href="/wallets.html">Wallets</a>
+      <a href="/roadmap.html">Roadmap</a>
+      <a href="/faq.html">FAQ</a>
+    </div>
+    <div class="footer-links">
+      <a href="/legal/privacy.html">Privacy Policy</a>
+      <a href="/legal/terms.html">Terms &amp; Conditions</a>
+      <a href="/legal/risk-disclosure.html">Risk Disclosure</a>
+    </div>
+    <p>&copy; 2026 FirstIslamicCoin project. Open source under the MIT license. Testnet software — nothing on this site is financial or religious advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>
