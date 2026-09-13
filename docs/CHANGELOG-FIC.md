@@ -377,6 +377,95 @@ a defect, and FIC has no test regressions relative to CAC.
 
 ---
 
+## Phase 2 — Testnet validation
+
+*2026-09-13, in progress*
+
+### Consensus bug found: the weighted kernel target wrapped around
+
+Found in the first minutes of the testnet bootstrap, while investigating a gap
+between blocks.
+
+`CheckStakeKernelHash` compares the kernel hash with `target × coin value`,
+computed in a 256-bit integer. Blackcoin's outputs and difficulty keep that
+product small; FIC's are different. A 14,000,000 FIC genesis output is 2^50.3
+fils, and the easiest PoS target (`posLimitV2`, where every new chain starts)
+is about 2^208, so the product needs 259 bits. `arith_uint256` discards the
+overflow silently, and what is left is an arbitrary function of `nBits`: 97%
+of the hash space at `0x1b00ffff`, 1.3×10⁻⁶ at `0x1b00cde1`. Every genesis
+output has the same value, so at an unlucky `nBits` all of them fail together,
+and a chain whose only mature coins are genesis outputs cannot produce the
+block that would change `nBits`. This applies to mainnet launch exactly as to
+testnet.
+
+**Fixed** by saturating: a product at or above 2^256 means every hash
+qualifies, so the target is capped at 2^256−1. Nothing changes below that
+boundary, and at equilibrium difficulty for a 14-billion-coin supply no single
+output reaches it, so the change only matters during the easy-difficulty
+bootstrap and on very small networks. Regression test:
+`pos_tests/CheckStakeKernelHash_WeightedTargetSaturates`. Verified both ways
+on the same build: with the saturation branch disabled it fails with 0 of 200
+kernels passing at `0x1b00cde1`; with it, all 200 pass.
+
+### Consensus bug found: SegWit and Taproot were never enforced
+
+SegWit and Taproot are version-bits deployments in this tree, and
+`GetBlockScriptFlags` adds `SCRIPT_VERIFY_WITNESS` / `SCRIPT_VERIFY_TAPROOT`
+only while the deployment is active. CAC set both to `NEVER_ACTIVE` on mainnet
+and testnet (signet had no SegWit entry), under a comment claiming SegWit was
+active from genesis through `SegwitHeight`, a field this tree never reads for
+SegWit. On those networks witness programs were not script-checked in blocks,
+so native SegWit (`fic1q…`) and Taproot (`fic1p…`) outputs could be spent
+without a signature by whoever staked the block. At the same time the mempool
+refused properly signed witness spends (`no-witness-yet`) and blocks carrying
+witness data were rejected (`unexpected-witness`), so their owners could not
+spend them. The testnet wallet defaults to legacy addresses, which is why the
+bootstrap never touched the problem; an explicit bech32 address works.
+
+**Fixed**: both deployments `ALWAYS_ACTIVE` on every network, from genesis.
+Activating Taproot as well as SegWit was the project owner's decision
+(2026-09-13). The wallet's "Taproot addresses (bech32m) are not supported yet"
+refusal is removed, and `getdeploymentinfo`, which hides `NEVER_ACTIVE`
+deployments, now lists both. Test:
+`fic_genesis_tests/segwit_and_taproot_active_from_genesis`.
+
+### Consensus bug found: output and input sums overflowed
+
+`MAX_MONEY` is `INT64_MAX` in this tree, so the inherited
+`sum += value; if (!MoneyRange(sum))` pattern is signed overflow — undefined
+behaviour that the optimiser removes. On regtest a transaction spending one
+28,000,000 FIC coinbase into two `INT64_MAX` outputs plus change, wrapping to a
+normal-looking 1 FIC fee, was accepted to the mempool and mined, leaving both
+outputs in the UTXO set: coins from nothing. Found independently by the unit
+and P2P test diagnosis. **Fixed** by checking headroom before each addition in
+`CheckTransaction`, `GetValueOut`, `CheckTxInputs` and the block fee total.
+Tests: `amount_tests/txout_total_overflow` and
+`txout_total_overflow_block_rejected`. Whether `MAX_MONEY` should become a real
+cap is open for the Phase 10 review.
+
+### Relay bug found: fee filter could exceed the fixed fee
+
+Found by the functional-test diagnosis (`wallet_listtransactions` timing out
+on mempool sync). FIC fixes the fee rate at `TX_FEE_PER_KB` (0.001 FIC/kvB), and
+`MaybeSendFeefilter` advertises that to peers after passing it through
+`FeeFilterRounder`, which returns the bucket at or above its input one time in
+three: 0.00107179 FIC/kvB. A peer told that filter never announces a standard
+wallet transaction, which pays exactly 0.001. The effect is random per
+connection and per broadcast interval, so transactions would reach some peers
+and not others. **Fixed**: the rounded filter is capped at the fixed fee, so
+rounding can only lower it. Upstream Bitcoin Core does not have this problem
+because its filter follows the mempool's dynamic minimum; FIC's version
+hardcoded the fixed fee, and does not raise the filter when its mempool is
+full (noted for Phase 10).
+
+The gap that prompted the investigation, 512 s before block 4, is **not**
+explained by this bug: at that block's `nBits` the wrapped threshold was 23% of
+the hash space. It was the block that carried the last two 18 KB tranche
+transactions, but large transactions are not the cause either: tranche 2 put
+four 18 KB transactions into block 61 and one into block 62, each 16 s after
+its predecessor. The gap did not recur in the remaining blocks of that run; the
+rerun logs coinstake activity on every node so any repeat can be explained.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
