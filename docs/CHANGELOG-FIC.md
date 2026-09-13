@@ -595,6 +595,59 @@ on mainnet or testnet would have hit the ContextualCheckBlock crash before
 this fix existed, with no workaround short of a source change. Worth a
 deliberate crash-recovery drill before mainnet (TODO-HUMAN).
 
+### Functional suite: seven diagnosis agents' fixes merged
+
+Seven agents each diagnosed a slice of the ~280-test inherited functional
+suite in parallel, against FIC's real parameters, and independently wrote
+fixes for their own tests plus (unavoidably) the shared test framework. Their
+per-test patches were applied directly (116 files); the framework layer
+(`messages.py`, `blocktools.py`, `test_framework.py`, `util.py`, `wallet.py`,
+`p2p.py`, `netutil.py`, `fic.py`) needed reconciling into one coherent
+version, since several agents had independently solved the same problem
+(scrypt proof of work, `nFlags` only on the P2P wire, block version ≥ 7,
+staking off by default in tests, IPv6 detection) in slightly different ways —
+done by a dedicated merge pass, committed together as `1604ef1`.
+
+Full suite, commit `1604ef1`, compared against the `e7f2b25` baseline (70
+passed / 155 failed / 57 skipped):
+
+| | Passed | Failed | Skipped |
+|---|---|---|---|
+| Baseline (`e7f2b25`) | 70 | 155 | 57 |
+| Now (`1604ef1`) | **157** | 60 | 63 |
+
+**Zero regressions** — nothing that passed at baseline fails now. **88 tests
+fixed.** FIC's own three tests and the un-skipped `feature_taproot.py` (see
+below) pass against the merged framework.
+
+The 60 still failing fall into the categories already identified during
+diagnosis, not individually re-verified here: SegWit/CSV activation-height
+tests that assume a configurable activation point (`feature_segwit`,
+`feature_csv_activation`, `feature_nulldummy`,
+`feature_presegwit_node_upgrade`, `p2p_segwit`) — this fork enforces both as
+fixed, buried-at-genesis deployments, so there is no "before activation" state
+left to construct the same way upstream does; mempool policy differences
+around the missing `prioritisetransaction` RPC and RBF (`mempool_*`,
+`rpc_packages`); P2P/IBD timeouts that scale with target spacing
+(`p2p_ibd_stalling`, `p2p_eviction`, `p2p_headers_sync_with_minchainwork`);
+wallet RPC option-passing that needs a small rewrite for `send`/`sendall`
+(`wallet_send`, `wallet_sendall`, `wallet_resendwallettransactions`); and a
+handful (`wallet_orphanedreward`, `feature_signet`) that need a redesigned
+scenario to fit this fork's shallower reorg limits or signet mining path.
+Getting the whole suite green is further work, as anticipated when Phase 2
+began.
+
+**`feature_taproot.py` found a framework determinism bug.** Un-skipped now
+that Taproot is active, its self-check builds a synthetic version-1 coinbase
+and pins its hash — but `CTransaction()` defaults `nTime` to the current
+second for freshly-constructed objects, and only version-1 transactions
+serialize `nTime` at all, so the hash was different on every run. Fixed by
+pinning `nTime = 0` before hashing, the same way the test already pins
+`nLockTime`. The test's later BIP341 vector-generation scenario has its own
+hardcoded Bitcoin-scale fees throughout and still needs per-vector adaptation
+to this fork's fixed minimum fee — left as further work, not re-skipped, since
+Taproot really is enforced now and the test is worth finishing.
+
 ### Unit suites, final tally for this phase
 
 One process per suite, commit `c1d48ed`: **118 of 121 pass**, no regressions
