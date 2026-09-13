@@ -82,7 +82,10 @@ int64_t GetMaxTransactionTime(CBlock* pblock)
 void RegenerateCommitments(CBlock& block, ChainstateManager& chainman)
 {
     CMutableTransaction tx{*block.vtx.at(0)};
-    tx.vout.erase(tx.vout.begin() + GetWitnessCommitmentIndex(block));
+    const int commitpos{GetWitnessCommitmentIndex(block)};
+    if (commitpos != NO_WITNESS_COMMITMENT) {
+        tx.vout.erase(tx.vout.begin() + commitpos);
+    }
     block.vtx.at(0) = MakeTransactionRef(tx);
 
     const CBlockIndex* prev_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock));
