@@ -928,19 +928,23 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         // to be secure by simply only having two immediately-spendable
         // outputs - one for each counterparty. For more info on the uses for
         // this, see https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-November/016518.html
-        /*
+        //
+        // FirstIslamicCoin: upstream derived these from maybe_rbf_limits, which
+        // went away with RBF; CAC replaced them with Limits::NoLimits(), so any
+        // transaction up to EXTRA_DESCENDANT_TX_SIZE_LIMIT skipped the ancestor
+        // and descendant limits entirely and unconfirmed chains could grow
+        // without bound. Without RBF the base limits are the pool's own.
         CTxMemPool::Limits cpfp_carve_out_limits{
             .ancestor_count = 2,
-            .ancestor_size_vbytes = maybe_rbf_limits.ancestor_size_vbytes,
-            .descendant_count = maybe_rbf_limits.descendant_count + 1,
-            .descendant_size_vbytes = maybe_rbf_limits.descendant_size_vbytes + EXTRA_DESCENDANT_TX_SIZE_LIMIT,
+            .ancestor_size_vbytes = m_pool.m_limits.ancestor_size_vbytes,
+            .descendant_count = m_pool.m_limits.descendant_count + 1,
+            .descendant_size_vbytes = m_pool.m_limits.descendant_size_vbytes + EXTRA_DESCENDANT_TX_SIZE_LIMIT,
         };
-        */
         const auto error_message{util::ErrorString(ancestors).original};
         if (ws.m_vsize > EXTRA_DESCENDANT_TX_SIZE_LIMIT) {
             return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", error_message);
         }
-        ancestors = m_pool.CalculateMemPoolAncestors(*entry, CTxMemPool::Limits::NoLimits());
+        ancestors = m_pool.CalculateMemPoolAncestors(*entry, cpfp_carve_out_limits);
         if (!ancestors) return state.Invalid(TxValidationResult::TX_MEMPOOL_POLICY, "too-long-mempool-chain", error_message);
     }
 
@@ -4683,7 +4687,11 @@ bool Chainstate::ReplayBlocks()
     }
 
     // Roll forward from the forking point to the new tip.
-    int nForkHeight = pindexFork ? pindexFork->nHeight : 0;
+    // FirstIslamicCoin: the genesis coinbase (the premine) is part of the UTXO set (see
+    // ConnectBlock()), so if the interrupted flush was the first one -- no old tip and so
+    // no fork point -- genesis has to be rolled forward too. Upstream starts at height 1
+    // because Bitcoin's genesis output never enters the UTXO set.
+    int nForkHeight = pindexFork ? pindexFork->nHeight : -1;
     for (int nHeight = nForkHeight + 1; nHeight <= pindexNew->nHeight; ++nHeight) {
         const CBlockIndex& pindex{*Assert(pindexNew->GetAncestor(nHeight))};
 
@@ -5077,14 +5085,24 @@ void ChainstateManager::CheckBlockIndex()
         if (!pindex->HaveNumChainTxs()) assert(pindex->nSequenceId <= 0); // nSequenceId can't be set positive for blocks that aren't linked (negative is used for preciousblock)
         // VALID_TRANSACTIONS is equivalent to nTx > 0 for all nodes (whether or not pruning has occurred).
         // HAVE_DATA is only equivalent to nTx > 0 (or VALID_TRANSACTIONS) if no pruning has occurred.
-        // As we've never pruned, then HAVE_DATA should be equivalent to nTx > 0
-        assert(!(pindex->nStatus & BLOCK_HAVE_DATA) == (pindex->nTx == 0));
-        if (pindexFirstAssumeValid == nullptr) {
-            // If we've got some assume valid blocks, then we might have
-            // missing blocks (not HAVE_DATA) but still treat them as
-            // having been processed (with a fake nTx value). Otherwise, we
-            // can assert that these are the same.
-            assert(pindexFirstMissing == pindexFirstNeverProcessed);
+        // As we've never pruned, then HAVE_DATA should be equivalent to nTx > 0,
+        // unless the index is assumed valid and pending block download on a
+        // background chainstate.
+        // FirstIslamicCoin: restore upstream's IsAssumedValid() exception. Loading a
+        // UTXO snapshot leaves the blocks below its base with a faked nTx and no
+        // HAVE_DATA, which tripped this assertion under -checkblockindex.
+        if (!pindex->IsAssumedValid()) {
+            assert(!(pindex->nStatus & BLOCK_HAVE_DATA) == (pindex->nTx == 0));
+            if (pindexFirstAssumeValid == nullptr) {
+                // If we've got some assume valid blocks, then we might have
+                // missing blocks (not HAVE_DATA) but still treat them as
+                // having been processed (with a fake nTx value). Otherwise, we
+                // can assert that these are the same.
+                assert(pindexFirstMissing == pindexFirstNeverProcessed);
+            }
+        } else {
+            // Assumed-valid blocks may lack data, but HAVE_DATA still implies nTx > 0.
+            if (pindex->nStatus & BLOCK_HAVE_DATA) assert(pindex->nTx > 0);
         }
         if (pindex->nStatus & BLOCK_HAVE_UNDO) assert(pindex->nStatus & BLOCK_HAVE_DATA);
         if (pindex->IsAssumedValid()) {
