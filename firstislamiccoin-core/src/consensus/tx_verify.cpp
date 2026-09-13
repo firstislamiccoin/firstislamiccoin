@@ -198,10 +198,11 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, TxValidationState& state, 
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-time-earlier-than-input");
 
         // Check for negative or overflow input values
-        nValueIn += coin.out.nValue;
-        if (!MoneyRange(coin.out.nValue) || !MoneyRange(nValueIn)) {
+        // FirstIslamicCoin: overflow-safe; MAX_MONEY is INT64_MAX (see CheckTransaction).
+        if (!MoneyRange(coin.out.nValue) || coin.out.nValue > MAX_MONEY - nValueIn) {
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-inputvalues-outofrange");
         }
+        nValueIn += coin.out.nValue;
     }
 
     if (!tx.IsCoinStake())

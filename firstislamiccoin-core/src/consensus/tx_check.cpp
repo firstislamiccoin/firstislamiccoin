@@ -30,9 +30,12 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-negative");
         if (txout.nValue > MAX_MONEY)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-toolarge");
-        nValueOut += txout.nValue;
-        if (!MoneyRange(nValueOut))
+        // FirstIslamicCoin: MAX_MONEY is INT64_MAX, so "add then MoneyRange()" is
+        // signed overflow (UB). Compilers drop the check, and a tx whose outputs
+        // wrap past INT64_MAX was accepted. Check the headroom before adding.
+        if (txout.nValue > MAX_MONEY - nValueOut)
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-txouttotal-toolarge");
+        nValueOut += txout.nValue;
     }
 
     // Check for duplicate inputs (see CVE-2018-17144)
