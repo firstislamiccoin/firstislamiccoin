@@ -33,7 +33,7 @@ jobs:
         with:
           channel: stable
 
-      - name: flutter pub get (also runs l10n codegen -- see pubspec.yaml's generate: true)
+      - name: "flutter pub get (also runs l10n codegen -- see pubspec.yaml's generate: true)"
         run: flutter pub get
 
       - name: flutter analyze

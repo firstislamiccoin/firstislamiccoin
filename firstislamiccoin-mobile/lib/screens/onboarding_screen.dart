@@ -15,7 +15,7 @@ class OnboardingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -221,14 +221,14 @@ class _CreateWalletFlowState extends State<_CreateWalletFlow> {
               value: _confirmed,
               onChanged: (v) => setState(() => _confirmed = v ?? false),
               controlAffinity: ListTileControlAffinity.leading,
-              title: Text(AppLocalizations.of(context)!.onboardingConfirmedBackup),
+              title: Text(AppLocalizations.of(context).onboardingConfirmedBackup),
             ),
             const Spacer(),
             FilledButton(
               onPressed: _confirmed ? _startQuiz : null,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(AppLocalizations.of(context)!.onboardingContinue),
+                child: Text(AppLocalizations.of(context).onboardingContinue),
               ),
             ),
           ],

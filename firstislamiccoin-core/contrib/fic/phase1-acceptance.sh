@@ -6,6 +6,7 @@
 #
 # Usage, from firstislamiccoin-core/ after building: contrib/fic/phase1-acceptance.sh [bindir]
 # bindir defaults to ./src. Uses a throwaway datadir and regtest's default ports.
+export LC_ALL=C
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 BIN=${1:-$ROOT/src}

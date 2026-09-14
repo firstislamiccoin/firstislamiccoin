@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletService>();
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('FirstIslamicCoin'),

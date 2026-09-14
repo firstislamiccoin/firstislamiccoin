@@ -64,7 +64,7 @@ def main():
     if args.rpcuser and args.rpcpassword:
         userpass = f"{args.rpcuser}:{args.rpcpassword}"
     else:
-        with open(args.rpccookiefile) as f:
+        with open(args.rpccookiefile, encoding="utf8") as f:
             userpass = f.read().strip()
     rpc = RPC(args.rpcconnect, args.rpcport, "Basic " + b64encode(userpass.encode()).decode())
 

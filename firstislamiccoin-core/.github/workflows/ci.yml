@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Determine fetch depth
         run: echo "FETCH_DEPTH=$((${{ github.event.pull_request.commits }} + 2))" >> "$GITHUB_ENV"
-  - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: ${{ env.FETCH_DEPTH }}
@@ -75,8 +75,6 @@ jobs:
     # See: https://github.com/actions/runner-images#available-images.
     runs-on: macos-13  # Use M1 once available https://github.com/github/roadmap/issues/528
 
-    # No need to run on the read-only mirror, unless it is a PR.
-    if: github.repository != 'bitcoin-core/gui' || github.event_name == 'pull_request'
 
     timeout-minutes: 120
 
@@ -123,14 +121,90 @@ jobs:
           # https://github.com/actions/cache/blob/main/tips-and-workarounds.md#update-a-cache
           key: ${{ github.job }}-ccache-${{ github.run_id }}
 
+  # FirstIslamicCoin: ci/test/00_setup_env_native_asan.sh and
+  # 00_setup_env_native_tidy.sh already existed (inherited unchanged from
+  # upstream Bitcoin Core's CI scripts), but neither was actually referenced
+  # by any job here -- the Phase 10 security review found this while looking
+  # for where "ASan/UBSan builds" and "clang-tidy" were supposed to run. The
+  # two jobs below wire them in, using the same docker-based ci/test_run_all.sh
+  # path the mac-native job above uses directly on-host (unsetting the
+  # workflow-wide DANGER_RUN_CI_ON_HOST so 02_run_container.sh builds its own
+  # Ubuntu 24.04 container instead of installing clang/qt5/boost onto the
+  # GitHub-hosted runner itself).
+  linux-native-asan:
+    name: 'Linux (native, no depends, ASan+UBSan+integer+float-div-by-zero)'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      DANGER_RUN_CI_ON_HOST: ''
+      FILE_ENV: './ci/test/00_setup_env_native_asan.sh'
+      # Unit tests only here -- RUN_FUNCTIONAL_TESTS under a sanitizer build
+      # is dramatically slower and functional behaviour is already covered,
+      # unsanitized, by test-each-commit / the release workflow's own build.
+      RUN_FUNCTIONAL_TESTS: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set Ccache directory
+        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+
+      - name: Restore Ccache cache
+        id: ccache-cache
+        uses: actions/cache/restore@v4.3.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ github.job }}-ccache-
+
+      - name: CI script
+        run: ./ci/test_run_all.sh
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v4.3.0
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+
+  linux-native-clang-tidy:
+    name: 'Linux (native, clang-tidy static analysis)'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DANGER_RUN_CI_ON_HOST: ''
+      FILE_ENV: './ci/test/00_setup_env_native_tidy.sh'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set Ccache directory
+        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+
+      - name: Restore Ccache cache
+        id: ccache-cache
+        uses: actions/cache/restore@v4.3.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ github.job }}-ccache-
+
+      - name: CI script
+        run: ./ci/test_run_all.sh
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v4.3.0
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ github.job }}-ccache-${{ github.run_id }}
+
   win64-native:
     name: 'Win64 native, VS 2022'
     # Use latest image, but hardcode version to avoid silent upgrades (and breaks).
     # See: https://github.com/actions/runner-images#available-images.
     runs-on: windows-2022
 
-    # No need to run on the read-only mirror, unless it is a PR.
-    if: github.repository != 'bitcoin-core/gui' || github.event_name == 'pull_request'
 
     env:
       CCACHE_MAXSIZE: '200M'

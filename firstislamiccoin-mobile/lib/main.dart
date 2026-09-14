@@ -48,7 +48,7 @@ class FicWalletApp extends StatelessWidget {
       // themeMode as soon as Settings changes it -- no app restart needed.
       child: Consumer<WalletService>(
         builder: (context, wallet, _) => MaterialApp(
-          onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+          onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,

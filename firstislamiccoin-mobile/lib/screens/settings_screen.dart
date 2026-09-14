@@ -28,7 +28,7 @@ class SettingsScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(AppLocalizations.of(dialogContext)!.commonCancel),
+            child: Text(AppLocalizations.of(dialogContext).commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -48,7 +48,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final wallet = context.watch<WalletService>();
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.navSettings)),
       body: ListView(
