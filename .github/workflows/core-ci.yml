@@ -304,16 +304,20 @@ jobs:
       # step then can't find. `vswhere` couldn't identify a component ID for
       # 14.29.30133 to remove via vs_installer.exe (it isn't a queryable
       # package on this image either) -- but this runner is a single-use VM
-      # torn down after the job, so there's nothing to restore afterward and
-      # renaming the folder out of MSVC's own discovery path directly is
-      # both simpler and guaranteed to work regardless of which installer
-      # component (if any) actually owns it.
+      # torn down after the job, so there's nothing to restore afterward.
+      # First tried renaming the folder rather than deleting it -- boost's
+      # own toolset auto-detection (b2) still found and used it under its
+      # new name (confirmed in the CI log, literal ".disabled-by-fic-ci"
+      # suffix and all): it isn't matching on the folder's name at all, just
+      # scanning for a bin\HostX64\<arch>\cl.exe pattern underneath whatever
+      # subdirectories exist. Deleting the toolset's actual contents, not
+      # just renaming the folder, is what actually removes it from that scan.
       - name: Disable the ambiguous MSVC v142 toolset (14.29.30133)
         run: |
           $oldToolset = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.29.30133"
           if (Test-Path $oldToolset) {
-            Rename-Item -Path $oldToolset -NewName "14.29.30133.disabled-by-fic-ci"
-            Write-Host "Renamed $oldToolset out of MSVC's toolset discovery path"
+            Remove-Item -Path $oldToolset -Recurse -Force
+            Write-Host "Deleted $oldToolset"
           } else {
             Write-Host "14.29.30133 not present on this runner image -- nothing to do"
           }
