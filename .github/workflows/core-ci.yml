@@ -290,29 +290,30 @@ jobs:
 
       # FirstIslamicCoin: fixes a real, pre-existing (not caused by any of
       # this project's own changes -- present in the very first successful
-      # win64-native run) boost-thread build failure. Diagnosed first, via
-      # a one-off step that listed every installed MSVC toolset folder:
-      # this runner image has exactly two
-      # installed MSVC toolsets, 14.29.30133 (MSVC v142 / VS2019) and
-      # 14.44.35207 (the real one, v143 / VS2022) -- the "Fix Visual Studio
-      # installation" step above only targets specific v143 sub-versions
-      # (14.37.17.7, 14.38.17.8) that don't even exist on this image, so it's
-      # a no-op here and the 14.29.x toolset stays ambiguous with 14.44.x.
-      # vcpkg's own boost-thread port build (b2) picks up 14.29.30133's ARM
-      # cross-compiler (bin/HostX64/arm/cl.exe) as if it were the toolset to
-      # build for, producing a mismatched vc140-labeled .lib vcpkg's install
-      # step then can't find. `vswhere` couldn't identify a component ID for
-      # 14.29.30133 to remove via vs_installer.exe (it isn't a queryable
-      # package on this image either) -- but this runner is a single-use VM
-      # torn down after the job, so there's nothing to restore afterward.
-      # First tried renaming the folder rather than deleting it -- boost's
-      # own toolset auto-detection (b2) still found and used it under its
-      # new name (confirmed in the CI log, literal ".disabled-by-fic-ci"
-      # suffix and all): it isn't matching on the folder's name at all, just
-      # scanning for a bin\HostX64\<arch>\cl.exe pattern underneath whatever
-      # subdirectories exist. Deleting the toolset's actual contents, not
-      # just renaming the folder, is what actually removes it from that scan.
-      - name: Disable the ambiguous MSVC v142 toolset (14.29.30133)
+      # win64-native run) boost-thread build failure. The actual root cause,
+      # found over three attempts against the real CI logs rather than
+      # guessed at:
+      #
+      # 1. This runner image ships two MSVC toolsets, 14.29.30133 (v142) and
+      #    14.44.35207 (v143, the real one) -- the "Fix Visual Studio
+      #    installation" step above only targets specific v143 sub-versions
+      #    that don't exist on this image, so it's a no-op here. Deleting
+      #    14.29.30133 (below) removed it from vcpkg's boost-thread build
+      #    (b2)'s own toolset scan -- renaming first, not deleting, did NOT
+      #    work: the CI log showed b2 still finding and using it under its
+      #    new name, so it isn't matching by folder name at all, just
+      #    scanning for a bin\HostX64\<arch>\cl.exe pattern underneath
+      #    whatever subdirectories exist.
+      # 2. That fix alone wasn't enough: with only 14.44.35207 left, b2 still
+      #    grabbed *its* bin\Hostx64\arm\cl.exe (an ARM cross-compiler) as
+      #    the "detected" compiler for what is supposed to be a plain x64
+      #    build, mislabeling boost-thread's own output library
+      #    (boost_chrono-vc140-mt.lib -- "vc140" doesn't match this
+      #    toolset's real MSVC version at all) so vcpkg's later install step
+      #    can't find it. Same fix as step 1: remove the non-x64 host-x64
+      #    cross-compiler subdirectories b2 shouldn't be looking at, so only
+      #    the real bin\Hostx64\x64\cl.exe remains discoverable.
+      - name: Remove ambiguous MSVC toolsets and cross-compiler variants
         run: |
           $oldToolset = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.29.30133"
           if (Test-Path $oldToolset) {
@@ -320,6 +321,15 @@ jobs:
             Write-Host "Deleted $oldToolset"
           } else {
             Write-Host "14.29.30133 not present on this runner image -- nothing to do"
+          }
+          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" -Directory | ForEach-Object {
+            $hostX64 = Join-Path $_.FullName "bin\Hostx64"
+            if (Test-Path $hostX64) {
+              Get-ChildItem $hostX64 -Directory | Where-Object { $_.Name -ne "x64" } | ForEach-Object {
+                Remove-Item -Path $_.FullName -Recurse -Force
+                Write-Host "Deleted $($_.FullName)"
+              }
+            }
           }
 
       - name: Configure Developer Command Prompt for Microsoft Visual C++
