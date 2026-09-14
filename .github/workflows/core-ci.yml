@@ -288,6 +288,34 @@ jobs:
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
 
+      # FirstIslamicCoin: diagnostic-only, added while chasing a real,
+      # pre-existing (not caused by any of this project's own changes)
+      # boost-thread build failure -- vcpkg's own build of boost-thread
+      # picks up a stray MSVC toolset (observed: .../MSVC/14.29.30133/
+      # bin/HostX64/arm/cl.exe -- an ARM cross-compiler, for what should be
+      # a plain x64 build) that the "Fix Visual Studio installation" step
+      # above doesn't remove -- its own removal list only covers specific
+      # v143 sub-versions (14.37.17.7, 14.38.17.8), not whatever ships the
+      # 14.29.x (v142) toolset on the current runner image. Lists every
+      # installed MSVC toolset folder and, for each, the VS component ID
+      # (if any) that owns it, so the next commit can extend the removal
+      # list above with the real ID instead of guessing.
+      - name: List installed MSVC toolsets (diagnostic)
+        run: |
+          Write-Host "=== VC\Tools\MSVC subfolders ==="
+          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" -Directory | ForEach-Object { Write-Host $_.Name }
+          Write-Host "=== vswhere: installed packages matching VC.14 or v142/v143 ==="
+          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+          & $vswhere -all -products * -property packages 2>&1 | Out-Null
+          $json = & $vswhere -all -products * -format json | ConvertFrom-Json
+          foreach ($inst in $json) {
+            foreach ($pkg in $inst.packages) {
+              if ($pkg.id -match "VC\.14|v141|v142|v143|Component\.VC\.Tools") {
+                Write-Host $pkg.id
+              }
+            }
+          }
+
       - name: Configure Developer Command Prompt for Microsoft Visual C++
         # Using microsoft/setup-msbuild is not enough.
         uses: ilammy/msvc-dev-cmd@v1
