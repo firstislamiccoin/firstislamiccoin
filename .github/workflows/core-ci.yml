@@ -2,7 +2,19 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+# FirstIslamicCoin: moved here from firstislamiccoin-core/.github/workflows/
+# ci.yml -- GitHub Actions only discovers workflow files under the
+# repository ROOT's .github/workflows/ (release.yml's own comment already
+# said so), and this file living one level down meant it was never
+# discovered at all, regardless of whether its own YAML/job definitions were
+# correct. `defaults.run.working-directory` below reproduces the cwd this
+# file's steps were always written assuming (a checkout of firstislamiccoin-
+# core alone, not the whole monorepo) without having to touch every step.
+
 name: CI
+defaults:
+  run:
+    working-directory: firstislamiccoin-core
 on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request.
   pull_request:
@@ -80,7 +92,11 @@ jobs:
 
     env:
       FILE_ENV: './ci/test/00_setup_env_mac_native.sh'
-      BASE_ROOT_DIR: ${{ github.workspace }}
+      # Must point at the firstislamiccoin-core subdirectory, not the whole
+      # checked-out monorepo -- DANGER_RUN_CI_ON_HOST scripts use this as an
+      # absolute path baked into further paths, unaffected by this
+      # workflow's own working-directory default above.
+      BASE_ROOT_DIR: ${{ github.workspace }}/firstislamiccoin-core
 
     steps:
       - name: Checkout

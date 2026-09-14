@@ -1,9 +1,14 @@
+# FirstIslamicCoin: moved here from firstislamiccoin-core/.github/workflows/
+# build.yml -- see core-ci.yml's own comment for why (GitHub Actions only
+# discovers workflows under the repository root). `branches: - master` below
+# was also fixed: this project's default branch is `main`, so the trigger
+# never matched anything even before the discovery problem.
 name: build
 
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - '**/*.md'
   pull_request:
@@ -15,6 +20,9 @@ on:
 jobs:
   build:
     name: ${{ matrix.name }}
+    defaults:
+      run:
+        working-directory: firstislamiccoin-core
 
     env:
       MAKEJOBS: 4
@@ -127,7 +135,7 @@ jobs:
         env:
           cache-name: sdk
         with:
-          path: ./depends/sdk-sources
+          path: ./firstislamiccoin-core/depends/sdk-sources
           key: ${{ matrix.name }}-${{ env.cache-name }}
 
       - name: Install SDK
@@ -143,8 +151,8 @@ jobs:
         env:
           cache-name: depends
         with:
-          path: ./depends/built
-          key: ${{ matrix.name }}-${{ env.cache-name }}-${{ hashFiles('depends/packages/*') }}
+          path: ./firstislamiccoin-core/depends/built
+          key: ${{ matrix.name }}-${{ env.cache-name }}-${{ hashFiles('firstislamiccoin-core/depends/packages/*') }}
 
       - name: Build depends
         run: |
@@ -168,8 +176,8 @@ jobs:
         with:
           name: firstislamiccoin-${{ github.sha }}-${{ matrix.name }}
           path: |
-            depends/${{ matrix.host }}/bin/firstislamiccoin*
-            dist/FirstIslamicCoin-Qt.app
+            firstislamiccoin-core/depends/${{ matrix.host }}/bin/firstislamiccoin*
+            firstislamiccoin-core/dist/FirstIslamicCoin-Qt.app
           if-no-files-found: error
           retention-days: 7
 
