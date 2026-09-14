@@ -123,7 +123,7 @@ Intro::Intro(QWidget *parent, int64_t blockchain_size_gb) :
     ui->lblExplanation1->setText(ui->lblExplanation1->text()
         .arg(PACKAGE_NAME)
         .arg(m_blockchain_size_gb)
-        .arg(2014)
+        .arg(2026) // FirstIslamicCoin: genesis nTime is 2026-09-12 (docs/genesis.md); inherited 2014 (Blackcoin's own launch year) unchanged through CAC
         .arg(tr("FirstIslamicCoin"))
     );
     ui->lblExplanation2->setText(ui->lblExplanation2->text().arg(PACKAGE_NAME));
