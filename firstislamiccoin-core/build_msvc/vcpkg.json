@@ -14,7 +14,7 @@
     },
     "zeromq"
   ],
-  "builtin-baseline": "f14984af3738e69f197bf0e647a8dca12de92996",
+  "builtin-baseline": "a1cae005c39be7b18ba319fced856b68d7276271",
   "overrides": [
     {
       "name": "libevent",
