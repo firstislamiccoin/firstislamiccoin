@@ -44,6 +44,10 @@ jobs:
       MAX_COUNT: 6
     steps:
       - name: Determine fetch depth
+        # Runs before Checkout below, so firstislamiccoin-core/ doesn't
+        # exist on the runner yet -- the job-level working-directory
+        # default would fail to even start the shell for this step.
+        working-directory: ${{ github.workspace }}
         run: echo "FETCH_DEPTH=$((${{ github.event.pull_request.commits }} + 2))" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
         with:

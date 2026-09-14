@@ -108,15 +108,24 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      # These three run before Checkout below, so firstislamiccoin-core/
+      # doesn't exist on the runner yet -- the job-level working-directory
+      # default above would make GitHub Actions fail to even start the
+      # shell for them ("No such file or directory"). They're plain
+      # system-package installs with no repo-relative paths anyway, so
+      # explicitly running them at the workspace root is correct, not just
+      # a workaround.
       - name: Add architecture
         if: ${{ matrix.arch }}
+        working-directory: ${{ github.workspace }}
         run: |
           sudo dpkg --add-architecture "${{ matrix.arch }}"
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
           sudo apt-get update -qq
           sudo apt-get remove -qq libmono* moby* mono* nginx* php* libgdiplus libpcre2-posix3 libzip4
- 
+
       - name: Install packages
+        working-directory: ${{ github.workspace }}
         run: |
           sudo apt-get update
           sudo apt-get install make automake cmake curl g++-multilib libtool binutils-gold bsdmainutils pkg-config python3 patch bison
@@ -124,6 +133,7 @@ jobs:
 
       - name: Post Install
         if: ${{ matrix.postinstall }}
+        working-directory: ${{ github.workspace }}
         run: ${{ matrix.postinstall }}
 
       - name: Checkout
