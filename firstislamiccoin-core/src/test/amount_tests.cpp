@@ -26,7 +26,15 @@ BOOST_AUTO_TEST_CASE(MoneyRangeTest)
     BOOST_CHECK_EQUAL(MoneyRange(CAmount(0)), true);
     BOOST_CHECK_EQUAL(MoneyRange(CAmount(1)), true);
     BOOST_CHECK_EQUAL(MoneyRange(MAX_MONEY), true);
-    BOOST_CHECK_EQUAL(MoneyRange(MAX_MONEY + CAmount(1)), false);
+    // FirstIslamicCoin: MAX_MONEY is INT64_MAX here (no fixed cap, unlike
+    // Bitcoin's small 21e6*COIN), so plain `MAX_MONEY + CAmount(1)` is
+    // signed-integer overflow (UB) rather than a representable CAmount one
+    // past the top of the range. Compute it via well-defined unsigned
+    // wraparound instead -- this lands on the same value (CAmount's
+    // negative INT64_MIN bit pattern) the original expression already
+    // informally relied on, which MoneyRange()'s own `nValue >= 0` check
+    // correctly rejects either way.
+    BOOST_CHECK_EQUAL(MoneyRange(static_cast<CAmount>(static_cast<uint64_t>(MAX_MONEY) + 1)), false);
 }
 
 BOOST_AUTO_TEST_CASE(GetFeeTest)

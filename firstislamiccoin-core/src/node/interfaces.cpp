@@ -373,6 +373,13 @@ public:
     }
     double getPoSKernelPS() override
     {
+        // FirstIslamicCoin: GetPoSKernelPS() reads chainman.m_best_header,
+        // which is GUARDED_BY(cs_main) -- this call site (reached from the
+        // Qt GUI's staking-status display, via getPoSKernelPS() ->
+        // bitcoingui.cpp) never held the lock before clang's thread-safety
+        // analysis actually got compiled against this code for the first
+        // time and caught it.
+        LOCK(::cs_main);
         return GetPoSKernelPS(chainman());
     }
     std::unique_ptr<Handler> handleInitMessage(InitMessageFn fn) override
@@ -863,8 +870,8 @@ public:
 
     NodeContext* context() override { return &m_node; }
     ArgsManager& args() { return *Assert(m_node.args); }
-    ChainstateManager& chainman() { return *Assert(m_node.chainman); }
-    const CTxMemPool& mempool() { return *Assert(m_node.mempool); }
+    ChainstateManager& chainman() override { return *Assert(m_node.chainman); }
+    const CTxMemPool& mempool() override { return *Assert(m_node.mempool); }
     NodeContext& m_node;
 };
 } // namespace

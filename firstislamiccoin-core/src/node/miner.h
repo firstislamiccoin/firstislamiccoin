@@ -172,7 +172,9 @@ private:
     Chainstate& m_chainstate;
 
 #ifdef ENABLE_WALLET
-    CWallet *pwallet = 0;
+    // CreateNewBlock() below takes its own pwallet parameter (shadowing
+    // this), so this member is never actually read or assigned.
+    [[maybe_unused]] CWallet *pwallet = 0;
 #endif
 
 public:

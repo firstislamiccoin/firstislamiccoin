@@ -27,9 +27,11 @@ using node::NodeContext;
 
 void RegisterFeeRPCCommands(CRPCTable& t)
 {
-    static const CRPCCommand commands[]{
-    };
-    for (const auto& c : commands) {
-        t.appendCommand(c.name, &c);
-    }
+    // No fee-estimation RPCs are registered here: FirstIslamicCoin has no
+    // dynamic/smart fee estimator (see GetMinFee() in consensus/tx_verify.cpp
+    // -- a flat, deterministic minimum fee replaces it), so estimatesmartfee
+    // was dropped rather than left pointing at a mempool-based estimate this
+    // chain doesn't compute. Kept as a no-op function since rpc/register.h
+    // still calls it unconditionally alongside every other category.
+    (void)t;
 }

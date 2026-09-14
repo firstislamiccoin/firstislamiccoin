@@ -84,6 +84,13 @@ static CAmount GetStakingBalance(const CWallet& wallet)
 
 uint64_t GetStakeWeight(const CWallet& wallet)
 {
+    // FirstIslamicCoin: the whole WalletModel::getStakeWeight() -> ... ->
+    // here call chain the Qt GUI's staking-status display drives (see
+    // qt/bitcoingui.cpp) never acquired cs_wallet at any point before
+    // clang's thread-safety analysis actually got compiled against this
+    // code for the first time and caught it, on GetTxDepthInMainChain()
+    // below.
+    LOCK(wallet.cs_wallet);
     // Choose coins to use
     CAmount nBalance = GetStakingBalance(wallet);
     if (wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS))

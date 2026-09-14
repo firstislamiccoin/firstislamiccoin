@@ -645,7 +645,6 @@ public:
      * @param[in] nodeid      the node's NodeId (only for debug log output).
      * @param[in] initiating  whether we are the initiator side.
      * @param[in] type_in     the serialization type of returned CNetMessages.
-     * @param[in] version_in  the serialization version of returned CNetMessages.
      */
     V2Transport(NodeId nodeid, bool initiating, int type_in) noexcept;
 

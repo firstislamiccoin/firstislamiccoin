@@ -69,7 +69,12 @@ static inline bool InsecureRandBool()
 
 static inline CAmount InsecureRandMoneyAmount()
 {
-    return static_cast<CAmount>(InsecureRandRange(MAX_MONEY + 1));
+    // FirstIslamicCoin: MAX_MONEY is INT64_MAX here (no fixed cap, unlike
+    // Bitcoin's small 21e6*COIN), so plain `MAX_MONEY + 1` overflows CAmount
+    // (int64_t) before InsecureRandRange ever sees it. Promote to uint64_t
+    // first -- InsecureRandRange's own parameter type -- so the +1 lands in
+    // range (2^63, representable) instead of wrapping a signed integer.
+    return static_cast<CAmount>(InsecureRandRange(static_cast<uint64_t>(MAX_MONEY) + 1));
 }
 
 #endif // BITCOIN_TEST_UTIL_RANDOM_H

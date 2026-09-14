@@ -41,7 +41,11 @@ FUZZ_TARGET(wallet_fees, .init = initialize_setup)
     }
     (void)GetDiscardRate(wallet);
 
-    const auto tx_bytes{fuzzed_data_provider.ConsumeIntegral<unsigned int>()};
+    // FirstIslamicCoin: GetRequiredFee(wallet, tx_bytes) below is commented out
+    // (removed in favor of the fixed-fee model -- see GetRequiredFeeRate()),
+    // leaving this otherwise-unused; kept (not deleted) so the fuzzer's
+    // buffer-consumption order here doesn't shift and invalidate the corpus.
+    [[maybe_unused]] const auto tx_bytes{fuzzed_data_provider.ConsumeIntegral<unsigned int>()};
 
     if (fuzzed_data_provider.ConsumeBool()) {
         wallet.m_pay_tx_fee = CFeeRate{ConsumeMoney(fuzzed_data_provider, /*max=*/COIN)};

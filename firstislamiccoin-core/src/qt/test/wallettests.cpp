@@ -283,7 +283,8 @@ void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
     mini_gui.initModelForWallet(node, wallet, platformStyle.get());
     WalletModel& walletModel = *mini_gui.walletModel;
     SendCoinsDialog& sendCoinsDialog = mini_gui.sendCoinsDialog;
-    TransactionView& transactionView = mini_gui.transactionView;
+    // Only referenced by the commented-out BumpFee(...) calls below.
+    [[maybe_unused]] TransactionView& transactionView = mini_gui.transactionView;
 
     // Update walletModel cached balance which will trigger an update for the 'labelBalance' QLabel.
     walletModel.pollBalanceChanged();

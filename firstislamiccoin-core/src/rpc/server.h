@@ -6,6 +6,7 @@
 #ifndef BITCOIN_RPC_SERVER_H
 #define BITCOIN_RPC_SERVER_H
 
+#include <kernel/cs_main.h>
 #include <rpc/request.h>
 #include <rpc/util.h>
 
@@ -182,7 +183,7 @@ bool IsDeprecatedRPCEnabled(const std::string& method);
 
 extern CRPCTable tableRPC;
 
-extern double GetPoSKernelPS(ChainstateManager& chainman);
+extern double GetPoSKernelPS(ChainstateManager& chainman) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
 
 void StartRPC();
 void InterruptRPC();

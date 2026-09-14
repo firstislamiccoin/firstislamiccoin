@@ -15,6 +15,8 @@
 #include <util/check.h>
 #include <util/moneystr.h>
 
+#include <limits>
+
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime)
 {
     if (tx.nLockTime == 0)
@@ -241,13 +243,22 @@ CAmount GetMinFee(size_t nBytes, uint32_t nTime)
     CAmount nMinFee;
     CFeeRate nMinFeeRate;
 
+    // FirstIslamicCoin: CFeeRate::GetFee() takes uint32_t, but this function
+    // takes size_t nBytes (needed so callers can pass a pathological value,
+    // e.g. SIZE_MAX in test/blk_minfee_tests.cpp, and still get a sane
+    // MoneyRange()-capped result below rather than UB). Passing nBytes
+    // straight through silently truncated it instead of saturating.
+    const uint32_t nBytesForFee = nBytes > std::numeric_limits<uint32_t>::max()
+                                       ? std::numeric_limits<uint32_t>::max()
+                                       : static_cast<uint32_t>(nBytes);
+
     if (Params().GetConsensus().IsProtocolV3_1(nTime)) {
         nMinFeeRate = CFeeRate{TX_FEE_PER_KB};
-        nMinFee = (nBytes <= 100) ? MIN_TX_FEE : nMinFeeRate.GetFee(nBytes);
+        nMinFee = (nBytes <= 100) ? MIN_TX_FEE : nMinFeeRate.GetFee(nBytesForFee);
     }
     else {
         nMinFeeRate = CFeeRate{DEFAULT_MIN_RELAY_TX_FEE};
-        nMinFee = nMinFeeRate.GetFee(nBytes);
+        nMinFee = nMinFeeRate.GetFee(nBytesForFee);
     }
 
     if (!MoneyRange(nMinFee))
