@@ -1284,6 +1284,90 @@ No FirstIslamicCoin GitHub org/repository exists yet for `provision.sh`'s `REPO_
 no real server or DNS record exists for either ElectrumX instance, and no mainnet block-test
 fixture exists for `FirstIslamicCoin` in `tests/blocks/` — tracked in the table below.
 
+## Phase 10 — Mainnet launch checklist and handover
+
+The full writeup for the security-review pass is in
+[`docs/security-review.md`](security-review.md); this section summarizes what it found and fixed,
+plus the rest of the phase.
+
+### Security review found two CI workflows that have never actually run
+
+Validating every `.github/workflows/*.yml` file in the monorepo as YAML (not just reading them)
+turned up two that fail to parse at all, meaning GitHub Actions would silently refuse to run either
+workflow in full: `firstislamiccoin-core/.github/workflows/ci.yml` (a mis-indented `checkout` step,
+confirmed byte-identical in `codexacoin-core`'s own copy — inherited from CAC, not FIC's doing) and
+`firstislamiccoin-mobile/.github/workflows/ci.yml` (an unquoted colon inside a step name, FIC's own,
+from Phase 5). Both fixed. This is a bigger, more basic gap than anything the security tooling
+itself found — no CI has ever run on either repository, independent of whether its jobs are
+individually correct.
+
+### ASan/UBSan and clang-tidy were already scripted, just never wired in
+
+`ci/test/00_setup_env_native_asan.sh` and `00_setup_env_native_tidy.sh` — full sanitizer and
+static-analysis build configs — were already present, inherited unchanged from upstream Bitcoin
+Core, but no job in `ci.yml` referenced either. Added `linux-native-asan` and
+`linux-native-clang-tidy` jobs that do. The `ci_native_asan` Docker image builds cleanly in this
+environment (unlike CAC's own macOS-blocked ElectrumX verification in Phase 4, this isn't a
+packaging problem); completing an actual sanitizer build+test run locally hit a real but mundane
+snag — Bitcoin Core's own `CI_EXEC` shell helper loses quoting through `bash -c "... $*"`, and this
+checkout lives at a path containing spaces ("First Islamic Coin"). Not fixed in the vendored
+script (a real GitHub Actions runner's workspace path never has spaces, so this would not recur
+there); tracked as `TODO-HUMAN` instead of worked around with a local-only patch.
+
+### Real, current CVEs in both Python services, fixed
+
+`pip-audit` found Flask, PyJWT, cryptography, and requests all pinned to versions with disclosed
+advisories in `firstislamiccoin-staking-service` and `firstislamiccoin-explorer`. Bumped both
+`requirements.txt` files; re-ran `pip-audit` clean; installed each into a fresh venv and exercised
+a real Flask route through each app's own test client to confirm nothing broke.
+
+### The mobile wallet had never been run against a real Flutter SDK until now
+
+No Flutter SDK existed in this project's environment before this phase (pulled
+`ghcr.io/cirruslabs/flutter:stable` via Docker). `flutter pub get` failed outright —
+`pubspec.yaml`'s `intl: ^0.19.0` conflicts with the current SDK's `flutter_localizations`, which
+pins `intl` to `0.20.2` exactly. Fixed the constraint. That unblocked `flutter analyze` (19 issues,
+all in FIC's own code — 7 real `AppLocalizations.of(context)!` redundant-assertion warnings fixed;
+12 `deprecated_member_use` infos left alone pending a real device to verify the behavioural
+migration on) and `flutter test`, which surfaced two real, pre-existing, currently-failing crypto
+tests (`address_test.dart`'s bech32 round-trip, `keys_test.dart`'s coin-type key derivation) —
+confirmed unrelated to anything this phase touched, and deliberately not guessed at given the
+fund-loss risk of a wrong fix to address/key-derivation code. Full detail, including why several
+other `flutter analyze`/`pub outdated` findings were left alone rather than bumped blind, is in
+`docs/security-review.md`.
+
+### cppcheck: zero findings in FIC's own code
+
+Scoped to the 37 non-test files this project has actually changed (found via the `// 
+FirstIslamicCoin:` comment marker), not the ~2,600 inherited-unmodified files: zero warnings inside
+any FIC-authored consensus or wallet logic. Every warning cppcheck did emit traces to pre-existing
+upstream code, confirmed against CAC's own copy of the same files.
+
+### `docs/LAUNCH-RUNBOOK.md`, `docs/OPERATIONS.md`, top-level `README.md`
+
+Written per the prompt's Phase 10 items 3-5. The genesis key ceremony section in the runbook
+reconciles the prompt's "premine held in a 3-of-5 multisig cold wallet" instruction with the actual
+consensus constraint `docs/genesis.md` already documents — staking only accepts single-key
+outputs, so the ceremony splits the premine between a small number of single-key bootstrap outputs
+and the multisig cold wallet, rather than paying the whole premine into the multisig directly.
+
+### What this phase did *not* do, deliberately
+
+**Did not regenerate mainnet genesis, set real checkpoints/`assumevalid`, or tag `v1.0.0`.** The
+prompt's item 1 assumes mainnet has launched; it hasn't — the genesis key ceremony itself needs a
+real 3-of-5 multisig with real, human-held keys, which nothing in this environment can supply (see
+existing `TODO-HUMAN` row 1 and `docs/genesis.md`). Tagging `v1.0.0` or writing real checkpoint
+hashes for a chain that has never run would misrepresent unlaunched software as released.
+`docs/LAUNCH-RUNBOOK.md` documents the exact ceremony instead, as a runbook a human operator
+follows, not proof it happened.
+
+### `TODO-HUMAN`
+
+The genesis key ceremony and everything downstream of a real mainnet existing; the ASan CI run
+completing somewhere without a spaces-in-path checkout; the two failing mobile crypto tests; the
+Flutter API migrations and major-version dependency bumps that need a real device to verify —
+tracked in the table below (rows 23-26).
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -1322,3 +1406,7 @@ those are removed.
 | 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
+| 23 | Complete a real ASan/UBSan CI run (`ci/test_run_all.sh` with `FILE_ENV=./ci/test/00_setup_env_native_asan.sh`) from a checkout with no spaces in its path, or via the real GitHub Actions runner once a repository exists — see `docs/security-review.md` §3 | Phase 10 |
+| 24 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
+| 25 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
+| 26 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |

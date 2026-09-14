@@ -35,7 +35,7 @@ where `PARAMETERS.md` (CAC's consensus source of truth) lives.
 | FIC target | CAC source | Notes |
 |---|---|---|
 | `firstislamiccoin-core/` | `codexacoin-core/` | Autotools, not CMake. 2,650 files |
-| `firstislamiccoin-electrumx/` | `electrumx-cac/` | Fork of `CoinBlack/electrumx-blk`. Indexing unverified upstream |
+| `firstislamiccoin-electrumx/` | `electrumx-cac/` | Fork of `CoinBlack/electrumx-blk`. Indexing verified end-to-end (Phase 4) — CAC's own equivalent never got past a daemon-connection check |
 | `firstislamiccoin-mobile/` | `cac_wallet/` | Flutter, Android + iOS |
 | `firstislamiccoin-web-wallet/` | `web-wallet/` | Static vanilla JS, **no build step** — not React/Vite |
 | `firstislamiccoin-explorer/` | `explorer/` | Flask + static frontend, not `btc-rpc-explorer` |
@@ -71,7 +71,7 @@ Dropped per the decision recorded in
 | 1 — core rebrand, chain params, fixed reward | `firstislamiccoin-core/` | Builds on Linux; mainnet live |
 | 2 — testnet validation | `firstislamiccoin-infra/` | `docker/` regtest env works |
 | 3 — desktop CI + release | `firstislamiccoin-core/.github/` | `release.yml` written, **never run end-to-end** |
-| 4 — ElectrumX | `firstislamiccoin-electrumx/` | **Indexing unverified** |
+| 4 — ElectrumX | `firstislamiccoin-electrumx/` | Real block indexing verified against a live regtest node |
 | 5 — mobile | `firstislamiccoin-mobile/` | Builds; store metadata written |
 | 6 — staking service | `firstislamiccoin-staking-service/` | Custodial only — **no P2CS exists** |
 | 7 — web wallet | `firstislamiccoin-web-wallet/` | Deployed |
