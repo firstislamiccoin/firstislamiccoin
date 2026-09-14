@@ -961,6 +961,97 @@ the project's actual CI coverage going forward.
 
 Signing keys, store accounts, and translation review — tracked in the `TODO-HUMAN` table below.
 
+## Phase 6 — Staking service
+
+Forked from `codexacoin/vps-gateway/` into `firstislamiccoin-staking-service/` per `docs/repo-map.md`.
+Implements `firstislamiccoin-mobile/docs/mobile-api.md` for real — both the mobile app and the
+not-yet-built web wallet (Phase 7) are meant to talk to this. Most of the codebase needed only
+renaming: `auth.py`, `kyc.py`, `push.py`, `push_mobile.py`, `mobile_notify.py`, `watcher.py`, and
+`db.py`'s schema carried over with no logic changes at all — none of it was CAC-specific to begin
+with.
+
+### Backend choice matches CAC's own, for a different reason
+
+CAC's `vps-gateway` already talks directly to `codexacoind` via RPC (a watch-only wallet that
+imports addresses on demand) rather than `electrumx-cac`, because CAC's own local verification hit
+a macOS packaging issue with that backend. FIC has the same architecture for a related but distinct
+reason: `firstislamiccoin-electrumx` (Phase 4) doesn't exist at all yet. Either way, the substitution
+is what makes this phase actually runnable and verifiable now instead of waiting on Phase 4 —
+documented as a deviation here rather than silently diverging from the prompt's Electrum-backed
+design.
+
+### Reward-model correction, not a rebrand
+
+CAC's `staking.py` quotes depositors a real annualized rate (`STAKE_REWARD_ANNUAL_BP`, a
+coin-age-proportional design). FIC's reward is a fixed 10 FIC plus fees per block regardless of
+deposit size (Phase 1) — deposit size affects only the probability of winning a block, not the
+size of the reward. Removed the env-var-driven rate entirely rather than porting a number that
+doesn't mean anything for FIC; `effective_monthly_rate_bp` reports `0` now. The reward-detection
+mechanics themselves (`_attribute_rewards()`'s outputs-minus-inputs computation on the real
+coinstake transaction) needed no change — verified to still produce exactly the right number for
+FIC's different reward model (see "Verification" below).
+
+### Decision 3 removed price sourcing, not just the mobile wallet's UI for it
+
+CAC's `price_alerts.py` sourced a real (if thin) price from a PancakeSwap pool and a Stellar DEX
+order book — both only exist because CodexaCoin issues wrapped tokens on those chains, which this
+project already decided to drop (Decision 3). `fetch_fic_usd_price()` now always returns `None`;
+`/v1/price` always answers `503 not-available`, verified directly rather than assumed. The
+CRUD/one-shot-trigger machinery around it needed no change — a real price source, if one ever
+exists, is a one-function swap.
+
+### Verification: full custodial-staking lifecycle, against a real node
+
+Ran against a real regtest `firstislamiccoind` node (regtest's 10-block maturity and ~1s block
+spacing make a real coinstake observable in minutes, unlike testnet/mainnet's real chain time) —
+the same live-node standard Phases 2 and 8 were held to:
+
+- Signup → login (JWT) → deposit address → funded externally → watcher detected it
+  (`delegated_amount` became exactly the amount sent).
+- The deposit staked for real: `listtransactions` showed `category: "generate", amount: 10.0` —
+  **exactly** the fixed block reward. The watcher then credited `accrued_rewards` as exactly
+  `10 FIC − 5% pool fee = 9.5 FIC` net — the pool-fee math matched precisely.
+- Referral: a second signup using the first user's real referral code, funding a 1000 FIC deposit,
+  credited exactly `10%` (10 FIC) to the referrer — masked email confirmed correct in the history
+  endpoint.
+- General wallet endpoints (`balance`/`utxos`/`history`/`tx-detail`/`fee-estimate`/`broadcast`)
+  verified against a real ordinary send and a separately-built-and-signed raw transaction actually
+  broadcast through the gateway's own `/v1/tx/broadcast`, not just via the node directly.
+- Error paths verified, not just assumed: invalid address (400), missing auth (401), unfunded
+  admin wallet on referral withdrawal (clean `not-found`), `/v1/price` with no source (503).
+
+Full command-by-command account in `firstislamiccoin-staking-service/README.md`'s "Verification"
+section.
+
+### One real finding from verification, flagged rather than fixed
+
+After the deposit's coin staked once (and kept re-staking on subsequent maturities — an accepted,
+CAC-inherited limitation, see `staking.py`'s docstring), its resulting UTXO came back
+`"solvable": false` — a raw P2PK script, not the P2PKH the deposit address used — and
+`sendtoaddress` failed with `Insufficient funds` despite the wallet holding the coin and its keys.
+This looks like a general issue in `firstislamiccoin-core`'s coinstake-construction code (possibly
+reserving a destination outside the descriptor wallet's normal bookkeeping) that could affect any
+descriptor wallet that stakes, not something specific to this gateway. Flagged for a focused
+core-side investigation rather than guessed at or fixed here — it touches consensus-adjacent wallet
+code well outside this phase's scope.
+
+### Not done in this pass
+
+- **Not deployed anywhere.** No server, no DNS record. `docs/dns.md` already lists
+  `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` as planned (added
+  during Phase 5) but neither is live.
+- **`firstislamiccoin-infra/provisioning/staking-service/`** has the systemd units (adapted from
+  CAC's own) but no `provision.sh` — CAC's own `vps-gateway` didn't build one either.
+- **Web Push / FCM push** exercised only structurally (no VAPID keys or Firebase service account
+  in this environment) — both took their documented no-op branch rather than actually delivering a
+  notification.
+- **The coinstake-output solvability finding above.**
+
+### `TODO-HUMAN`
+
+Server, DNS, VAPID/FCM credentials, and the core-side coinstake-output investigation — tracked in
+the table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -992,3 +1083,6 @@ those are removed.
 | 13 | Mobile: publish `firstislamiccoin-mobile/store/privacy-policy.md` at a real, reachable URL (both stores require one) and have it reviewed by a lawyer | Phase 5 |
 | 14 | Mobile: native-speaker review of `lib/l10n/app_ar.arb`'s Arabic strings, plus real Urdu/Bahasa Indonesia/Malay/Turkish translations — see `firstislamiccoin-mobile/docs/localization.md` | Phase 5 |
 | 15 | Mobile: real Android/iOS device or emulator build (`flutter build apk`/`flutter build ios`), plus a physical-device check of the Face ID/fingerprint app-lock flow and camera QR scanning now that `Info.plist` declares them | Phase 5 |
+| 16 | Staking service: provision a real server and the `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` DNS records, generate a real `GATEWAY_JWT_SECRET`/`GATEWAY_KYC_ENCRYPTION_KEY`, fund `GATEWAY_ADMIN_WALLET` for referral payouts | Phase 6 |
+| 17 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
+| 18 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
