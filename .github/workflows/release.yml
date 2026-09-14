@@ -1,0 +1,227 @@
+name: release
+
+# Builds Linux (tarball + .deb), Windows (NSIS installer), and macOS (.dmg)
+# desktop wallet artifacts on tag push and attaches them to a GitHub
+# Release. Cross-compiles for Linux and Windows on an Ubuntu runner via the
+# depends/ system (same approach firstislamiccoin-core/.github/workflows/
+# build.yml's CI matrix already uses on every push). macOS builds natively
+# on a macos runner (no cross-compilation) so it can use the same
+# contrib/macdeploy/build_dmg.sh path a local dev build would.
+#
+# Forked from CAC's own top-level release.yml (docs/repo-map.md) --
+# CodexaCoin's is a single monorepo too, so this lives at the same place
+# for the same reason theirs does: GitHub Actions only discovers
+# workflows under the repository root's .github/workflows/, and the
+# actual source tree is one level down, at firstislamiccoin-core/ --
+# every build step below sets working-directory to compensate.
+#
+# Like every other CI/deploy workflow in this project (see
+# firstislamiccoin-mobile/.github/workflows/ci.yml,
+# firstislamiccoin-website/.github/workflows/deploy.yml), this is
+# committed as ready-to-run infrastructure, not proof a release has
+# happened: no FirstIslamicCoin GitHub org/repository exists yet (`git
+# remote -v` returns nothing in this environment) for it to have ever
+# run against, and mainnet itself is still blocked on the Phase 10 key
+# ceremony (see docs/genesis.md) -- there is nothing to tag a real
+# release of yet either.
+#
+# Codesigning/notarization for macOS and Authenticode signing for Windows
+# are NOT done here -- see the TODO comments below and
+# contrib/macdeploy/build_dmg.sh's own TODO output. Both require real
+# certificates this repo does not have; artifacts from this workflow
+# would be unsigned.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # allow manual runs for testing without pushing a tag
+
+env:
+  MAKEJOBS: 4
+  SDK_URL: https://bitcoincore.org/depends-sources/sdks
+
+permissions:
+  contents: write # needed to create the Release and upload assets
+
+jobs:
+  linux:
+    name: linux-x86_64
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: firstislamiccoin-core
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make automake cmake curl g++-multilib libtool binutils-gold \
+            bsdmainutils pkg-config python3 patch bison ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Dependency cache
+        uses: actions/cache@v4.3.0
+        with:
+          path: ./firstislamiccoin-core/depends/built
+          key: release-linux-64-bit-depends-${{ hashFiles('firstislamiccoin-core/depends/packages/*') }}
+
+      - name: Build depends
+        run: make -j "$MAKEJOBS" -C depends HOST=x86_64-pc-linux-gnu
+
+      - name: Build FirstIslamicCoin
+        run: |
+          ./autogen.sh
+          ./configure --prefix="$PWD/depends/x86_64-pc-linux-gnu" --enable-sse2 \
+            --enable-glibc-back-compat LDFLAGS=-static-libstdc++ --enable-reduce-exports \
+            || ( cat config.log && false )
+          make -j "$MAKEJOBS" install
+
+      - name: Determine version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball
+        run: |
+          STAGE=firstislamiccoin-${{ steps.ver.outputs.version }}-x86_64-linux-gnu
+          mkdir -p "$STAGE/bin"
+          cp depends/x86_64-pc-linux-gnu/bin/firstislamiccoin* "$STAGE/bin/"
+          cp README.md COPYING "$STAGE/"
+          tar -czf "${STAGE}.tar.gz" "$STAGE"
+
+      - name: Package .deb (via fpm)
+        run: |
+          VER=${{ steps.ver.outputs.version }}
+          fpm -s dir -t deb \
+            --name firstislamiccoin \
+            --version "$VER" \
+            --architecture amd64 \
+            --description "FirstIslamicCoin (FIC) full node and CLI" \
+            --license MIT \
+            --url "https://firstislamiccoin.com/" \
+            --maintainer "FirstIslamicCoin developers" \
+            depends/x86_64-pc-linux-gnu/bin/firstislamiccoind=/usr/bin/firstislamiccoind \
+            depends/x86_64-pc-linux-gnu/bin/firstislamiccoin-cli=/usr/bin/firstislamiccoin-cli \
+            depends/x86_64-pc-linux-gnu/bin/firstislamiccoin-tx=/usr/bin/firstislamiccoin-tx
+
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: linux-x86_64
+          path: |
+            firstislamiccoin-core/*.tar.gz
+            firstislamiccoin-core/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: windows-x86_64
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: firstislamiccoin-core
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis g++-mingw-w64-x86-64 build-essential libtool \
+            autotools-dev automake pkg-config bsdmainutils curl git
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+
+      - name: Dependency cache
+        uses: actions/cache@v4.3.0
+        with:
+          path: ./firstislamiccoin-core/depends/built
+          key: release-windows-64-bit-depends-${{ hashFiles('firstislamiccoin-core/depends/packages/*') }}
+
+      - name: Build depends
+        run: make -j "$MAKEJOBS" -C depends HOST=x86_64-w64-mingw32
+
+      - name: Build FirstIslamicCoin
+        run: |
+          ./autogen.sh
+          CONFIG_SITE="$PWD/depends/x86_64-w64-mingw32/share/config.site" \
+            ./configure --prefix=/ --enable-sse2 \
+            LDFLAGS=-static-libgcc --enable-reduce-exports || ( cat config.log && false )
+          make -j "$MAKEJOBS" deploy
+
+      # TODO: sign the installer with a real Authenticode certificate before
+      # any public distribution, e.g.:
+      #   osslsigncode sign -certs cert.pem -key key.pem \
+      #     -n "FirstIslamicCoin Core" -i https://firstislamiccoin.com \
+      #     -in firstislamiccoin-*-win64-setup.exe -out firstislamiccoin-*-win64-setup-signed.exe
+      # This repo has no such certificate; artifacts here are unsigned and
+      # will trigger Windows SmartScreen warnings.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: windows-x86_64
+          path: "firstislamiccoin-core/*win64-setup.exe"
+          if-no-files-found: error
+
+  macos:
+    name: macos-x86_64
+    runs-on: macos-13 # x86_64 runner; matches this project's local dev build target
+    defaults:
+      run:
+        working-directory: firstislamiccoin-core
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Homebrew)
+        run: |
+          brew install boost libevent qt@5 pkg-config
+          echo "$(brew --prefix qt@5)/bin" >> "$GITHUB_PATH"
+
+      - name: Build FirstIslamicCoin
+        run: |
+          ./autogen.sh
+          ./configure --with-gui=yes --with-sqlite=yes --without-bdb \
+            --disable-bench --disable-tests --disable-fuzz-binary --disable-hardening
+          make -j "$(sysctl -n hw.ncpu)"
+
+      - name: Build .dmg
+        run: ./contrib/macdeploy/build_dmg.sh
+
+      # TODO: codesign + notarize before any public distribution -- see
+      # contrib/macdeploy/build_dmg.sh's own printed instructions. This
+      # repo has no Apple Developer ID certificate; the dmg produced here
+      # is unsigned and macOS Gatekeeper will warn on first launch.
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: macos-x86_64
+          path: "firstislamiccoin-core/*.dmg"
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    # macOS runners on the shared GitHub-hosted pool are known to queue for
+    # a long time under load (see CAC's own identical note) -- not worth
+    # blocking Linux+Windows releases on that. Publish as soon as those two
+    # are ready; macOS still builds above and its artifact (once/if it
+    # completes) can be attached to the release by hand.
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          pattern: linux-x86_64
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          pattern: windows-x86_64
+          merge-multiple: true
+
+      - name: List staged artifacts
+        run: ls -la artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true # leave as a draft so a human reviews before publishing -- see doc/release-process.md
+          generate_release_notes: true

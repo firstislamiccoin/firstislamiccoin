@@ -1132,6 +1132,62 @@ fee, and price alerts showing the honest "unavailable" price. Full account in
 
 Server and DNS for `wallet.firstislamiccoin.com`, VAPID keys — tracked in the table below.
 
+## Phase 3 — Desktop CI + release
+
+`firstislamiccoin-core/.github/workflows/{build.yml,ci.yml,docker_build_push_26.yml}` were already
+fully rebranded (verified: zero real `codexacoin`/`CodexaCoin` hits — the only `CAC` matches are
+`ccache`/`CCACHE` substrings) as part of Phase 1's core rebrand, so this phase's actual gap was
+narrower than the prompt's phase name suggests: a tag-triggered **release** workflow that packages
+desktop binaries, which CAC keeps at its monorepo root rather than inside `codexacoin-core/`.
+
+### `.github/workflows/release.yml`, forked to the monorepo root
+
+Added `.github/workflows/release.yml` at the repository root (not inside `firstislamiccoin-core/`),
+matching exactly where CAC's own equivalent lives and for the same reason theirs does: GitHub
+Actions only discovers workflows under the repository root's `.github/workflows/`, and this
+project's actual source tree is one level down. Forked with working-directory changed to
+`firstislamiccoin-core` throughout, binary/package names renamed
+(`firstislamiccoind`/`firstislamiccoin-cli`/`firstislamiccoin-tx`, package `firstislamiccoin`), and
+the `.deb`'s `--url` pointed at `firstislamiccoin.com` (CAC's pointed at a real
+`github.com/fakharnaqvi5313/codexacoin` — no equivalent exists for FIC, so this was dropped rather
+than pointed at a repository that isn't there).
+
+Confirmed no branding drift in what this workflow actually invokes: `contrib/macdeploy/build_dmg.sh`
+has zero CAC references (already generic/rebranded), and `configure.ac`'s `AC_INIT` already declares
+`FirstIslamicCoin Core` with `firstislamiccoin.com` as its URL — this workflow's `./configure` calls
+inherit that correctly with no changes needed there.
+
+### Why this couldn't be verified end-to-end here, and what was checked instead
+
+Actually running this workflow needs a real GitHub Actions runner (Linux/Windows/macOS
+cross-compilation, several dependency-heavy `depends/` builds) — not something to attempt inside
+this development environment. This is the same honest gap already established for every other
+CI/deploy workflow in this project (`firstislamiccoin-mobile/.github/workflows/ci.yml`,
+`firstislamiccoin-website/.github/workflows/deploy.yml`): committed as ready-to-run infrastructure,
+not proof a release has happened. Two things make that gap wider here than for those: no
+FirstIslamicCoin GitHub org/repository exists yet for this workflow to have ever run against
+(`git remote -v` returns nothing), and there is nothing to tag a real release *of* yet either --
+mainnet is still blocked on the Phase 10 key ceremony (`docs/genesis.md`'s placeholder premine).
+
+What was checked instead: the workflow file parses as valid YAML with the expected four jobs
+(`linux`, `windows`, `macos`, `publish-release`); every file/script path it references
+(`contrib/macdeploy/build_dmg.sh`, `doc/release-process.md`, `depends/packages/`, `README.md`,
+`COPYING`) exists in `firstislamiccoin-core/` and was inspected for accuracy, not just assumed
+present because CAC's did.
+
+### Codesigning and notarization
+
+Unchanged from CAC: Windows Authenticode signing and macOS codesigning/notarization are both
+explicitly `TODO`-commented in the workflow rather than attempted — both need real certificates
+this project doesn't have, and CAC's own workflow left them exactly as unsigned for the identical
+reason.
+
+### `TODO-HUMAN`
+
+A FirstIslamicCoin GitHub org/repository for this workflow to actually run in, and (separately, for
+a real public release) Windows Authenticode + macOS Developer ID certificates — tracked in the
+table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -1168,3 +1224,4 @@ those are removed.
 | 18 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
 | 19 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
 | 20 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
+| 21 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
