@@ -50,7 +50,16 @@ index 65e31724bc..f61b471953 100644
 
    mutex_.Lock();
    stats_[compact->compaction->level() + 1].Add(stats);' | patch -p1
-  git diff
+  # FirstIslamicCoin: this diagnostic `git diff` is not load-bearing (the
+  # patch above already succeeded or `set -e` would have aborted before
+  # here) -- but under the dockerized CI path (BASE_READ_ONLY_DIR is a
+  # subdirectory of this project's own monorepo, not a repo root of its
+  # own), 02_run_container.sh's rsync copies plain files into
+  # BASE_ROOT_DIR with no .git alongside them, so `git diff` here has no
+  # repository to diff against and fails the whole script. `|| true` keeps
+  # this purely informational, matching what it already was everywhere
+  # else this script runs (a real git checkout, where it always succeeds).
+  git diff || true
 )
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then

@@ -20,7 +20,14 @@ libs = [
     'libbitcoin_wallet_tool',
     'libbitcoin_wallet',
     'libbitcoin_zmq',
-    'bench_bitcoin',
+    # FirstIslamicCoin: src/Makefile.bench.include renamed the automake
+    # target to bench/bench_firstislamiccoin, so the generated SOURCES
+    # variable is bench_bench_firstislamiccoin_SOURCES (automake derives it
+    # from the program's path with '/' -> '_'). 'bench_firstislamiccoin'
+    # still matches via re.search below (it's the tail of that longer
+    # name) and keeps this project/folder free of the redundant doubled
+    # "bench_bench" prefix the raw automake name would otherwise produce.
+    'bench_firstislamiccoin',
     'libtest_util',
 ]
 
