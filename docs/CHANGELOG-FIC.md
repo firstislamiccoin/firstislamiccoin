@@ -1261,10 +1261,28 @@ the two `testnet-electrum{1,2}.firstislamiccoin.com` rows to `docs/dns.md` (CAC'
 this project's copy before this phase, only listed mainnet `electrum{1,2}`, even though
 `FirstIslamicCoinTestnet.PEERS` already names testnet-prefixed hosts).
 
+### Existing ElectrumX test suite: run, not just left alone
+
+Ran `tests/lib/test_coins.py` and `tests/test_blocks.py` (upstream's own unit tests, inherited
+unmodified) against the new coin classes: 130 passed, 33 skipped, 5 failed. All 5 failures
+pre-exist this phase and are not caused by it:
+
+- 4 are `ModuleNotFoundError: No module named 'blake256'` on Decred fixtures — an optional native
+  dependency this environment never installed, unrelated to any Blackcoin/CAC/FIC code path.
+- 1 is `test_all_coins_are_covered`, which asserts every mainnet `Coin` subclass has a real block
+  test fixture under `tests/blocks/`. CAC's own `CodexaCoin` mainnet class never had one either
+  (`tests/blocks/codexacoin_mainnet_*.json` does not exist in CAC's `electrumx-cac`) — FirstIslamicCoin
+  simply joins that same pre-existing gap, not a new regression. Closing it for real would mean
+  reconstructing FIC's actual mainnet genesis block bytes from `chainparams.cpp`'s placeholder
+  premine parameters via `contrib/genesis/generate_genesis.py` and getting a real node to emit them
+  — out of scope for this phase, and blocked on the same Phase 10 key ceremony that blocks mainnet
+  itself; tracked as its own `TODO-HUMAN` row rather than faked with invented block data.
+
 ### `TODO-HUMAN`
 
 No FirstIslamicCoin GitHub org/repository exists yet for `provision.sh`'s `REPO_URL` to clone from,
-and no real server or DNS record exists for either ElectrumX instance — tracked in the table below.
+no real server or DNS record exists for either ElectrumX instance, and no mainnet block-test
+fixture exists for `FirstIslamicCoin` in `tests/blocks/` — tracked in the table below.
 
 ## Prompt items that need no work
 
@@ -1303,3 +1321,4 @@ those are removed.
 | 19 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
 | 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
+| 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
