@@ -499,7 +499,9 @@ class WalletService extends ChangeNotifier {
     final feeResp = await _gateway.feeEstimate();
     final feeRate = int.tryParse(feeResp['fee_rate_sat_per_vbyte']?.toString() ?? '') ?? 1;
     final estimatedVsize = 10 + record.inputs.length * 148 + record.outputs.length * 34;
-    final rateBasedFee = (feeRate * estimatedVsize + 999) ~/ 1000;
+    // feeRate is already sat/vbyte -- see send_screen.dart's identical
+    // note on why this must NOT also divide by 1000.
+    final rateBasedFee = feeRate * estimatedVsize;
     // Must be a *meaningfully* higher fee, not just technically higher
     // (BIP125 rule 4 requires paying for the replacement's own
     // bandwidth too) -- take whichever is larger of "fresh rate

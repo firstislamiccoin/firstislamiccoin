@@ -127,11 +127,13 @@ class _OfflineSendScreenState extends State<OfflineSendScreen> {
         chosen.add(c);
         totalIn += c.valueSatoshis;
         final estimatedVsize = 10 + chosen.length * 148 + 2 * 34;
-        final feeSatoshis = (feeRate * estimatedVsize + 999) ~/ 1000;
+        // feeRate is already sat/vbyte -- see send_screen.dart's identical
+        // note on why this must NOT also divide by 1000.
+        final feeSatoshis = feeRate * estimatedVsize;
         if (totalIn >= amountSatoshis + feeSatoshis) break;
       }
       final finalVsize = 10 + chosen.length * 148 + 2 * 34;
-      final feeSatoshis = (feeRate * finalVsize + 999) ~/ 1000;
+      final feeSatoshis = feeRate * finalVsize;
       if (totalIn < amountSatoshis + feeSatoshis) {
         throw StateError('Insufficient funds: have $totalIn, need ${amountSatoshis + feeSatoshis}');
       }

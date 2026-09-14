@@ -174,15 +174,24 @@ class _SendScreenState extends State<SendScreen> {
         chosen.add(u);
         totalIn += u.valueSatoshis;
         final estimatedVsize = 10 + chosen.length * 148 + outputCount * 34;
-        // Round up, not down -- the node's own CFeeRate::GetFee() rounds up
-        // (ceil), so truncating division here computes exactly 1 satoshi
-        // too little on almost every real transaction and gets rejected as
-        // bad-txns-fee-not-enough.
-        final feeSatoshis = (feeRate * estimatedVsize + 999) ~/ 1000;
+        // feeRate is already satoshis-per-vbyte (GatewayApi.feeEstimate's
+        // fee_rate_sat_per_vbyte -- see the staking-service's fee_estimate,
+        // which converts mempoolminfee's BTC/kvB all the way down to
+        // sat/vbyte itself), so the fee is feeRate * vsize directly, no
+        // further /1000 "per-kvB" conversion. This file previously had
+        // exactly that extra /1000 (inherited from CAC's identical code),
+        // making every send pay 1000x less fee than intended -- harmless
+        // on CAC, which has no consensus-level minimum-fee check, but a
+        // real, send-blocking bug on FIC, which does enforce one (see
+        // firstislamiccoin-core's consensus/tx_verify.cpp GetMinFee).
+        // Found live during Phase 7's web-wallet browser verification: a
+        // real send against a real regtest node came back
+        // bad-txns-fee-not-enough even at 50x the recommended rate.
+        final feeSatoshis = feeRate * estimatedVsize;
         if (totalIn >= amountTotalSatoshis + feeSatoshis) break;
       }
       final finalVsize = 10 + chosen.length * 148 + outputCount * 34;
-      final feeSatoshis = (feeRate * finalVsize + 999) ~/ 1000;
+      final feeSatoshis = feeRate * finalVsize;
       if (totalIn < amountTotalSatoshis + feeSatoshis) {
         throw StateError('Insufficient funds: have $totalIn, need ${amountTotalSatoshis + feeSatoshis}');
       }

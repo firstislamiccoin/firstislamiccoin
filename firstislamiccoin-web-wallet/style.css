@@ -1,0 +1,323 @@
+/* Palette from firstislamiccoin-brand/tokens/theme.css -- the same brand
+   tokens the website and explorer use, not a generic reskin. Light is the
+   brand's primary palette (warm off-white bg, deep green accent); dark
+   swaps to the brand's own dark-mode tokens, not just an inverted light
+   palette. Applied three ways: the plain :root block (fallback for
+   browsers without prefers-color-scheme support -- brand light, since
+   that's the primary palette here, unlike CAC's dark-first original),
+   the media query (system preference, when the user hasn't overridden
+   it), and the [data-theme] attribute (explicit override from the
+   Settings screen, set on <html> before first paint by the inline
+   script in index.html so there's no flash of the wrong theme). */
+:root {
+  --accent: #D4AF37;
+  --bg: #F7F5EE;
+  --bg-card: #FFFFFF;
+  --text: #14201B;
+  --text-dim: #5E6B65;
+  --danger: #C2413B;
+  --ok: #1E9E6A;
+  --border: #D9D6CB;
+  --input-bg: #FFFFFF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --accent: #E9CC6A;
+    --bg: #0A1F17;
+    --bg-card: #10291F;
+    --text: #EEF2EE;
+    --text-dim: #9DB0A6;
+    --danger: #e06666;
+    --ok: #6fcf97;
+    --border: #23483A;
+    --input-bg: #0A1F17;
+  }
+}
+:root[data-theme="light"] {
+  --accent: #D4AF37;
+  --bg: #F7F5EE;
+  --bg-card: #FFFFFF;
+  --text: #14201B;
+  --text-dim: #5E6B65;
+  --danger: #C2413B;
+  --ok: #1E9E6A;
+  --border: #D9D6CB;
+  --input-bg: #FFFFFF;
+}
+:root[data-theme="dark"] {
+  --accent: #E9CC6A;
+  --bg: #0A1F17;
+  --bg-card: #10291F;
+  --text: #EEF2EE;
+  --text-dim: #9DB0A6;
+  --danger: #e06666;
+  --ok: #6fcf97;
+  --border: #23483A;
+  --input-bg: #0A1F17;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 20px; color: var(--accent); font-family: "Poppins", sans-serif; }
+header .network-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.new-tx-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--accent);
+  color: #0A1F17;
+  font-size: 13px;
+  font-weight: 600;
+}
+.new-tx-banner span[role="button"] { cursor: pointer; }
+.new-tx-banner button {
+  width: auto;
+  margin-top: 0;
+  padding: 0 8px;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+}
+
+main { flex: 1; padding: 20px; }
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.balance {
+  text-align: center;
+  font-size: 36px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+.balance-sub { text-align: center; color: var(--text-dim); font-size: 13px; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 999px;
+  border: none;
+  padding: 12px 20px;
+  width: 100%;
+  margin-top: 8px;
+}
+button.primary { background: var(--accent); color: #0A1F17; font-weight: 600; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+button.secondary.active { background: var(--accent); color: #0A1F17; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, textarea, select {
+  font: inherit;
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+/* <select> ignores background/color from the rule above on its own in
+   several browsers (WebKit in particular) without appearance:none --
+   the native dropdown chrome takes over the closed-state rendering too,
+   producing a white box that clashes with the rest of the theme. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%235E6B65' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 11px;
+  padding-right: 36px;
+}
+select option {
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+#send-fee-row { align-items: center; gap: 6px; }
+#send-fee-row > * { flex: none; }
+#send-fee-row .field-label { margin-right: 4px; }
+#send-fee-row button { padding: 4px 10px; }
+#send-fee-rate { width: 70px; text-align: center; flex: none; }
+
+.tabbar {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+.tabbar button {
+  flex: 1;
+  background: none;
+  border-radius: 0;
+  color: var(--text-dim);
+  padding: 14px 4px;
+  font-size: 12px;
+  margin: 0;
+}
+.tabbar button.active { color: var(--accent); }
+
+.error { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.notice { color: var(--text-dim); font-size: 13px; margin: 8px 0; }
+.notice.small { font-size: 11px; }
+.success { color: var(--ok); font-size: 13px; margin: 8px 0; }
+
+.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
+
+.mnemonic-box {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.tx-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.tx-row:last-child { border-bottom: none; }
+
+.field-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+/* QR code (receive) */
+.qr-box {
+  display: flex;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* Modals (QR scan, tx detail) */
+.modal-overlay, .lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+.lock-overlay { z-index: 200; background: var(--bg); }
+.lock-overlay .card { width: 100%; max-width: 360px; }
+.modal-overlay .card { width: 100%; max-width: 440px; max-height: 85vh; overflow-y: auto; }
+
+.qr-scan-card video {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+  margin: 8px 0;
+}
+.qr-scan-btn { flex: 0 0 auto; width: auto; padding: 12px 16px; margin-top: 0; }
+#send-recipients .row:has(.qr-scan-btn) input { margin-bottom: 0; }
+
+/* Multi-recipient batch send rows */
+.recipient-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.recipient-row:first-child { padding-top: 0; }
+.recipient-row:last-child { border-bottom: none; }
+.recipient-row .recipient-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.recipient-row .remove-recipient-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.tx-detail-card .kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.tx-detail-card .kv-row:last-child { border-bottom: none; }
+.tx-detail-card .kv-row span:first-child { color: var(--text-dim); flex: 0 0 auto; }
+.tx-detail-card .kv-row span:last-child { text-align: right; word-break: break-all; }
+
+/* Address book / address list rows */
+.book-row, .addr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.book-row:last-child, .addr-row:last-child { border-bottom: none; }
+.book-row .book-info, .addr-row .addr-info { min-width: 0; flex: 1; }
+.book-row .book-label { color: var(--text); font-weight: 600; }
+.book-row .book-address, .addr-row { word-break: break-all; }
+.book-row button, .addr-row button {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.addr-row.current { color: var(--accent); }
+
+.tx-row { cursor: pointer; }
+.tx-row:hover { opacity: 0.8; }

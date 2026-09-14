@@ -1052,6 +1052,86 @@ code well outside this phase's scope.
 Server, DNS, VAPID/FCM credentials, and the core-side coinstake-output investigation — tracked in
 the table below.
 
+## Phase 7 — Web wallet
+
+Forked from `codexacoin/web-wallet/` into `firstislamiccoin-web-wallet/` per `docs/repo-map.md`. A
+static, no-build-step browser wallet talking to the same `firstislamiccoin-staking-service` gateway
+and `mobile-api.md` contract the mobile app uses. `qr.js` needed zero changes (nothing in it was
+CAC-specific); `gateway.js`, `message.js`, `storage.js`, `sw.js` needed only renames.
+
+### Decision 3 removed price.js entirely, not just its UI
+
+CAC's `price.js` sourced a real (if thin) price from a PancakeSwap pool and a Stellar DEX order
+book for the Home/Send screens' fiat estimate and a "Buy / Sell CAC (PancakeSwap)" button — all
+only possible because CodexaCoin issues wrapped tokens on those chains, which this project already
+decided to drop. `price.js` was deleted outright; both fiat-estimate spots are now permanently
+empty and the PancakeSwap button is gone. The price-alerts feature's "current price" display
+needed **no code change at all** — it already called the gateway's `/v1/price`, which Phase 6
+already made honestly return `503`, and the existing `catch` block already rendered "unavailable"
+for that case. Verified directly in a real browser against a real gateway, not just reasoned about:
+the staking screen's price-alerts card showed "Current price: unavailable right now" exactly as
+designed.
+
+### A real bug found (and fixed, in both wallets) by testing in a real browser
+
+Every fee calculation in both `web-wallet/app.js` and `cac_wallet`'s Dart screens divides
+`feeRate * estimatedVsize` by 1000 (`(feeRate * vsize + 999) / 1000`), as if `feeRate` were
+satoshis-per-*kilobyte*. It isn't — the gateway's `/v1/fee-estimate` (`fee_rate_sat_per_vbyte`,
+both the field name and every UI label) has always returned satoshis-per-*byte*, converted fully
+from `mempoolminfee` server-side. The extra `/1000` silently computed a fee **1000x smaller** than
+intended on both CAC and FIC alike — invisible on CAC, which has no consensus-level minimum-fee
+check, so an underpaid transaction still relayed and mined fine. FIC is not so forgiving:
+`firstislamiccoin-core/src/consensus/tx_verify.cpp`'s `GetMinFee`/`TX_FEE_PER_KB` (comment-marked
+`// FirstIslamicCoin:`, i.e. new consensus code, not something inherited from Blackcoin/CAC) enforces
+a real per-byte minimum, and every send at or near the recommended rate was silently building a
+transaction the network would reject outright.
+
+Found live, not by re-reading the code: building the mobile wallet (Phase 5) only ever exercised
+this formula against static test values, never a real broadcast (no gateway existed yet). Phase 6's
+own verification broadcast several real transactions, but always via the *node's own* `sendtoaddress`
+RPC — never through the gateway's `/v1/tx/broadcast` + client-side `buildAndSignTransaction` path
+this bug actually lives in. Phase 7 was the first time that exact path got exercised end-to-end in
+a real browser against a real regtest node: a send at the displayed "recommended" rate came back
+`bad-txns-fee-not-enough`, and manually overriding the UI's fee-rate field to 50x the floor (the
+maximum the slider allows) still failed identically — the tell that the override wasn't reaching
+the actual computation at all, not just that the floor itself was too low.
+
+Fixed by removing the erroneous `/1000` everywhere it appeared — `feeRate * vsize` needs no
+rounding correction once the extra division is gone, since both operands are already integers.
+Six call sites in `firstislamiccoin-web-wallet/app.js` (send, multisig propose, bump-fee, and the
+send-screen live estimate); seven in `firstislamiccoin-mobile/`: `send_screen.dart` (×2),
+`multisig_screen.dart` (×2), `offline_send_screen.dart` (×2), `wallet_service.dart`'s `bumpFee`
+(×1) — all committed in this same phase's commit, not deferred, since the mobile wallet's Phase 5
+commit was already merged with the bug present. Re-verified after the fix: the same send that
+failed now broadcasts and confirms on-chain at the exact intended fee.
+
+### Verification
+
+Tested in a real browser (not just read for correctness), against a real regtest
+`firstislamiccoind` node and a real `firstislamiccoin-staking-service` instance — the same
+live-node standard Phases 2, 6, and 8 were held to: wallet creation (real BIP39/BIP32 via the
+CDN-loaded `@noble`/`@scure` libraries, producing a correctly-prefixed `m…`/testnet-style address —
+regtest shares testnet's version bytes), network switching, balance display against a real funded
+address, a real send (initially failed on the bug above, fixed, then succeeded and confirmed
+on-chain), QR rendering on Receive, staking signup/login (JWT + KYC fields) and deposit (real
+deposit address from the pool wallet), staking status showing the honest `0%` rate and `5%` pool
+fee, and price alerts showing the honest "unavailable" price. Full account in
+`firstislamiccoin-web-wallet/README.md`'s "Verification" section.
+
+### Not done in this pass
+
+- **Not deployed anywhere.** No server, no DNS record — `docs/dns.md` already lists
+  `wallet.firstislamiccoin.com` as planned (Phase 0) but it isn't live.
+- **Multisig, watch-only/xpub, message sign/verify, and PIN-lock screens** were read for
+  correctness and exercised only lightly in this pass's browser session (the send-flow bug hunt and
+  fix took priority) — not each individually driven through a full real scenario the way the send
+  and staking flows were.
+- **Web Push** exercised only structurally (no VAPID keys in this environment).
+
+### `TODO-HUMAN`
+
+Server and DNS for `wallet.firstislamiccoin.com`, VAPID keys — tracked in the table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -1086,3 +1166,5 @@ those are removed.
 | 16 | Staking service: provision a real server and the `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` DNS records, generate a real `GATEWAY_JWT_SECRET`/`GATEWAY_KYC_ENCRYPTION_KEY`, fund `GATEWAY_ADMIN_WALLET` for referral payouts | Phase 6 |
 | 17 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
 | 18 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
+| 19 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
+| 20 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |

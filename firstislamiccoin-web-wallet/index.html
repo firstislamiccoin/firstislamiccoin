@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FirstIslamicCoin Web Wallet</title>
+<script>
+  // Applied before the stylesheet loads / first paint, so an explicit
+  // dark/light override (set from Settings) doesn't flash the system
+  // default for a frame. "system" (or no saved value) leaves the
+  // data-theme attribute unset entirely, so style.css's
+  // prefers-color-scheme media query is what actually governs.
+  (function () {
+    var saved = localStorage.getItem("fic_theme");
+    if (saved === "dark" || saved === "light") {
+      document.documentElement.dataset.theme = saved;
+    }
+  })();
+</script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>FirstIslamicCoin Wallet</h1>
+    <div class="network-badge" id="network-badge">mainnet</div>
+  </header>
+
+  <div class="new-tx-banner" id="new-tx-banner" style="display:none">
+    <span id="new-tx-banner-text" role="button" tabindex="0"></span>
+    <button type="button" id="btn-new-tx-dismiss" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <!-- App lock overlay -->
+  <div class="lock-overlay" id="lock-overlay" style="display:none">
+    <div class="card">
+      <p class="field-label">Enter your PIN to unlock</p>
+      <input id="lock-pin" type="password" inputmode="numeric" autocomplete="off" />
+      <button class="primary" id="btn-unlock">Unlock</button>
+      <div class="error" id="lock-error"></div>
+    </div>
+  </div>
+
+  <main>
+    <!-- Onboarding -->
+    <section class="screen active" id="screen-onboarding">
+      <div class="card">
+        <p>Create a new wallet or restore one from an existing recovery phrase.
+           Your key is generated and stored only in this browser -- see the
+           "Security note" at the bottom before using this with real funds.</p>
+        <button class="primary" id="btn-create-wallet">Create a new wallet</button>
+        <button class="secondary" id="btn-show-restore">Restore from recovery phrase</button>
+      </div>
+      <div class="card" id="restore-card" style="display:none">
+        <label class="field-label">Recovery phrase (12 words, space-separated)</label>
+        <textarea id="restore-mnemonic" rows="3"></textarea>
+        <button class="primary" id="btn-restore-confirm">Restore</button>
+        <div class="error" id="restore-error"></div>
+      </div>
+      <div class="card" id="new-mnemonic-card" style="display:none">
+        <p><strong>Write down these 12 words in order.</strong> Anyone with this
+           phrase can spend your funds. FirstIslamicCoin cannot recover it for you.</p>
+        <div class="mnemonic-box mono" id="new-mnemonic"></div>
+        <label class="field-label"><input type="checkbox" id="confirm-written" /> I have written down my recovery phrase</label>
+        <button class="primary" id="btn-mnemonic-continue" disabled>Continue</button>
+      </div>
+      <div class="card" id="mnemonic-quiz-card" style="display:none">
+        <p><strong>Confirm your backup.</strong> Enter the requested words from
+           the phrase you just wrote down, to make sure it was recorded
+           correctly before it's needed.</p>
+        <div id="mnemonic-quiz-fields"></div>
+        <button class="primary" id="btn-quiz-verify">Verify &amp; continue</button>
+        <button class="secondary" id="btn-quiz-back">Show phrase again</button>
+        <div class="error" id="mnemonic-quiz-error"></div>
+      </div>
+      <div class="card">
+        <p class="notice">Security note: unlike the mobile app (which stores your
+           key in the OS Keychain/Keystore), this web wallet keeps your recovery
+           phrase in this browser's localStorage. Setting a PIN (Settings tab,
+           after creating/restoring a wallet) encrypts it at rest with a key
+           derived from that PIN (PBKDF2 + AES-GCM, via the browser's own Web
+           Crypto API) -- real protection against someone reading localStorage
+           directly, but it only holds up if your PIN itself isn't guessable,
+           and offers no protection once the wallet is unlocked in an open tab.
+           Best used for testnet or small amounts; the mobile app is the safer
+           choice for real funds. See README.md for the full reasoning.</p>
+      </div>
+    </section>
+
+    <!-- Home -->
+    <section class="screen" id="screen-home">
+      <div class="card">
+        <div class="balance" id="home-balance">0.00000000 FIC</div>
+        <p class="notice small" id="home-fiat-value"></p>
+        <div class="balance-sub" id="home-address"></div>
+        <p class="notice small" id="home-address-count"></p>
+      </div>
+      <div class="error" id="home-error"></div>
+    </section>
+
+    <!-- Send -->
+    <section class="screen" id="screen-send">
+      <div class="card">
+        <div id="send-recipients"></div>
+        <button class="secondary" id="btn-add-recipient" type="button">+ Add recipient</button>
+        <p class="notice small" id="send-amount-fiat"></p>
+        <div class="row" id="send-fee-row">
+          <span class="field-label">Network fee</span>
+          <button class="secondary" id="btn-fee-decrease" type="button" title="Decrease fee rate">&minus;</button>
+          <input type="number" id="send-fee-rate" step="10" />
+          <span class="notice small">sat/vB</span>
+          <button class="secondary" id="btn-fee-increase" type="button" title="Increase fee rate">+</button>
+          <button class="secondary" id="btn-fee-reset" type="button">Reset</button>
+        </div>
+        <p class="notice small" id="send-fee-estimate"></p>
+        <button class="primary" id="btn-send-confirm">Send</button>
+        <div class="error" id="send-error"></div>
+        <div class="success" id="send-success"></div>
+      </div>
+      <div class="card" id="address-book-card">
+        <p class="field-label">Address book</p>
+        <div id="address-book-list"><p class="notice">No saved addresses yet.</p></div>
+        <div class="row">
+          <input id="new-book-label" placeholder="Label" />
+          <input id="new-book-address" placeholder="Address" />
+        </div>
+        <button class="secondary" id="btn-book-add">Save address</button>
+      </div>
+    </section>
+
+    <!-- QR scan modal -->
+    <div class="modal-overlay" id="qr-scan-overlay" style="display:none">
+      <div class="card qr-scan-card">
+        <p class="field-label">Point your camera at a QR code</p>
+        <video id="qr-video" playsinline muted></video>
+        <canvas id="qr-scan-canvas" style="display:none"></canvas>
+        <div class="error" id="qr-scan-error"></div>
+        <button class="secondary" id="btn-qr-scan-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Receive -->
+    <section class="screen" id="screen-receive">
+      <div class="card">
+        <div class="qr-box"><canvas id="receive-qr"></canvas></div>
+        <p class="field-label">Your receive address</p>
+        <p class="mono" id="receive-address"></p>
+        <button class="secondary" id="btn-copy-address">Copy address</button>
+        <button class="secondary" id="btn-view-on-explorer">View on explorer</button>
+        <label class="field-label">Request a specific amount (optional)</label>
+        <input id="receive-request-amount" type="number" step="0.00000001" placeholder="Leave blank for just the address" />
+      </div>
+      <div class="card">
+        <p class="field-label">Previously used addresses</p>
+        <p class="notice small">This wallet derives a new address each time you
+           tap "New address" below rather than automatically rotating one for
+           you -- balance and history are combined across every address you've
+           generated. It does not scan for addresses used elsewhere (e.g. by
+           another copy of this wallet restored from the same phrase) beyond
+           what's listed here.</p>
+        <div id="address-list"></div>
+        <button class="secondary" id="btn-new-address">New address</button>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="screen" id="screen-history">
+      <div class="card" id="history-list">
+        <p class="notice">Loading...</p>
+      </div>
+      <button class="secondary" id="btn-export-csv">Export as CSV</button>
+    </section>
+
+    <!-- Transaction detail modal -->
+    <div class="modal-overlay" id="tx-detail-overlay" style="display:none">
+      <div class="card tx-detail-card">
+        <p class="field-label">Transaction</p>
+        <div id="tx-detail-body"><p class="notice">Loading...</p></div>
+        <button class="secondary" id="btn-tx-detail-bump-fee" style="display:none">Bump fee</button>
+        <div class="error" id="tx-detail-bump-error"></div>
+        <div class="success" id="tx-detail-bump-success"></div>
+        <button class="secondary" id="btn-tx-detail-explorer">View on explorer</button>
+        <button class="secondary" id="btn-tx-detail-close">Close</button>
+      </div>
+    </div>
+
+    <!-- Staking -->
+    <section class="screen" id="screen-staking">
+      <div class="card" id="staking-auth-card">
+        <p class="notice">Sign in to the staking pool to deposit, withdraw, and
+           see accrued rewards.</p>
+        <label class="field-label">Email</label>
+        <input id="stake-email" type="email" />
+        <label class="field-label">Password</label>
+        <input id="stake-password" type="password" />
+        <div id="signup-only-fields">
+          <p class="notice">Signing up also requires the fields below.
+             This is self-attested information, not verified identity
+             checking -- see the note at the bottom of this section.</p>
+          <label class="field-label">Full name</label>
+          <input id="stake-full-name" type="text" autocomplete="name" />
+          <label class="field-label">Date of birth</label>
+          <input id="stake-dob" type="date" />
+          <label class="field-label">ID type</label>
+          <select id="stake-id-type">
+            <option value="nic">National ID card</option>
+            <option value="passport">Passport</option>
+          </select>
+          <label class="field-label">ID number</label>
+          <input id="stake-id-number" type="text" autocomplete="off" />
+          <label class="field-label">Referral code (optional)</label>
+          <input id="stake-referral-code" type="text" autocomplete="off" placeholder="Leave blank if none" />
+        </div>
+        <div class="row">
+          <button class="primary" id="btn-stake-login">Log in</button>
+          <button class="secondary" id="btn-stake-signup">Sign up</button>
+        </div>
+        <div class="error" id="stake-auth-error"></div>
+        <p class="notice small">These fields are stored as entered and are not
+           checked against any document or verification provider. Your ID
+           number is encrypted before storage; your name and date of birth
+           are not.</p>
+        <p class="notice small">By signing up you agree to the
+           <a href="https://firstislamiccoin.com/legal/terms.html" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+           and <a href="https://firstislamiccoin.com/legal/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.
+           No separate AML/KYC Policy is published yet.</p>
+      </div>
+      <div class="card" id="staking-status-card" style="display:none">
+        <div class="stat-row"><span>Delegated</span><span id="stat-delegated">0 FIC</span></div>
+        <div class="stat-row"><span>Accrued rewards</span><span id="stat-rewards">0 FIC</span></div>
+        <div class="stat-row"><span>Rate</span><span id="stat-rate">-</span></div>
+        <div class="stat-row"><span>Pool fee</span><span id="stat-fee">-</span></div>
+      </div>
+      <div class="card" id="push-card" style="display:none">
+        <p class="notice">Get a browser notification when a deposit is confirmed or a staking reward is credited.</p>
+        <button class="secondary" id="btn-enable-push">Enable notifications</button>
+        <div class="error" id="push-error"></div>
+        <div class="success" id="push-success"></div>
+      </div>
+      <div class="card" id="price-alerts-card" style="display:none">
+        <p class="notice">Get notified when FIC's estimated price crosses a level
+           you set (via the same browser notifications enabled above). Each
+           alert fires once, then you can set a new one.</p>
+        <p class="notice small" id="price-alerts-current">Current price: loading...</p>
+        <div class="row">
+          <select id="price-alert-direction">
+            <option value="above">Goes above</option>
+            <option value="below">Goes below</option>
+          </select>
+          <input id="price-alert-threshold" type="number" step="0.000001" min="0" placeholder="USD" />
+          <button class="secondary" id="btn-price-alert-add">Add alert</button>
+        </div>
+        <div class="error" id="price-alert-error"></div>
+        <div id="price-alert-list"><p class="notice">No alerts set.</p></div>
+      </div>
+      <div class="card" id="staking-actions-card" style="display:none">
+        <label class="field-label">Deposit amount (FIC)</label>
+        <input id="deposit-amount" type="number" step="0.00000001" />
+        <button class="primary" id="btn-stake-deposit">Get deposit address</button>
+        <div id="deposit-result" class="success mono"></div>
+        <hr style="border-color:var(--border);margin:16px 0" />
+        <label class="field-label">Withdraw amount (FIC)</label>
+        <input id="withdraw-amount" type="number" step="0.00000001" />
+        <label class="field-label">To address (your own wallet)</label>
+        <input id="withdraw-address" />
+        <button class="secondary" id="btn-stake-withdraw">Withdraw</button>
+        <div class="error" id="staking-action-error"></div>
+        <div class="success" id="staking-action-success"></div>
+      </div>
+      <div class="card" id="referral-card" style="display:none">
+        <p class="notice">Share your code. When someone signs up with it and
+           makes their first deposit, you get 10% of that deposit, credited
+           here -- withdraw it to any address whenever you like.</p>
+        <div class="stat-row">
+          <span>Your code</span>
+          <span>
+            <span id="stat-referral-code" class="mono">-</span>
+            <button class="secondary" id="btn-referral-copy" type="button" title="Copy referral code">Copy</button>
+          </span>
+        </div>
+        <div class="stat-row"><span>People referred</span><span id="stat-referral-count">0</span></div>
+        <div class="stat-row"><span>Available to withdraw</span><span id="stat-referral-available">0 FIC</span></div>
+        <label class="field-label">Withdraw to address</label>
+        <input id="referral-withdraw-address" />
+        <button class="secondary" id="btn-referral-withdraw">Withdraw referral credit</button>
+        <div class="error" id="referral-action-error"></div>
+        <div class="success" id="referral-action-success"></div>
+        <hr style="border-color:var(--border);margin:16px 0" />
+        <p class="field-label">Referral history</p>
+        <div id="referral-history-list"><p class="notice">No referrals yet.</p></div>
+      </div>
+    </section>
+
+    <!-- Multisig -->
+    <section class="screen" id="screen-multisig">
+      <div class="card">
+        <p class="notice">Create a shared N-of-M address, propose a spend,
+           collect signatures from cosigners, and broadcast once enough have
+           signed. Proposals are plain JSON -- send them to cosigners however
+           you like (email, a shared file); nothing here transmits them for
+           you.</p>
+      </div>
+      <div class="card">
+        <p class="field-label">1. Create a multisig address</p>
+        <p class="notice small">Your own compressed public key (included automatically): <span class="mono" id="my-pubkey"></span></p>
+        <label class="field-label">Cosigners' public keys (one per line, 33-byte compressed hex, not including your own)</label>
+        <textarea id="ms-pubkeys" rows="3"></textarea>
+        <label class="field-label">Signatures required (M)</label>
+        <input id="ms-m" type="number" min="1" value="2" />
+        <button class="primary" id="btn-ms-create">Generate address</button>
+        <div class="error" id="ms-create-error"></div>
+        <div id="ms-create-result" style="display:none">
+          <p class="field-label">Redeem script (share with cosigners -- required to spend)</p>
+          <p class="mono" id="ms-redeem-script"></p>
+          <p class="field-label">Multisig address</p>
+          <p class="mono" id="ms-address"></p>
+        </div>
+      </div>
+      <div class="card">
+        <p class="field-label">2. Propose a spend</p>
+        <label class="field-label">Multisig address (must have funds)</label>
+        <input id="ms-propose-address" />
+        <label class="field-label">Redeem script (hex)</label>
+        <textarea id="ms-propose-redeem" rows="2"></textarea>
+        <label class="field-label">Destination address</label>
+        <input id="ms-propose-to" />
+        <label class="field-label">Amount (FIC)</label>
+        <input id="ms-propose-amount" type="number" step="0.00000001" />
+        <button class="secondary" id="btn-ms-propose">Create proposal</button>
+        <div class="error" id="ms-propose-error"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">3. Sign / combine / broadcast a proposal</p>
+        <label class="field-label">Proposal JSON (paste one, or several to combine)</label>
+        <textarea id="ms-proposal-json" rows="6" class="mono"></textarea>
+        <div class="row">
+          <button class="secondary" id="btn-ms-show-qr">Show as QR</button>
+          <button class="secondary" id="btn-ms-scan-qr">Scan QR</button>
+        </div>
+        <div class="row">
+          <button class="secondary" id="btn-ms-sign">Sign with my key</button>
+          <button class="secondary" id="btn-ms-broadcast">Finalize &amp; broadcast</button>
+        </div>
+        <div class="error" id="ms-sign-error"></div>
+        <div class="success" id="ms-sign-success"></div>
+      </div>
+    </section>
+
+    <!-- Multisig proposal QR display -->
+    <div class="modal-overlay" id="ms-qr-overlay" style="display:none">
+      <div class="card qr-scan-card">
+        <p class="field-label">Scan this on another device</p>
+        <div class="qr-box"><canvas id="ms-qr-canvas"></canvas></div>
+        <div class="error" id="ms-qr-error"></div>
+        <button class="secondary" id="btn-ms-qr-close">Close</button>
+      </div>
+    </div>
+
+    <!-- Watch-only addresses -->
+    <section class="screen" id="screen-watch">
+      <div class="card">
+        <p class="notice">Add any FirstIslamicCoin address to monitor its balance --
+           no keys involved, this can't spend anything. Useful for keeping an
+           eye on an address that isn't part of this wallet.</p>
+        <div class="row">
+          <input id="watch-label" placeholder="Label" />
+          <input id="watch-address" placeholder="Address" />
+        </div>
+        <button class="secondary" id="btn-watch-add">Add address</button>
+      </div>
+      <div class="card">
+        <p class="field-label">Your account xpub</p>
+        <p class="notice">Share this so someone else -- or this wallet
+           restored on another device, without its private key -- can
+           watch your addresses' balances. Anyone with it can see every
+           address this wallet generates and how much it's received, so
+           don't share it publicly.</p>
+        <button class="secondary" id="btn-show-xpub">Show my xpub</button>
+        <textarea id="my-xpub-output" class="mono" rows="3" readonly style="display:none"></textarea>
+      </div>
+      <div class="card">
+        <p class="field-label">Watch from an xpub</p>
+        <p class="notice">Add several addresses at once from an account
+           xpub, instead of one at a time. Derives a fixed number of
+           addresses you choose, not a full gap-limit scan.</p>
+        <input id="watch-xpub-label" placeholder="Label" />
+        <textarea id="watch-xpub-input" class="mono" rows="2" placeholder="xpub..."></textarea>
+        <label class="field-label">How many addresses</label>
+        <input id="watch-xpub-count" type="number" min="1" max="50" value="5" />
+        <button class="secondary" id="btn-watch-xpub-add">Add from xpub</button>
+        <div class="error" id="watch-xpub-error"></div>
+      </div>
+      <div class="card" id="watch-list-card">
+        <div id="watch-list"><p class="notice">No watched addresses yet.</p></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="screen" id="screen-settings">
+      <div class="card">
+        <label class="field-label">Network</label>
+        <div class="row">
+          <button class="secondary" id="btn-net-mainnet">Mainnet</button>
+          <button class="secondary" id="btn-net-testnet">Testnet</button>
+        </div>
+      </div>
+      <div class="card">
+        <label class="field-label">Theme</label>
+        <div class="row">
+          <button class="secondary" id="btn-theme-system">System</button>
+          <button class="secondary" id="btn-theme-dark">Dark</button>
+          <button class="secondary" id="btn-theme-light">Light</button>
+        </div>
+      </div>
+      <div class="card" id="lock-settings-card">
+        <p class="field-label">App lock</p>
+        <div id="lock-not-set">
+          <p class="notice">No PIN set -- your recovery phrase is stored in plain
+             text in this browser (see the security note on the onboarding
+             screen).</p>
+          <input id="set-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Choose a PIN (4+ digits)" />
+          <input id="set-pin-confirm" type="password" inputmode="numeric" autocomplete="off" placeholder="Confirm PIN" />
+          <button class="primary" id="btn-set-pin">Set PIN</button>
+        </div>
+        <div id="lock-is-set" style="display:none">
+          <p class="notice">Your recovery phrase is encrypted at rest with a key derived from your PIN.</p>
+          <button class="secondary" id="btn-lock-now">Lock now</button>
+          <button class="danger" id="btn-remove-pin">Remove PIN (decrypt back to plain text)</button>
+        </div>
+        <div class="error" id="lock-settings-error"></div>
+        <div class="success" id="lock-settings-success"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">Sign a message</p>
+        <p class="notice">Proves control of one of your addresses, without
+           spending anything -- e.g. to verify your identity to someone
+           else off-chain.</p>
+        <label class="field-label">Sign as</label>
+        <select id="msg-sign-address"></select>
+        <label class="field-label">Message</label>
+        <textarea id="msg-sign-input" rows="2"></textarea>
+        <button class="secondary" id="btn-msg-sign">Sign</button>
+        <div id="msg-sign-result" style="display:none">
+          <label class="field-label">Signature</label>
+          <textarea id="msg-sign-output" class="mono" rows="3" readonly></textarea>
+        </div>
+        <div class="error" id="msg-sign-error"></div>
+      </div>
+      <div class="card">
+        <p class="field-label">Verify a message</p>
+        <label class="field-label">Address</label>
+        <input id="msg-verify-address" placeholder="F..." />
+        <label class="field-label">Message</label>
+        <textarea id="msg-verify-message" rows="2"></textarea>
+        <label class="field-label">Signature</label>
+        <textarea id="msg-verify-signature" class="mono" rows="3"></textarea>
+        <button class="secondary" id="btn-msg-verify">Verify</button>
+        <div class="error" id="msg-verify-error"></div>
+        <div class="success" id="msg-verify-success"></div>
+      </div>
+      <div class="card">
+        <button class="danger" id="btn-wipe-wallet">Wipe wallet</button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar" style="display:none">
+    <button data-screen="home">Home</button>
+    <button data-screen="send">Send</button>
+    <button data-screen="receive">Receive</button>
+    <button data-screen="history">History</button>
+    <button data-screen="staking">Staking</button>
+    <button data-screen="multisig">Multisig</button>
+    <button data-screen="watch">Watch</button>
+    <button data-screen="settings">Settings</button>
+  </nav>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
