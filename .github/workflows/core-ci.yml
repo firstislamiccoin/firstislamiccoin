@@ -288,32 +288,34 @@ jobs:
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
 
-      # FirstIslamicCoin: diagnostic-only, added while chasing a real,
-      # pre-existing (not caused by any of this project's own changes)
-      # boost-thread build failure -- vcpkg's own build of boost-thread
-      # picks up a stray MSVC toolset (observed: .../MSVC/14.29.30133/
-      # bin/HostX64/arm/cl.exe -- an ARM cross-compiler, for what should be
-      # a plain x64 build) that the "Fix Visual Studio installation" step
-      # above doesn't remove -- its own removal list only covers specific
-      # v143 sub-versions (14.37.17.7, 14.38.17.8), not whatever ships the
-      # 14.29.x (v142) toolset on the current runner image. Lists every
-      # installed MSVC toolset folder and, for each, the VS component ID
-      # (if any) that owns it, so the next commit can extend the removal
-      # list above with the real ID instead of guessing.
-      - name: List installed MSVC toolsets (diagnostic)
+      # FirstIslamicCoin: fixes a real, pre-existing (not caused by any of
+      # this project's own changes -- present in the very first successful
+      # win64-native run) boost-thread build failure. Diagnosed first, via
+      # a one-off step that listed every installed MSVC toolset folder:
+      # this runner image has exactly two
+      # installed MSVC toolsets, 14.29.30133 (MSVC v142 / VS2019) and
+      # 14.44.35207 (the real one, v143 / VS2022) -- the "Fix Visual Studio
+      # installation" step above only targets specific v143 sub-versions
+      # (14.37.17.7, 14.38.17.8) that don't even exist on this image, so it's
+      # a no-op here and the 14.29.x toolset stays ambiguous with 14.44.x.
+      # vcpkg's own boost-thread port build (b2) picks up 14.29.30133's ARM
+      # cross-compiler (bin/HostX64/arm/cl.exe) as if it were the toolset to
+      # build for, producing a mismatched vc140-labeled .lib vcpkg's install
+      # step then can't find. `vswhere` couldn't identify a component ID for
+      # 14.29.30133 to remove via vs_installer.exe (it isn't a queryable
+      # package on this image either) -- but this runner is a single-use VM
+      # torn down after the job, so there's nothing to restore afterward and
+      # renaming the folder out of MSVC's own discovery path directly is
+      # both simpler and guaranteed to work regardless of which installer
+      # component (if any) actually owns it.
+      - name: Disable the ambiguous MSVC v142 toolset (14.29.30133)
         run: |
-          Write-Host "=== VC\Tools\MSVC subfolders ==="
-          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" -Directory | ForEach-Object { Write-Host $_.Name }
-          Write-Host "=== vswhere: installed packages matching VC.14 or v142/v143 ==="
-          $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-          & $vswhere -all -products * -property packages 2>&1 | Out-Null
-          $json = & $vswhere -all -products * -format json | ConvertFrom-Json
-          foreach ($inst in $json) {
-            foreach ($pkg in $inst.packages) {
-              if ($pkg.id -match "VC\.14|v141|v142|v143|Component\.VC\.Tools") {
-                Write-Host $pkg.id
-              }
-            }
+          $oldToolset = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.29.30133"
+          if (Test-Path $oldToolset) {
+            Rename-Item -Path $oldToolset -NewName "14.29.30133.disabled-by-fic-ci"
+            Write-Host "Renamed $oldToolset out of MSVC's toolset discovery path"
+          } else {
+            Write-Host "14.29.30133 not present on this runner image -- nothing to do"
           }
 
       - name: Configure Developer Command Prompt for Microsoft Visual C++
