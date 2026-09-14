@@ -1188,6 +1188,84 @@ A FirstIslamicCoin GitHub org/repository for this workflow to actually run in, a
 a real public release) Windows Authenticode + macOS Developer ID certificates — tracked in the
 table below.
 
+## Phase 4 — ElectrumX (light-client backend)
+
+Forked CAC's own `electrumx-cac` (itself a fork of `CoinBlack/electrumx-blk`, Blackcoin's ElectrumX)
+to `firstislamiccoin-electrumx/`. The entire CAC-specific customization is three coin-definition
+classes in the single large multi-coin registry file `src/electrumx/lib/coins.py` (which also
+carries ~100+ unrelated upstream coin definitions — Bitbay, Myce, Navcoin, etc. — left untouched);
+everything else, including the daemon and transaction-deserializer classes
+(`daemon.BlackcoinDaemon`, `lib_tx.DeserializerBlackcoinSegWit`), is reused unchanged from upstream
+Blackcoin support, same as CAC's own fork does.
+
+### `FirstIslamicCoin`/`FirstIslamicCoinTestnet`/`FirstIslamicCoinRegtest`
+
+Replaced CAC's three coin classes with FIC equivalents: real genesis hashes (mainnet
+`be7039971885efc3cb375ffb86200ab6964535dcd57c2cf9d8075522657afaeb`, testnet
+`a028f8ffcbbb97bde94e3acb508ec33caa80067dccfc077905a4c3acb18f7aed` — live-verified against the
+Phase 2 testnet node, not copied from a doc — and regtest
+`360afc3edc3e70f91452bbc7ece92fd4a18dbb9700aea612564636fadbd4e712`), FIC's own address-version
+bytes, RPC ports (19771/29771/39771), and `PEERS` pointed at the real `electrum{1,2}`/
+`testnet-electrum{1,2}.firstislamiccoin.com` hostnames `docs/dns.md` reserves for this phase (not a
+placeholder `.example` domain).
+
+### Real end-to-end indexing verified — the gap CAC's own Phase 4 was blocked from closing
+
+CAC's own `electrumx-cac/provisioning/electrumx/README.md` is explicit that it only ever confirmed
+a daemon *connection* (`BlackcoinDaemon:daemon #1 at 127.0.0.1:36211/ (current)` in the log), never
+actual block/transaction indexing — blocked by `plyvel`/`leveldb`/`rocksdb` packaging failures on
+their macOS 12.7.6 dev machine, below Homebrew's supported tier. This project's environment doesn't
+have that constraint, so this phase went further:
+
+1. Built `firstislamiccoin-infra/provisioning/electrumx/Dockerfile` (Debian bookworm-slim +
+   `libleveldb-dev`, the standard packaged path CAC's own Dockerfile was written for but never
+   itself ran) as image `fic-electrumx`. It built and ran cleanly.
+2. Pointed it at a live local regtest `firstislamiccoind` (50+ blocks, including a real send —
+   txid `9278a0c0a6f10467589796490f9deb3fa8c15cf030c5ad12b015998b25bce31f`, 777.5 FIC to
+   `mz5jgSPSRht9swKqAHi2GPQpbV9SEKKwhx`). It fully synced to the daemon's height and began serving.
+3. Queried the running server's own TCP RPC port directly (`blockchain.scripthash.get_balance` /
+   `get_history` — the current Electrum protocol's scripthash-keyed methods, not the deprecated
+   address-keyed ones) for that address. It returned `{"confirmed": 77750000000, "unconfirmed": 0}`
+   and a history containing exactly that txid at height 3 — an exact match, down to the satoshi, of
+   the node's own `gettxout`/`getrawtransaction` RPC output (777.50000000 FIC). Real indexing,
+   confirmed against real chain data, not asserted.
+
+### Two real bugs this surfaced, both fixed
+
+Neither would have been caught by CAC's own connection-only verification, since both only manifest
+once real blocks are actually processed:
+
+- **`coins.py`'s inherited `genesis_block()` silently dropped FIC's own premine.** The base
+  `Coin.genesis_block()` (used, unmodified, by every other coin in this file — none of them have a
+  spendable genesis either) truncates the genesis block to zero transactions, matching Bitcoin's
+  unspendable-coinbase convention. FIC's genesis is deliberately different: 1000 real, spendable
+  premine outputs (`docs/genesis.md`). That truncation meant the premine transaction itself was
+  never indexed, so the very first spend of *any* premine output crashed the indexer with
+  `ChainError: UTXO ... not found in "h" table"`. Fixed by overriding `genesis_block()` on the
+  `FirstIslamicCoin` base class to keep the real transactions, verifying only the header hash —
+  this is a genuine FIC-specific deviation from every other coin definition in this file, not a
+  copy-paste of an existing pattern.
+- **`FirstIslamicCoinRegtest.TX_COUNT_HEIGHT = 0` divided by zero.** It's used as a divisor in
+  `block_processor.estimate_txs_remaining()`'s ETA heuristic
+  (`self.height / coin.TX_COUNT_HEIGHT`), which runs the moment sync first catches up to the
+  daemon — crashing with `ZeroDivisionError` right after the last block of a freshly-synced
+  regtest chain. `TX_COUNT`/`TX_COUNT_HEIGHT` are cosmetic (server-info hints, not consensus), so
+  this was never going to be caught by a build/connection check. Fixed by setting it to `1`.
+
+### Provisioning tooling
+
+Adapted `electrumx-cac.service`, `provision.sh`, and `README.md` from CAC's originals to
+`firstislamiccoin-infra/provisioning/electrumx/` — service/venv/data paths and DNS hostnames
+renamed, `provision.sh`'s `NETWORK` → `COIN` lookup table updated to the FIC classes above. Added
+the two `testnet-electrum{1,2}.firstislamiccoin.com` rows to `docs/dns.md` (CAC's own table, and
+this project's copy before this phase, only listed mainnet `electrum{1,2}`, even though
+`FirstIslamicCoinTestnet.PEERS` already names testnet-prefixed hosts).
+
+### `TODO-HUMAN`
+
+No FirstIslamicCoin GitHub org/repository exists yet for `provision.sh`'s `REPO_URL` to clone from,
+and no real server or DNS record exists for either ElectrumX instance — tracked in the table below.
+
 ## Prompt items that need no work
 
 **Kernel stake weight is already amount-only.** `pos.cpp` computes
@@ -1211,17 +1289,17 @@ those are removed.
 | 5 | Shariah advisory board review. No endorsement, scholar name or certification to be written anywhere until real | Phase 9 |
 | 6 | DNS seeders for `seed{1,2,3}.firstislamiccoin.com`; testnet seeds | Phase 6 |
 | 7 | `generate.py` in the brand kit hardcodes `/home/claude/fic-brand` and Linux font paths | — |
-| 8 | Verify ElectrumX full block indexing end-to-end — never done upstream | Phase 4 |
-| 9 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
-| 10 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |
-| 11 | Explorer: provision a real server and the `explorer.firstislamiccoin.com` DNS record, run `firstislamiccoin-infra/provisioning/explorer/provision.sh` against it once a public repository URL exists | Phase 8 |
-| 12 | Mobile: Google Play Console + App Store Connect accounts, Android release keystore, iOS distribution certificate/provisioning profile, and the four `ANDROID_*`/Apple signing secrets `.github/workflows/ci.yml`'s release jobs need | Phase 5 |
-| 13 | Mobile: publish `firstislamiccoin-mobile/store/privacy-policy.md` at a real, reachable URL (both stores require one) and have it reviewed by a lawyer | Phase 5 |
-| 14 | Mobile: native-speaker review of `lib/l10n/app_ar.arb`'s Arabic strings, plus real Urdu/Bahasa Indonesia/Malay/Turkish translations — see `firstislamiccoin-mobile/docs/localization.md` | Phase 5 |
-| 15 | Mobile: real Android/iOS device or emulator build (`flutter build apk`/`flutter build ios`), plus a physical-device check of the Face ID/fingerprint app-lock flow and camera QR scanning now that `Info.plist` declares them | Phase 5 |
-| 16 | Staking service: provision a real server and the `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` DNS records, generate a real `GATEWAY_JWT_SECRET`/`GATEWAY_KYC_ENCRYPTION_KEY`, fund `GATEWAY_ADMIN_WALLET` for referral payouts | Phase 6 |
-| 17 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
-| 18 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
-| 19 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
-| 20 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
-| 21 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
+| 8 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
+| 9 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |
+| 10 | Explorer: provision a real server and the `explorer.firstislamiccoin.com` DNS record, run `firstislamiccoin-infra/provisioning/explorer/provision.sh` against it once a public repository URL exists | Phase 8 |
+| 11 | Mobile: Google Play Console + App Store Connect accounts, Android release keystore, iOS distribution certificate/provisioning profile, and the four `ANDROID_*`/Apple signing secrets `.github/workflows/ci.yml`'s release jobs need | Phase 5 |
+| 12 | Mobile: publish `firstislamiccoin-mobile/store/privacy-policy.md` at a real, reachable URL (both stores require one) and have it reviewed by a lawyer | Phase 5 |
+| 13 | Mobile: native-speaker review of `lib/l10n/app_ar.arb`'s Arabic strings, plus real Urdu/Bahasa Indonesia/Malay/Turkish translations — see `firstislamiccoin-mobile/docs/localization.md` | Phase 5 |
+| 14 | Mobile: real Android/iOS device or emulator build (`flutter build apk`/`flutter build ios`), plus a physical-device check of the Face ID/fingerprint app-lock flow and camera QR scanning now that `Info.plist` declares them | Phase 5 |
+| 15 | Staking service: provision a real server and the `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` DNS records, generate a real `GATEWAY_JWT_SECRET`/`GATEWAY_KYC_ENCRYPTION_KEY`, fund `GATEWAY_ADMIN_WALLET` for referral payouts | Phase 6 |
+| 16 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
+| 17 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
+| 18 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
+| 19 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
+| 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
+| 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |

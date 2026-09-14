@@ -19,6 +19,8 @@ read as "already configured."
 | `staking-api.testnet.firstislamiccoin.com` | CNAME | Staking-service gateway hosting target (testnet) | Same, against testnet | Phase 6 |
 | `electrum1.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 1 IP | Light-client backend | Phase 4 |
 | `electrum2.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 2 IP | Light-client backend | Phase 4 |
+| `testnet-electrum1.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 1 IP (testnet) | Light-client backend, testnet | Phase 4 |
+| `testnet-electrum2.firstislamiccoin.com` | `A`/`AAAA` | ElectrumX server 2 IP (testnet) | Light-client backend, testnet | Phase 4 |
 | `seed1.firstislamiccoin.com` | `A`/`AAAA` (a real DNS seed also needs the domain's NS delegated for it, or a seeder like `dnsseed` returning peer IPs over DNS) | Seed node 1 IP | P2P bootstrap | Phase 6 infra / seed nodes |
 | `seed2.firstislamiccoin.com` | `A`/`AAAA` | Seed node 2 IP | P2P bootstrap | Phase 6 infra / seed nodes |
 | `seed3.firstislamiccoin.com` | `A`/`AAAA` | Seed node 3 IP | P2P bootstrap | Phase 6 infra / seed nodes |
