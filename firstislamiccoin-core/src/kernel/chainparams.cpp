@@ -179,8 +179,11 @@ public:
         // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        // FirstIslamicCoin: DNS seeders are provisioned in Phase 6; these names do
-        // not resolve yet (TODO-HUMAN).
+        // FirstIslamicCoin: these names resolve (a real VPS -- see
+        // docs/CHANGELOG-FIC.md's Phase 10 section), but nothing listens on
+        // mainnet's P2P port there yet -- mainnet itself can't start until
+        // the genesis key ceremony (m_genesis_premine_placeholder, TODO-HUMAN)
+        // replaces the placeholder above.
         vSeeds.emplace_back("seed1.firstislamiccoin.com");
         vSeeds.emplace_back("seed2.firstislamiccoin.com");
         vSeeds.emplace_back("seed3.firstislamiccoin.com");

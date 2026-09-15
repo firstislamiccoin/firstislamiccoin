@@ -1389,7 +1389,7 @@ those are removed.
 | 3 | The first staker at testnet and mainnet launch must run with `-maxtipage` longer than the genesis block's age, or it will not leave initial block download | Phase 2 |
 | 4 | Register BIP44 coin type 9770 via SLIP-0044 | Phase 10 |
 | 5 | Shariah advisory board review. No endorsement, scholar name or certification to be written anywhere until real | Phase 9 |
-| 6 | DNS seeders for `seed{1,2,3}.firstislamiccoin.com`; testnet seeds | Phase 6 |
+| 6 | `seed{1,2,3}.firstislamiccoin.com` resolve to a real VPS (169.58.129.247) as of Phase 10, but nothing can listen on mainnet's P2P port there until the genesis key ceremony -- a real mainnet node needs to actually run at that address (or DNS repointed at wherever one does) once mainnet exists | Mainnet |
 | 7 | `generate.py` in the brand kit hardcodes `/home/claude/fic-brand` and Linux font paths | — |
 | 8 | Deliberate crash-recovery drill on mainnet/testnet-shaped chains (kill -9 a node, restart, `-reindex`) before mainnet launch — this is how the ContextualCheckBlock genesis crash surfaced | Mainnet |
 | 9 | Website: register/confirm `firstislamiccoin.com`, create a Cloudflare account, set `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets, create the DNS records in `docs/dns.md`, review and publish Arabic/Urdu translations | Phase 9 |
