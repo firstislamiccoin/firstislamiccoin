@@ -163,6 +163,15 @@ BOOST_AUTO_TEST_CASE(sighash_test)
 BOOST_AUTO_TEST_CASE(sighash_from_data)
 {
     UniValue tests = read_json(json_tests::sighash);
+    // FirstIslamicCoin: this chain's SignatureHash() (script/interpreter.cpp)
+    // mixes nTime into the preimage for nVersion<2 transactions -- inherited
+    // from the Blackcoin/PoS lineage. sighash.json's expected hashes were
+    // computed under vanilla Bitcoin's SignatureHash(), which never had this
+    // field, so they can never match here for nVersion<2 vectors regardless
+    // of how the raw tx bytes are (re)encoded; see the matching skip in
+    // test/transaction_tests.cpp's tx_valid/tx_invalid for the full
+    // explanation. Only nVersion>=2 vectors are usable as-is.
+    unsigned int skipped_ntime_incompatible = 0;
 
     for (unsigned int idx = 0; idx < tests.size(); idx++) {
         const UniValue& test = tests[idx];
@@ -191,6 +200,11 @@ BOOST_AUTO_TEST_CASE(sighash_from_data)
           DataStream stream(ParseHex(raw_tx));
           stream >> TX_WITH_WITNESS(tx);
 
+          if (tx->nVersion < 2) {
+              ++skipped_ntime_incompatible;
+              continue;
+          }
+
           TxValidationState state;
           BOOST_CHECK_MESSAGE(CheckTransaction(*tx, state), strTest);
           BOOST_CHECK(state.IsValid());
@@ -205,5 +219,9 @@ BOOST_AUTO_TEST_CASE(sighash_from_data)
         sh = SignatureHash(scriptCode, *tx, nIn, nHashType, 0, SigVersion::BASE);
         BOOST_CHECK_MESSAGE(sh.GetHex() == sigHashHex, strTest);
     }
+    BOOST_WARN_MESSAGE(skipped_ntime_incompatible == 0,
+        "sighash_from_data: skipped " << skipped_ntime_incompatible << " nVersion<2 vector(s) "
+        "whose expected hash was computed under vanilla Bitcoin's sighash, incompatible with "
+        "this chain's nTime-inclusive sighash");
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -365,11 +365,18 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         CoinsResult available_coins;
 
         // single coin should be selected when effective fee > long term fee
-        // FirstIslamicCoin: OutputGroup::Insert() takes an input's long term fee
-        // from GetMinFee(input_bytes), which is MIN_TX_FEE (10000 sat) for a
-        // 68-byte input, not from a 1 sat/vB long term feerate. Upstream's 5 and
-        // 3 sat/vB are both below that, so pick feerates on either side of it.
+        // FirstIslamicCoin: pick a long-term fee comparable to this chain's
+        // consensus minimum, MIN_TX_FEE (10000 sat for a 68-byte input via
+        // GetMinFee()), rather than upstream's 1 sat/vB, and pick feerates on
+        // either side of it. OutputGroup::Insert() actually derives each
+        // coin's long_term_fee from coin_selection_params.m_long_term_feerate
+        // (coinselection.cpp), which this fixture otherwise leaves at its
+        // CFeeRate{0} default -- silently making every coin's long_term_fee
+        // 0 regardless of long_term_input_fee below, so BnB always preferred
+        // fewer inputs no matter the configured effective feerate. Set it
+        // explicitly so long_term_input_fee actually reaches the coins.
         const CAmount long_term_input_fee{GetMinFee(/*nBytes=*/68, GetAdjustedTimeSeconds())};
+        coin_selection_params_bnb.m_long_term_feerate = CFeeRate(long_term_input_fee, 68);
         coin_selection_params_bnb.m_effective_feerate = CFeeRate(200000);
 
         // Add selectable outputs, increasing their raw amounts by their input fee to make the effective value equal to the raw amount
@@ -387,10 +394,10 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         available_coins.Clear();
 
         // more coins should be selected when effective fee < long term fee
-        // FirstIslamicCoin: stay within m_cost_of_change of the long term fee.
-        // With a larger per-input saving, SRD's occasional 3-input selection
-        // (waste 3 * (fee - long_term_fee) + cost_of_change) beats the 2-input
-        // BnB result, making the outcome random.
+        // FirstIslamicCoin: stay within m_cost_of_change of the long term fee,
+        // so a 3-input selection with change (waste = 3*(fee-long_term_fee) +
+        // cost_of_change) doesn't beat the 2-input exact-match BnB result
+        // (waste = 2*(fee-long_term_fee)).
         coin_selection_params_bnb.m_effective_feerate = CFeeRate(145000);
 
         // Add selectable outputs, increasing their raw amounts by their input fee to make the effective value equal to the raw amount

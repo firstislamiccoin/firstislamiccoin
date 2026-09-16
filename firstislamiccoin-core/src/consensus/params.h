@@ -122,7 +122,13 @@ struct Params {
     bool IsProtocolV3(int64_t nTime) const { return nTime > nProtocolV3Time && nTime != 1444028400; }
     bool IsProtocolV3_1(int64_t nTime) const { return nTime > nProtocolV3_1Time && nTime != 1713938400; }
     int nLastPOWBlock;
-    int nStakeTimestampMask;
+    // FirstIslamicCoin: unsigned -- this is a bitmask (nTime &= ~nStakeTimestampMask
+    // in node/miner.cpp and wallet/rpc/staking.cpp), never a signed quantity. A
+    // plain `int` here let ~mask evaluate to -1 in signed arithmetic on regtest
+    // (mask=0), and converting that to the uint32_t nTime it's ANDed against is
+    // UB caught by UBSan's integer sanitizer, even though the resulting bit
+    // pattern (all-ones, i.e. no masking) was already correct.
+    uint32_t nStakeTimestampMask;
     int nCoinbaseMaturity;
     /**
      * FirstIslamicCoin: total premine, in satoshis, carried by the genesis

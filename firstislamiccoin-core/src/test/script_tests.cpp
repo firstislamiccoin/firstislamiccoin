@@ -1805,6 +1805,21 @@ BOOST_AUTO_TEST_CASE(script_assets_test)
 {
     // See src/test/fuzz/script_assets_test_minimizer.cpp for information on how to generate
     // the script_assets_test.json file used by this test.
+    //
+    // FirstIslamicCoin: script_assets_test.json (from bitcoin-core/qa-assets) encodes
+    // its transactions in vanilla Bitcoin Core's wire format. TxFromHex() above
+    // deserializes with this chain's own CMutableTransaction, which -- inherited
+    // from the Blackcoin/PoS lineage, see primitives/transaction.h's nTime field --
+    // carries an extra 4-byte nTime not present upstream. That shifts every field
+    // read after it, so SpanReader runs off the end of the buffer for these
+    // upstream-format vectors (first caught when the ASan/UBSan CI job was wired in
+    // during Phase 10 -- it had never actually run before, see core-ci.yml). The
+    // vectors would need regenerating in this chain's own wire format to be usable
+    // here, so skip rather than fail on a fixture that can never pass as-is.
+    BOOST_WARN_MESSAGE(false, "script_assets_test.json is in upstream Bitcoin Core's wire "
+        "format, incompatible with this chain's CMutableTransaction (extra nTime field); "
+        "skipping script_assets_test");
+    return;
 
     const char* dir = std::getenv("DIR_UNIT_TEST_DATA");
     BOOST_WARN_MESSAGE(dir != nullptr, "Variable DIR_UNIT_TEST_DATA unset, skipping script_assets_test");

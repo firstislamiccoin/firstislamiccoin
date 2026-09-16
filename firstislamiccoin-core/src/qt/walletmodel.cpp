@@ -643,4 +643,13 @@ void WalletModel::join()
         t.quit();
         t.wait();
     }
+
+    // worker was moved to t and never had a QObject parent to free it, so
+    // it must be deleted manually here. Safe now that t has fully stopped
+    // (its event loop is no longer running, so nothing can still be using
+    // worker), and safe to call join() more than once (e.g. bitcoingui.cpp
+    // calls it explicitly, then again from ~WalletModel): delete on
+    // nullptr is a no-op.
+    delete worker;
+    worker = nullptr;
 }
