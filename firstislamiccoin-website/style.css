@@ -233,11 +233,13 @@ table.data td.num { font-variant-numeric: tabular-nums; }
 }
 .roadmap-item.done::before { background: var(--success); border-color: var(--success); }
 .roadmap-item.active::before { background: var(--gold); border-color: var(--gold-deep); }
+.roadmap-item.built::before { background: var(--info); border-color: var(--info); }
 .roadmap-item h3 { margin: 0 0 4px; font-size: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .roadmap-item p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 640px; }
 .roadmap-tag { font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
 .tag-done { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
 .tag-active { background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold-deep); }
+.tag-built { background: color-mix(in srgb, var(--info) 15%, transparent); color: var(--info); }
 .tag-planned { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
 
 /* FAQ */
