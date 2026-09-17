@@ -764,6 +764,12 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
                 {"lockUnspents", UniValueType(UniValue::VBOOL)},
                 {"lock_unspents", UniValueType(UniValue::VBOOL)},
                 {"locktime", UniValueType(UniValue::VNUM)},
+                // FirstIslamicCoin: "send"'s own RPCHelpMan documents minconf/maxconf
+                // (used only when add_inputs is set), but this shared type-check list
+                // never allow-listed them -- inherited unmodified from the CodexaCoin
+                // import, so the RPC has always rejected them outright as unexpected.
+                {"minconf", UniValueType(UniValue::VNUM)},
+                {"maxconf", UniValueType(UniValue::VNUM)},
                 {"fee_rate", UniValueType()}, // will be checked by AmountFromValue()
                 {"feeRate", UniValueType()}, // will be checked by AmountFromValue() below
                 {"psbt", UniValueType(UniValue::VBOOL)},
@@ -813,6 +819,22 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
 
         if (options.exists("include_unsafe")) {
             coinControl.m_include_unsafe_inputs = options["include_unsafe"].get_bool();
+        }
+
+        // FirstIslamicCoin: wire minconf/maxconf the same way sendall's own
+        // handler does (below), now that they're allow-listed above.
+        if (options.exists("minconf")) {
+            if (options["minconf"].getInt<int>() < 0) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Invalid minconf (minconf cannot be negative): %s", options["minconf"].getInt<int>()));
+            }
+            coinControl.m_min_depth = options["minconf"].getInt<int>();
+        }
+
+        if (options.exists("maxconf")) {
+            coinControl.m_max_depth = options["maxconf"].getInt<int>();
+            if (coinControl.m_max_depth < coinControl.m_min_depth) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("maxconf can't be lower than minconf: %d < %d", coinControl.m_max_depth, coinControl.m_min_depth));
+            }
         }
 
         if (options.exists("feeRate")) {

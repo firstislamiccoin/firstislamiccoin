@@ -29,7 +29,7 @@ from test_framework.script import (
     OP_0,
     OP_TRUE,
 )
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
@@ -59,6 +59,12 @@ class NULLDUMMYTest(BitcoinTestFramework):
             '-addresstype=legacy',
             '-par=1',  # Use only one script thread to get the exact reject reason for testing
         ]]
+
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: SegWit is ALWAYS_ACTIVE from genesis on every
+        # network on this fork, so there is no pre-activation state left to
+        # construct the way -testactivationheight=segwit@N assumes.
+        raise SkipTest("SegWit is always active from genesis on this fork; no activation transition to test")
 
     def create_transaction(self, *, txid, input_details=None, addr, amount, privkey):
         input = {"txid": txid, "vout": 0}

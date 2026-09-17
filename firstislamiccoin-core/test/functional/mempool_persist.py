@@ -85,14 +85,14 @@ class MempoolPersistTest(BitcoinTestFramework):
 
         total_fee_old = self.nodes[0].getmempoolinfo()['total_fee']
 
-        self.log.debug("Prioritize a transaction on node0")
+        # FirstIslamicCoin: prioritisetransaction was removed from this fork
+        # along with the rest of RBF support, so fees.modified always equals
+        # fees.base here -- nothing to prioritise with.
+        self.log.debug("Check a transaction's fees on node0")
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
         assert_equal(fees['base'], fees['modified'])
-        self.nodes[0].prioritisetransaction(txid=last_txid, fee_delta=1000)
-        fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
-        assert_equal(fees['base'] + Decimal('0.00001000'), fees['modified'])
 
-        self.log.info('Check the total base fee is unchanged after prioritisetransaction')
+        self.log.info('Check the total base fee is unchanged')
         assert_equal(total_fee_old, self.nodes[0].getmempoolinfo()['total_fee'])
         assert_equal(total_fee_old, sum(v['fees']['base'] for k, v in self.nodes[0].getrawmempool(verbose=True).items()))
 
@@ -107,10 +107,9 @@ class MempoolPersistTest(BitcoinTestFramework):
         assert_equal(len(self.nodes[0].p2ps), 0)
         self.mini_wallet.send_self_transfer(from_node=self.nodes[0])
 
-        # Test persistence of prioritisation for transactions not in the mempool.
-        # Create a tx and prioritise but don't submit until after the restart.
+        # FirstIslamicCoin: prioritisetransaction was removed from this fork,
+        # so this is just a tx not yet submitted, with nothing to prioritise.
         tx_prioritised_not_submitted = self.mini_wallet.create_self_transfer()
-        self.nodes[0].prioritisetransaction(txid=tx_prioritised_not_submitted['txid'], fee_delta=9999)
 
         self.log.debug("Stop-start the nodes. Verify that node0 has the transactions in its mempool and node1 does not. Verify that node2 calculates its balance correctly after loading wallet transactions.")
         self.stop_nodes()
@@ -126,15 +125,15 @@ class MempoolPersistTest(BitcoinTestFramework):
         # The others have loaded their mempool. If node_1 loaded anything, we'd probably notice by now:
         assert_equal(len(self.nodes[1].getrawmempool()), 0)
 
-        self.log.debug('Verify prioritization is loaded correctly')
+        self.log.debug('Verify fees are loaded correctly')
         fees = self.nodes[0].getmempoolentry(txid=last_txid)['fees']
-        assert_equal(fees['base'] + Decimal('0.00001000'), fees['modified'])
+        assert_equal(fees['base'], fees['modified'])
 
         self.log.debug('Verify all fields are loaded correctly')
         assert_equal(last_entry, self.nodes[0].getmempoolentry(txid=last_txid))
         self.nodes[0].sendrawtransaction(tx_prioritised_not_submitted['hex'])
         entry_prioritised_before_restart = self.nodes[0].getmempoolentry(txid=tx_prioritised_not_submitted['txid'])
-        assert_equal(entry_prioritised_before_restart['fees']['base'] + Decimal('0.00009999'), entry_prioritised_before_restart['fees']['modified'])
+        assert_equal(entry_prioritised_before_restart['fees']['base'], entry_prioritised_before_restart['fees']['modified'])
 
         # Verify accounting of mempool transactions after restart is correct
         if self.is_sqlite_compiled():
@@ -164,10 +163,12 @@ class MempoolPersistTest(BitcoinTestFramework):
         assert_equal(len(self.nodes[0].getrawmempool()), 7)
         fees = self.nodes[0].getmempoolentry(txid=last_txid)["fees"]
         assert_equal(fees["base"], fees["modified"])
+        # FirstIslamicCoin: apply_fee_delta_priority has nothing to apply --
+        # prioritisetransaction was removed, so base still equals modified.
         assert_equal({}, self.nodes[0].importmempool(mempooldat0, {"apply_fee_delta_priority": True, "apply_unbroadcast_set": True}))
         assert_equal(2, self.nodes[0].getmempoolinfo()["unbroadcastcount"])
         fees = self.nodes[0].getmempoolentry(txid=last_txid)["fees"]
-        assert_equal(fees["base"] + Decimal("0.00001000"), fees["modified"])
+        assert_equal(fees["base"], fees["modified"])
 
         self.log.debug("Stop-start node0. Verify that it has the transactions in its mempool.")
         self.stop_nodes()
@@ -196,7 +197,10 @@ class MempoolPersistTest(BitcoinTestFramework):
         assert_raises_rpc_error(-1, "Unable to dump mempool to disk", self.nodes[1].savemempool)
         os.rmdir(mempooldotnew1)
 
-        self.test_importmempool_union()
+        # FirstIslamicCoin: test_importmempool_union() tests prioritisetransaction's
+        # fee-delta stacking/merging behavior end to end, but that RPC was
+        # removed from this fork along with the rest of RBF support.
+        # self.test_importmempool_union()
         self.test_persist_unbroadcast()
 
     def test_persist_unbroadcast(self):

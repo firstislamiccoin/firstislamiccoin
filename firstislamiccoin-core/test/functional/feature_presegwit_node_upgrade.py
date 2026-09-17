@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test a pre-segwit node upgrading to segwit consensus"""
 
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
     softfork_active,
@@ -17,6 +17,13 @@ class SegwitUpgradeTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 1
         self.extra_args = [["-testactivationheight=segwit@10"]]
+
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: this test is entirely about a node running
+        # without SegWit rules and then upgrading to them, but SegWit is
+        # ALWAYS_ACTIVE from genesis on every network on this fork -- there
+        # is no pre-segwit state to construct.
+        raise SkipTest("SegWit is always active from genesis on this fork; no pre-segwit state to upgrade from")
 
     def run_test(self):
         """A pre-segwit node with insufficiently validated blocks needs to redownload blocks"""

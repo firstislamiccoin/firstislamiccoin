@@ -60,9 +60,10 @@ class MempoolPackagesTest(BitcoinTestFramework):
         # and the second chain should work just fine
         self.chain_tx([second_chain])
 
-        # Make sure we can RBF the chain which used our carve-out rule
-        replacable_tx.vout[0].nValue -= 1000000
-        self.nodes[0].sendrawtransaction(replacable_tx.serialize().hex())
+        # FirstIslamicCoin: upstream also RBFs the carve-out chain's tx here
+        # (replacable_tx.vout[0].nValue -= 1000000; sendrawtransaction), but
+        # RBF was removed from this fork -- a conflicting resend would be
+        # rejected outright rather than replace the existing mempool entry.
 
         # Finally, check that we added two transactions
         assert_equal(len(self.nodes[0].getrawmempool()), DEFAULT_ANCESTOR_LIMIT + 3)

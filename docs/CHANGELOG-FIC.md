@@ -759,23 +759,140 @@ constants above**, left open rather than guessed at:
 
 Roughly 20 of the 61 known failures were fixed, skipped-with-documentation,
 or root-caused this pass (several skips explain multiple failures at once,
-e.g. the `bip125-replaceable` fix alone covers 12). The remaining ~40 —
-`p2p_eviction`, `p2p_ibd_stalling`, `p2p_headers_sync_with_minchainwork`,
-`p2p_orphan_handling`, `p2p_block_sync`, `feature_signet`, `feature_taproot`,
-`feature_csv_activation`, `feature_nulldummy`,
-`feature_presegwit_node_upgrade`, `feature_pos_reorg`, `feature_block`,
-`mining_basic`, `interface_rest`, `tool_wallet`, `tool_signet_miner`,
-`mempool_accept`, `mempool_datacarrier`, `mempool_limit`,
-`mempool_package_limits`, `mempool_package_onemore`, `rpc_blockchain`,
-`rpc_createmultisig`, `rpc_net`, `rpc_psbt`, `rpc_rawtransaction`,
-`wallet_abandonconflict`, `wallet_avoidreuse`, `wallet_backup`,
-`wallet_create_tx`, `wallet_fundrawtransaction`, `wallet_groups`,
-`wallet_importmulti`, `wallet_orphanedreward`, `wallet_send`,
-`wallet_sendall`, `wallet_signrawtransactionwithwallet`,
-`wallet_transactiontime_rescan` — have not yet been individually triaged.
-`wallet_orphanedreward` and the P2P/IBD-timeout-scaling group were already
-anticipated as needing real work back when Phase 2 began (above); the rest
-are genuinely unknown until looked at. Tracked as `TODO-HUMAN`.
+e.g. the `bip125-replaceable` fix alone covers 12).
+
+### A second pass: 17 more fixed, one more real bug, three more real findings left open
+
+A follow-up pass, same VPS, fresh build with the fixes above applied,
+brought the count from 61 down to 44, then continued triaging:
+
+**More design-incompatible tests skipped with documentation:**
+`feature_nulldummy` and `feature_presegwit_node_upgrade` (whole-file skips,
+same as `p2p_segwit` — both rely on `-testactivationheight=segwit@N`, which
+has no meaning on a fork where SegWit is `ALWAYS_ACTIVE` from genesis).
+`mempool_persist`'s `test_importmempool_union()` and `mempool_package_onemore`'s
+final RBF-replacement step both test BIP125 replace-by-fee directly, which
+this fork doesn't have; skipped/removed with the surrounding fee-delta and
+ancestor-count assertions adjusted to match (no delta to apply, so
+base == modified; the carve-out chain's final count already held without
+the replacement step).
+
+**A second genuine RPC bug, not a test issue.** `send`'s own `RPCHelpMan`
+documents `minconf`/`maxconf` options (`wallet/rpc/spend.cpp`), but the
+shared `FundTransaction()` helper's runtime `RPCTypeCheckObj` allow-list —
+used by `send`, `fundrawtransaction`, and others — never included either
+key, and neither was ever wired into `CCoinControl`. Both have silently
+been "Unexpected key" rejections since the CodexaCoin import (`git blame`
+confirms this block is untouched). Fixed by allow-listing and wiring both,
+matching `sendall`'s already-working handling of the same two options.
+
+**Real, safe fixes to genuinely fork-specific test data:**
+- `rpc_net`'s `getrawaddrman` expected-results dict still said Bitcoin's
+  port 8333 in two places, even though every `addpeeraddress` call in the
+  same file already correctly used FIC's real port (15714) — a partial
+  earlier adaptation pass that missed two literals.
+- `wallet_importmulti` hardcoded eight real Bitcoin-regtest bech32/taproot
+  addresses (`bcrt1...`). Since a bech32(m) checksum is computed over the
+  HRP, these can't be fixed by string substitution — decoded each with
+  `test_framework.segwit_addr` and re-encoded with FIC's real `rfic` HRP,
+  verified each round-trips correctly.
+- `wallet_abandonconflict`'s raw-transaction output amounts implied fees as
+  low as ~9 sat/vB (sized for upstream's ~1 sat/vB relay fee), rejected
+  outright by this fork's fixed 100 sat/vB floor. Traced the interdependent
+  balance-tracking arithmetic through the whole file and bumped every
+  affected amount consistently.
+
+**Three more real, open findings, documented rather than guessed at:**
+- `wallet_abandonconflict` has a *second*, deeper problem past the one just
+  fixed: it restarts the node with a higher `-minrelaytxfee` specifically to
+  evict a transaction that no longer meets the new relay policy, but this
+  fork's actual fee floor is a hardcoded consensus constant (`GetMinFee`),
+  not derived from `-minrelaytxfee` at all — so the restart-based eviction
+  this test relies on is a no-op here. The file's own comment already flags
+  this mechanism as fragile (`# TODO: redo with eviction`) even upstream.
+- `tool_wallet`'s `test_chainless_conflicts` constructs a raw transaction
+  that double-spends an already-unconfirmed input on the same node and
+  expects `sendrawtransaction` to accept it (`txn-mempool-conflict` instead).
+  Whether this is genuinely fork-specific or was already fragile upstream
+  (this function is untouched since the CodexaCoin import) needs real
+  investigation before either fixing or skipping it.
+- `wallet_send`'s `test_send` helper appears to pass `fee_rate` as both a
+  top-level parameter and inside `options` simultaneously even for a plain,
+  no-`fee_rate`-specified call, tripping the RPC framework's own
+  already-both-specified conflict check. The exact mechanism (Python
+  `AuthServiceProxy`'s null-handling vs. the RPC framework's presence check)
+  needs tracing before a confident fix.
+
+The remaining ~27 — `p2p_eviction`, `p2p_ibd_stalling`,
+`p2p_headers_sync_with_minchainwork`, `p2p_orphan_handling`,
+`p2p_block_sync`, `feature_signet`, `feature_taproot`,
+`feature_csv_activation`, `feature_pos_reorg`, `feature_block`,
+`feature_assumevalid`, `mining_basic`, `tool_signet_miner`,
+`mempool_accept`, `mempool_limit`, `mempool_package_limits`,
+`rpc_blockchain`, `rpc_createmultisig`, `rpc_psbt`, `rpc_rawtransaction`,
+`wallet_avoidreuse`, `wallet_backup`, `wallet_fundrawtransaction`,
+`wallet_groups`, `wallet_orphanedreward`, `wallet_sendall`,
+`wallet_signrawtransactionwithwallet`, `wallet_transactiontime_rescan` —
+have not yet been individually triaged. `wallet_orphanedreward` and the
+P2P/IBD-timeout-scaling group were already anticipated as needing real work
+back when Phase 2 began (above); the rest are genuinely unknown until
+looked at. Tracked as `TODO-HUMAN`.
+
+### The win64-native MSVC CI job, actually run to a genuine build for the first time
+
+GitHub Actions billing came back during this phase, letting the real
+`win64-native` job run for the first time ever on this fork. It had never
+actually built to completion before — each fix let it get further and
+exposed the next gap underneath, the same pattern as the ASan/clang-tidy
+verification:
+
+- `libbitcoin_node`'s MSVC project never included `wallet/staking.cpp` or
+  `wallet/rpc/staking.cpp` (added to `libbitcoin_node_a_SOURCES` via a `+=`
+  continuation in `src/Makefile.am` that `msvc-autogen.py`'s parser doesn't
+  recognize — the same class of gap `wallet/init.cpp` already had a manual
+  workaround for) — 6 unresolved externals linking `firstislamiccoind`.
+- `qt/walletmodel.cpp` defines a local `WalletWorker` QObject and
+  self-includes `qt/walletmodel.moc`, the same pattern four other Qt files
+  already use, but was never added to the `QT_MOC` list driving that build
+  rule — `Cannot open include file: 'qt/walletmodel.moc'`.
+- `bitcoin-tx`, `bitcoin-util`, and `bitcoin-wallet`'s standalone MSVC
+  projects were all missing `GetAdjustedTimeSeconds` (FIC's
+  `CMutableTransaction` constructor calls it, and MSVC links whole `.obj`
+  files rather than individual functions, pulling in that dependency even
+  for tools that never construct one); `bitcoin-wallet` also needed the real
+  `GetMinFee(size_t, uint32_t)` from `consensus/tx_verify.cpp`. Fixed by
+  matching `src/Makefile.am`'s own dependency choices exactly: the dummy
+  stub (`timedatadummy.cpp`) for the first two, matching
+  `firstislamiccoin_tx_SOURCES`; a real link against `libbitcoin_node` for
+  the third, matching `firstislamiccoin_wallet_LDADD`.
+- `wallet/rpc/staking.cpp:272` (`nTime &= ~nStakeTimestampMask`) mixes an
+  `int64_t` (`nTime`) with a `uint32_t` mask — inverting the 32-bit mask
+  first and zero-extending the result into the wider signed type would
+  incorrectly clear `nTime`'s upper 32 bits instead of just the intended low
+  mask bits (harmless today since real Unix timestamps fit in 32 bits, but
+  genuinely wrong). MSVC caught it as a hard warning-as-error the moment
+  this file compiled on Windows for the first time (the previous fix just
+  wired it into the build); GCC/Clang never flagged it. A different call
+  site already fixed for UBSan during the ASan pass (`node/miner.cpp`) ANDs
+  the same mask against a genuinely `uint32_t` field and was never affected.
+  Fixed by casting the mask to `int64_t` before inverting.
+
+With all five fixed, `clang-tidy` and `ASan/UBSan` both confirmed passing on
+the real runner (unrelated to these Windows-only fixes, but run in the same
+CI matrix), and the Windows build itself got past linking for the first
+time — reaching `test/util/test_runner.py` (`bitcoin-util-test.py`), which
+then failed close to 40 of its ~50 cases. This suite's own skip logic
+(documented in Phase 10's ASan section) already excludes the fixtures known
+to be structurally incompatible with this chain's tx/address format, and
+that logic doesn't obviously depend on anything platform-specific — so
+these failures are either the same known-incompatible fixtures somehow
+evading the skip list on Windows specifically, or a genuinely new
+Windows-only gap in the tool binaries or the bctester harness itself. Not
+yet root-caused; needs the actual per-testcase diffs from a Windows run,
+which requires another round-trip through GitHub Actions to obtain. The
+macOS job remains separately stuck `queued` with no runner assigned —
+GitHub is very plausibly withholding macOS runner capacity from this
+brand-new account, not something fixable from this environment.
 
 ---
 
@@ -1605,5 +1722,6 @@ those are removed.
 | 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
-| 26 | Finish triaging the ~40 still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_nulldummy`/`feature_presegwit_node_upgrade`/`feature_pos_reorg`/`feature_block`, `mining_basic`, `interface_rest`, `tool_wallet`/`tool_signet_miner`, the rest of `mempool_*`/`rpc_*`/`wallet_*`) — see the Phase 2 "Functional suite revisited" section above | Phase 2 |
-| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, and why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor — see the Phase 2 section above for what's already been ruled out on each | Phase 2 |
+| 26 | Finish triaging the ~27 still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, the rest of `mempool_*`/`rpc_*`/`wallet_*`) — see the Phase 2 "Functional suite revisited" sections above | Phase 2 |
+| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, why `wallet_send`'s test helper trips a fee_rate/options conflict check even on a plain call, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each | Phase 2 |
+| 28 | Root-cause why `test/util/test_runner.py` (`bitcoin-util-test.py`) fails close to 40 of its ~50 cases specifically on the win64-native MSVC build (its first successful build+link ever on this fork) — either its existing skip list for known-incompatible fixtures isn't taking effect on Windows, or there's a genuinely new Windows-only gap in the tool binaries/bctester harness; needs the actual per-testcase diffs from a real Windows CI run to diagnose — see the Phase 10 win64-native section above | Phase 10 |
