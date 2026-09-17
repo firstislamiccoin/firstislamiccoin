@@ -10,6 +10,14 @@
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bitcoin-util.cpp" />
+    <!-- FirstIslamicCoin: MSVC pulls in the whole libbitcoin_consensus
+         transaction.obj (not just the individual functions bitcoin-util.cpp
+         actually calls), so CMutableTransaction's constructor, which calls
+         GetAdjustedTimeSeconds(), needs a concrete implementation here too,
+         same as bitcoin-tx above. Autotools doesn't need this (its linker
+         discards the otherwise-unused constructor), but the dummy stub is
+         harmless either way. -->
+    <ClCompile Include="..\..\src\timedatadummy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\libbitcoin_consensus\libbitcoin_consensus.vcxproj">

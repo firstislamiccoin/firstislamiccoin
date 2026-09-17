@@ -269,7 +269,11 @@ static RPCHelpMan checkkernel()
     CBlockIndex* pindexPrev = active_chain.Tip();
     unsigned int nBits = GetNextTargetRequired(pindexPrev, Params().GetConsensus(), true);
     int64_t nTime = GetAdjustedTimeSeconds();
-    nTime &= ~Params().GetConsensus().nStakeTimestampMask;
+    // FirstIslamicCoin: nStakeTimestampMask is uint32_t but nTime here is
+    // int64_t; casting before inverting avoids zero-extending the (32-bit)
+    // inverted mask into the wider signed type, which would incorrectly
+    // clear nTime's upper 32 bits instead of just its low mask bits.
+    nTime &= ~static_cast<int64_t>(Params().GetConsensus().nStakeTimestampMask);
 
     for (unsigned int idx = 0; idx < inputs.size(); idx++) {
         const UniValue& o = inputs[idx].get_obj();

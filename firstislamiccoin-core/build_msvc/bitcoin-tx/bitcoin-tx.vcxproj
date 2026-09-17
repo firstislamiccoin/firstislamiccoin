@@ -10,6 +10,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bitcoin-tx.cpp" />
+    <!-- FirstIslamicCoin: matches firstislamiccoin_tx_SOURCES in src/Makefile.am.
+         CMutableTransaction's constructor calls GetAdjustedTimeSeconds(), and this
+         lightweight tool intentionally links the dummy stub, not real timedata.cpp. -->
+    <ClCompile Include="..\..\src\timedatadummy.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\libbitcoin_consensus\libbitcoin_consensus.vcxproj">
