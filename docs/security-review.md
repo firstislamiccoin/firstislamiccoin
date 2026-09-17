@@ -143,8 +143,33 @@ can ever pass under this chain's real consensus rules. All fixed or
 skipped with documentation; see `docs/CHANGELOG-FIC.md`'s Phase 10 section
 for the full list. Final run: full build, all 126 unit test suites, the
 bench sanity-check gate, and libsecp256k1's own suite all pass clean.
-`linux-native-clang-tidy` has not been attempted the same way yet — see
-TODO-HUMAN.
+
+### What running the new clang-tidy job actually confirmed
+
+Same VPS approach, against `ci_native_tidy`/`00_setup_env_native_tidy.sh`.
+`src/.clang-tidy` sets `WarningsAsErrors: '*'`, so this job is a hard
+pass/fail over the whole tree regardless of who wrote which line — unlike
+the cppcheck pass above (a manual audit, not a CI gate, where leaving
+pre-existing upstream findings alone is the established policy). First run
+surfaced 27 unique findings (deduplicated — clang-tidy repeats header-level
+findings once per including translation unit). Checked each against
+`git blame` on commit `3df79ad0` (the verbatim CodexaCoin import that starts
+this repository's history): only one, a dead `[[maybe_unused]] CWallet
+*pwallet` member in `node/miner.h` left over from an earlier fix this same
+phase, was FIC's own change. The other 26 were all pre-existing in the
+CodexaCoin import, untouched since — `use nullptr` instead of `0`,
+default-member-initializer gaps, `push_back` vs `emplace_back`, unused
+`using` declarations, one stale argument-name comment, one `LogPrintf` call
+missing its trailing `\n` — style/modernization findings this fork's
+Bitcoin Core snapshot predates upstream fixing, none touching behavior.
+Fixed all 27 the mechanical way clang-tidy itself proposed. Verified with a
+direct `run-clang-tidy-17` scan of the whole tree (zero findings across
+~755 translation units) and then a completely fresh run of the real CI
+script end-to-end (clean container, full rebuild), which completed and
+reached its normal teardown with `errexit` active throughout and zero
+errors logged. Both `linux-native-asan` and `linux-native-clang-tidy` are
+now confirmed genuinely green; see `docs/CHANGELOG-FIC.md`'s Phase 10
+section for the full finding list.
 
 ## 4. `npm audit` — not applicable
 
@@ -241,10 +266,6 @@ than bumped blind, for the same reason as the deprecation notices above.
 
 ## Open `TODO-HUMAN` from this review
 
-- Run `ci/test_run_all.sh` (with `FILE_ENV=./ci/test/00_setup_env_native_
-  tidy.sh`) the same way the ASan/UBSan job now has been (see §3), or via
-  the real GitHub Actions runner once billing is restored, to get a
-  completed `linux-native-clang-tidy` result.
 - Investigate the two failing mobile crypto tests
   (`address_test.dart`'s bech32 P2WPKH testnet round-trip,
   `keys_test.dart`'s mainnet/testnet coin-type key-derivation inequality) —

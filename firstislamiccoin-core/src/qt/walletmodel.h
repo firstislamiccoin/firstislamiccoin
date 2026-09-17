@@ -133,7 +133,7 @@ public:
         WalletModel *wallet;
         const bool valid;
         const bool relock;
-        bool stakingOnly;
+        bool stakingOnly{false};
     };
 
     UnlockContext requestUnlock();
@@ -199,11 +199,11 @@ private:
     uint256 m_cached_last_update_tip{};
 
     int pollNum = 0;
-    uint64_t nWeight;
+    uint64_t nWeight{0};
     std::atomic<bool> updateStakeWeight;
 
     QThread t;
-    WalletWorker *worker;
+    WalletWorker *worker{nullptr};
 
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();

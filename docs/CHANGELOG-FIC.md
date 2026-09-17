@@ -1358,7 +1358,38 @@ Final run: full build, all 126 unit test suites, the bench sanity-check gate, an
 `libsecp256k1`'s own suite all pass clean, with only the same pre-existing, explicitly
 `(ignored)` `dist-hook` tarball error throughout (this VPS checkout isn't a real git clone, not a
 CI defect). This closes out the `TODO-HUMAN` item on completing a real ASan/UBSan run.
-`linux-native-clang-tidy` has not been attempted the same way and remains open.
+
+### The clang-tidy CI job, actually run to a genuine green state
+
+Same VPS approach as ASan/UBSan above: ran the exact `ci_native_tidy` Docker image and
+`ci/test_run_all.sh`/`00_setup_env_native_tidy.sh` config the `linux-native-clang-tidy` workflow
+job uses. `src/.clang-tidy` sets `WarningsAsErrors: '*'`, so unlike the cppcheck audit elsewhere in
+this document — a manual, non-blocking pass where the established policy is to leave pre-existing
+upstream findings alone — every finding here is a hard failure for this specific CI job
+regardless of which code introduced it, so getting a genuine pass required fixing all of them, not
+only the ones in this project's own code.
+
+First run surfaced 27 unique findings (deduplicated; clang-tidy reports the same header-level
+finding once per translation unit that includes it, so the raw log had far more). Checked each
+one with `git blame` against `3df79ad0` (the verbatim CodexaCoin import commit that starts this
+repository's own history) to see whether it was FIC's own change or inherited unmodified: only one,
+`node/miner.h`'s dead `[[maybe_unused]] CWallet *pwallet` member (left over from an earlier fix
+this same phase), was FIC's own. The other 26 were all pre-existing in the CodexaCoin import,
+untouched by any commit since — plain style/modernization gaps (`use nullptr` instead of `0` for
+eight pointer-valued members and defaults, `use default member initializer` for seven more,
+`use emplace_back` instead of `push_back` for nine constructor-argument insertions, three unused
+`using` declarations, one stale argument-name comment, and one `LogPrintf` call missing its
+trailing `\n`) that this fork's snapshot of Bitcoin Core predates upstream fixing, not anything
+that changes behavior. Every one fixed the same mechanical way clang-tidy itself proposed; none of
+them touch consensus, wallet, or staking logic paths, only their declaration/initialization style.
+
+Two full verification passes after the fixes: a direct `run-clang-tidy-17` scan of the whole
+`src/` tree (zero findings across all ~755 translation units), then a completely fresh run of the
+real CI script end to end — clean container, full rebuild, the actual `06_script_b.sh` step the
+`linux-native-clang-tidy` job runs — which completed and reached its normal teardown with
+`set -o errexit` active throughout and zero errors logged. This closes out the `TODO-HUMAN` item on
+completing a real `linux-native-clang-tidy` run; both the ASan/UBSan and clang-tidy CI jobs newly
+added this phase are now confirmed genuinely green.
 
 ### Real, current CVEs in both Python services, fixed
 
@@ -1409,10 +1440,10 @@ follows, not proof it happened.
 
 ### `TODO-HUMAN`
 
-The genesis key ceremony and everything downstream of a real mainnet existing; the
-`linux-native-clang-tidy` CI job, never actually run the way ASan/UBSan now has been; the two
-failing mobile crypto tests; the Flutter API migrations and major-version dependency bumps that
-need a real device to verify — tracked in the table below (rows 23-26).
+The genesis key ceremony and everything downstream of a real mainnet existing; the two failing
+mobile crypto tests; the Flutter API migrations and major-version dependency bumps that need a
+real device to verify — tracked in the table below (rows 23-25). Completing a real
+`linux-native-clang-tidy` CI run is now done — see above.
 
 ## Prompt items that need no work
 
@@ -1452,7 +1483,6 @@ those are removed.
 | 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
-| 23 | Complete a real `linux-native-clang-tidy` CI run (`ci/test_run_all.sh` with `FILE_ENV=./ci/test/00_setup_env_native_tidy.sh`) the same way the ASan/UBSan job now has been, or via the real GitHub Actions runner once billing is restored — see `docs/security-review.md` §3 | Phase 10 |
-| 24 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
-| 25 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
-| 26 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
+| 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
+| 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
+| 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |

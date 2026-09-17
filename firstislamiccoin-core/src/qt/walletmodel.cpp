@@ -71,9 +71,7 @@ WalletModel::WalletModel(std::unique_ptr<interfaces::Wallet> wallet, ClientModel
     m_node(client_model.node()),
     optionsModel(client_model.getOptionsModel()),
     timer(new QTimer(this)),
-    nWeight(0),
-    updateStakeWeight(true),
-    worker(0)
+    updateStakeWeight(true)
 {
     fHaveWatchOnly = m_wallet->haveWatchOnly();
     addressTableModel = new AddressTableModel(this);
@@ -524,8 +522,7 @@ WalletModel::UnlockContext WalletModel::requestUnlock()
 WalletModel::UnlockContext::UnlockContext(WalletModel *_wallet, bool _valid, bool _relock):
         wallet(_wallet),
         valid(_valid),
-        relock(_relock),
-        stakingOnly(false)
+        relock(_relock)
 {
     if(!relock)
     {

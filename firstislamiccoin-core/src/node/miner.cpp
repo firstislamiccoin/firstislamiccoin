@@ -48,9 +48,7 @@
 
 using wallet::CWallet;
 using wallet::CWalletTx;
-using wallet::COutput;
 using wallet::CCoinControl;
-using wallet::ReserveDestination;
 
 namespace node {
 
@@ -560,7 +558,7 @@ void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned
 // Peercoin/FirstIslamicCoin
 static bool ProcessBlockFound(const CBlock* pblock, ChainstateManager& chainman)
 {
-    LogPrintf("%s", pblock->ToString());
+    LogPrintf("%s\n", pblock->ToString());
 
     // Found a solution
     {

@@ -151,10 +151,10 @@ public:
 class CHashWriter : public HashWriter
 {
 private:
-    const int nType;
+    const int nType{SER_GETHASH};
 
 public:
-    CHashWriter() : nType(SER_GETHASH) {}
+    CHashWriter() {}
 
     int GetType() const { return nType; }
 

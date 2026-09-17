@@ -486,7 +486,7 @@ BOOST_AUTO_TEST_CASE(bnb_sffo_restriction)
             // 3 sat/vB against a 1 sat/vB long term feerate did. Below it SRD's
             // random 3-input result has the lowest waste about half the time.
             /*effective_feerate=*/ CFeeRate(200000),
-            /*long_term_feerate=*/ CFeeRate(1000),
+            /*discard_feerate=*/ CFeeRate(1000),
             /*tx_noinputs_size=*/ 0,
             /*avoid_partial=*/ false,
     };

@@ -422,7 +422,7 @@ RPCHelpMan optimizeutxoset()
     const uint32_t nSequence{CTxIn::MAX_SEQUENCE_NONFINAL};
     std::vector<COutPoint> preset_inputs = coin_control.ListSelected();
     for (const COutPoint& outpoint : preset_inputs) {
-        txTmp.vin.push_back(CTxIn(outpoint, CScript(), nSequence));
+        txTmp.vin.emplace_back(outpoint, CScript(), nSequence);
     }
 
     // Calculate transaction input size

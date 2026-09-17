@@ -23,8 +23,6 @@ namespace node {
 struct NodeContext;
 }
 
-using node::NodeContext;
-
 void RegisterFeeRPCCommands(CRPCTable& t)
 {
     // No fee-estimation RPCs are registered here: FirstIslamicCoin has no

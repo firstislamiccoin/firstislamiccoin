@@ -19,7 +19,6 @@
 using node::BLOCK_SERIALIZATION_HEADER_SIZE;
 using node::BlockManager;
 using node::KernelNotifications;
-using node::MAX_BLOCKFILE_SIZE;
 
 // use BasicTestingSetup here for the data directory configuration, setup, and cleanup
 BOOST_FIXTURE_TEST_SUITE(blockmanager_tests, BasicTestingSetup)

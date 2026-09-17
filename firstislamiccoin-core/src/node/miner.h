@@ -174,7 +174,7 @@ private:
 #ifdef ENABLE_WALLET
     // CreateNewBlock() below takes its own pwallet parameter (shadowing
     // this), so this member is never actually read or assigned.
-    [[maybe_unused]] CWallet *pwallet = 0;
+    [[maybe_unused]] CWallet *pwallet = nullptr;
 #endif
 
 public:
@@ -190,7 +190,7 @@ public:
     explicit BlockAssembler(Chainstate& chainstate, const CTxMemPool* mempool, const Options& options);
 
     /** Construct a new block template with coinbase to scriptPubKeyIn */
-    std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet = nullptr, bool* pfPoSCancel = nullptr, int64_t* pFees = 0, CTxDestination destination = CNoDestination());
+    std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn, CWallet* pwallet = nullptr, bool* pfPoSCancel = nullptr, int64_t* pFees = nullptr, CTxDestination destination = CNoDestination());
 
     inline static std::optional<int64_t> m_last_block_num_txs{};
     inline static std::optional<int64_t> m_last_block_weight{};

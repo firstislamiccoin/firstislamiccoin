@@ -58,7 +58,7 @@ void StopStake(CWallet& wallet) {
         wallet.m_stop_staking_thread = true;
         wallet.m_enabled_staking = false;
         StakeCoins(wallet, false);
-        wallet.threadStakeMinerGroup = 0;
+        wallet.threadStakeMinerGroup = nullptr;
         wallet.m_stop_staking_thread = false;
     }
 }
@@ -219,7 +219,7 @@ void AvailableCoinsForStaking(const CWallet& wallet,
             }
 
             if (spendable)
-                vCoins.push_back(std::make_pair(&wtx, i));
+                vCoins.emplace_back(&wtx, i);
 
             // Cache total amount as we go
             nTotal += output.nValue;
@@ -300,7 +300,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
     // Mark coin stake transaction
     CScript scriptEmpty;
     scriptEmpty.clear();
-    txNew.vout.push_back(CTxOut(0, scriptEmpty));
+    txNew.vout.emplace_back(0, scriptEmpty);
 
     // Choose coins to use
     CAmount nBalance = GetStakingBalance(wallet);
@@ -410,18 +410,18 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
                 }
 
                 txNew.nTime -= n;
-                txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
+                txNew.vin.emplace_back(pcoin.first->GetHash(), pcoin.second);
                 nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
                 vwtxPrev.push_back(tx);
 
                 if (bMinterKey) {
                     // extra output for minter key
-                    txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
+                    txNew.vout.emplace_back(0, scriptPubKeyOut);
                     // redefine scriptPubKeyOut to send output to input address
                     scriptPubKeyOut = scriptPubKeyKernel;
                 }
-    
-                txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
+
+                txNew.vout.emplace_back(0, scriptPubKeyOut);
                 LogPrint(BCLog::COINSTAKE, "CreateCoinStake : added kernel type=%d\n", (int)whichType);
                 fKernelFound = true;
                 break;
@@ -462,7 +462,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
             if (pcoin.first->tx->vout[pcoin.second].nValue >= GetStakeCombineThreshold())
                 continue;
 
-            txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));
+            txNew.vin.emplace_back(pcoin.first->GetHash(), pcoin.second);
             nCredit += pcoin.first->tx->vout[pcoin.second].nValue;
             vwtxPrev.push_back(tx);
         }
@@ -480,7 +480,7 @@ bool CreateCoinStake(CWallet& wallet, unsigned int nBits, int64_t nSearchInterva
 
     // Split stake
     if (nCredit >= GetStakeSplitThreshold())
-        txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
+        txNew.vout.emplace_back(0, scriptPubKeyOut);
 
     // Set output amount
     if (txNew.vout.size() == 3u + bMinterKey) {

@@ -491,9 +491,7 @@ struct CNodeState {
 class CNodeHeaders
 {
 public:
-    CNodeHeaders():
-        maxSize(0),
-        maxAvg(0)
+    CNodeHeaders()
     {
         maxSize = gArgs.GetIntArg("-headerspamfiltermaxsize", DEFAULT_HEADER_SPAM_FILTER_MAX_SIZE);
         maxAvg = gArgs.GetIntArg("-headerspamfiltermaxavg", DEFAULT_HEADER_SPAM_FILTER_MAX_AVG);
@@ -571,8 +569,8 @@ private:
 
 private:
     std::map<int,int> points;
-    size_t maxSize;
-    size_t maxAvg;
+    size_t maxSize{0};
+    size_t maxAvg{0};
 };
 
 class PeerManagerImpl final : public PeerManager
