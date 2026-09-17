@@ -205,7 +205,11 @@ if [ "${RUN_TIDY}" = "true" ]; then
            2>&1 | tee /tmp/iwyu_ci.out
   cd "${BASE_ROOT_DIR}/src"
   python3 "/include-what-you-use/fix_includes.py" --nosafe_headers < /tmp/iwyu_ci.out
-  git --no-pager diff
+  # FirstIslamicCoin: same reason as the leveldb dist-hook `git diff || true`
+  # above -- BASE_ROOT_DIR has no .git alongside it under the dockerized CI
+  # path, so this purely informational diff has nothing to diff against and
+  # would otherwise fail the whole script.
+  git --no-pager diff || true
 fi
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then
