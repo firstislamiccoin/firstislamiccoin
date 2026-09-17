@@ -5,10 +5,10 @@
 """Test the send RPC command."""
 
 from decimal import Decimal, getcontext
-from itertools import product
 
 from test_framework.authproxy import JSONRPCException
 from test_framework.descriptors import descsum_create
+from test_framework.fic import POW_SUBSIDY
 from test_framework.messages import (
     ser_compact_size,
     WITNESS_SCALE_FACTOR,
@@ -112,12 +112,51 @@ class WalletSendTest(BitcoinTestFramework):
         if len(options.keys()) == 0:
             options = None
 
+        # FirstIslamicCoin: send() takes only (outputs, options) here -- no
+        # separate conf_target/estimate_mode RPC parameters exist at all
+        # (removed along with dynamic fee estimation), and fee_rate is only
+        # reachable via an also_positional alias into options. Passing these
+        # unconditionally, even as explicit None, makes AuthServiceProxy send
+        # literal JSON nulls for all of them; fee_rate=null still gets merged
+        # into the RPC dispatcher's internal named-only-args accumulator
+        # (transformNamedArguments() in rpc/server.cpp doesn't skip nulls),
+        # so by the time it reaches the *also* explicitly-null "options"
+        # parameter, that accumulator is non-empty and it throws "Parameter
+        # options conflicts with parameter fee_rate" -- even though nothing
+        # was really set. Only include a kwarg when its value is actually
+        # given -- "options" itself included -- so an ordinary call omits
+        # all of them and never trips this.
+        #
+        # That conflict check isn't only about nulls, though: on upstream,
+        # fee_rate is its own independent positional argument (send(outputs,
+        # conf_target, estimate_mode, fee_rate, options)), so passing it
+        # alongside an options object with unrelated keys (like
+        # add_to_wallet) is fine -- no overlap. Here, fee_rate's
+        # also_positional alias merges into the *same* accumulator as the
+        # literal "options" argument, so supplying both -- even with
+        # non-overlapping content -- trips "conflicts with" for real. Route
+        # arg_fee_rate into options instead whenever options already has
+        # other content, unless options already carries its own explicit
+        # "fee_rate" (the one existing test that deliberately wants the
+        # conflict error keeps working, since arg_fee_rate stays a separate
+        # top-level kwarg for exactly that case).
+        send_kwargs = {"outputs": outputs}
+        if arg_fee_rate is not None and options is not None and "fee_rate" not in options:
+            options["fee_rate"] = arg_fee_rate
+        elif arg_fee_rate is not None:
+            send_kwargs["fee_rate"] = arg_fee_rate
+        if options is not None:
+            send_kwargs["options"] = options
+        if arg_conf_target is not None:
+            send_kwargs["conf_target"] = arg_conf_target
+        if arg_estimate_mode is not None:
+            send_kwargs["estimate_mode"] = arg_estimate_mode
+
         if expect_error is None:
-            res = from_wallet.send(outputs=outputs, conf_target=arg_conf_target, estimate_mode=arg_estimate_mode, fee_rate=arg_fee_rate, options=options)
+            res = from_wallet.send(**send_kwargs)
         else:
             try:
-                assert_raises_rpc_error(expect_error[0], expect_error[1], from_wallet.send,
-                    outputs=outputs, conf_target=arg_conf_target, estimate_mode=arg_estimate_mode, fee_rate=arg_fee_rate, options=options)
+                assert_raises_rpc_error(expect_error[0], expect_error[1], from_wallet.send, **send_kwargs)
             except AssertionError:
                 # Provide debug info if the test fails
                 self.log.error("Unexpected successful result:")
@@ -125,7 +164,7 @@ class WalletSendTest(BitcoinTestFramework):
                 self.log.error(arg_estimate_mode)
                 self.log.error(arg_fee_rate)
                 self.log.error(options)
-                res = from_wallet.send(outputs=outputs, conf_target=arg_conf_target, estimate_mode=arg_estimate_mode, fee_rate=arg_fee_rate, options=options)
+                res = from_wallet.send(**send_kwargs)
                 self.log.error(res)
                 if "txid" in res and add_to_wallet:
                     self.log.error("Transaction details:")
@@ -288,16 +327,13 @@ class WalletSendTest(BitcoinTestFramework):
 
         self.log.info("Create transaction that spends to address, but don't broadcast...")
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, add_to_wallet=False)
-        # conf_target & estimate_mode can be set as argument or option
-        res1 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_conf_target=1, arg_estimate_mode="economical", add_to_wallet=False)
-        res2 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=1, estimate_mode="economical", add_to_wallet=False)
-        assert_equal(self.nodes[1].decodepsbt(res1["psbt"])["fee"],
-                     self.nodes[1].decodepsbt(res2["psbt"])["fee"])
-        # but not at the same time
-        for mode in ["unset", "economical", "conservative"]:
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_conf_target=1, arg_estimate_mode="economical",
-                conf_target=1, estimate_mode=mode, add_to_wallet=False,
-                expect_error=(-8, "Pass conf_target and estimate_mode either as arguments or in the options object, but not both"))
+        # FirstIslamicCoin: conf_target and estimate_mode -- as an argument,
+        # as an option, and the "not both at once" conflict between the two
+        # forms -- don't exist in any form on this fork's send(); it has no
+        # dynamic fee estimation to target a confirmation window for (see
+        # spend.cpp's send() handler, which takes only outputs and options).
+        # Skipped entirely rather than adapted, since there's nothing left
+        # to adapt it to.
 
         self.log.info("Create PSBT from watch-only wallet w3, sign with w2...")
         res = self.test_send(from_wallet=w3, to_wallet=w1, amount=1)
@@ -327,59 +363,83 @@ class WalletSendTest(BitcoinTestFramework):
         res2 = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate="1", add_to_wallet=False)
         assert_equal(self.nodes[1].decodepsbt(res1["psbt"])["fee"], self.nodes[1].decodepsbt(res2["psbt"])["fee"])
 
+        # FirstIslamicCoin: all four fee_rate values below (7, 2, 4.531, 3
+        # sat/vB) are under this fork's fixed 100 sat/vB floor, so the
+        # actual applied rate is the floor (0.001 BTC/kvB), not the
+        # requested one.
         res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=7, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.00007"))
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
 
-        # "unset" and None are treated the same for estimate_mode
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=2, estimate_mode="unset", add_to_wallet=False)
+        # FirstIslamicCoin: dropped the "unset and None are treated the same
+        # for estimate_mode" half of this case -- estimate_mode isn't a
+        # valid options key here at all (see the note above on conf_target/
+        # estimate_mode not existing on this fork's send()) -- but fee_rate
+        # alone is still worth checking.
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=2, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.00002"))
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
 
         res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=4.531, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.00004531"))
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
 
         res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=3, add_to_wallet=False)
         fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
-        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.00003"))
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
 
         # Test that passing fee_rate as both an argument and an option raises.
+        # FirstIslamicCoin: upstream's send(outputs, conf_target, estimate_mode,
+        # fee_rate, options) has fee_rate as its own independent positional
+        # argument, so this duplication is only caught once inside the C++
+        # handler, which raises the friendlier message below. This fork's
+        # send(outputs, options) instead merges the fee_rate argument-alias
+        # into the same slot as the literal "options" argument at the RPC
+        # dispatcher level (rpc/server.cpp's transformNamedArguments()), so
+        # it's caught earlier, with the dispatcher's generic message.
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=1, fee_rate=1, add_to_wallet=False,
-                       expect_error=(-8, "Pass the fee_rate either as an argument, or in the options object, but not both"))
+                       expect_error=(-8, "Parameter options conflicts with parameter fee_rate"))
 
-        assert_raises_rpc_error(-8, "Use fee_rate (sat/vB) instead of feeRate", w0.send, {w1.getnewaddress(): 1}, 6, "conservative", 1, {"feeRate": 0.01})
+        # FirstIslamicCoin: send() takes only (outputs, options) -- the raw
+        # positional calls below pass options as the 2nd argument, not the
+        # 5th, since there's no conf_target/estimate_mode/fee_rate slot in
+        # between (see the send() signature note above).
+        assert_raises_rpc_error(-8, "Use fee_rate (sat/vB) instead of feeRate", w0.send, {w1.getnewaddress(): 1}, {"feeRate": 0.01})
 
-        assert_raises_rpc_error(-3, "Unexpected key totalFee", w0.send, {w1.getnewaddress(): 1}, 6, "conservative", 1, {"totalFee": 0.01})
+        assert_raises_rpc_error(-3, "Unexpected key totalFee", w0.send, {w1.getnewaddress(): 1}, {"totalFee": 0.01})
 
-        for target, mode in product([-1, 0, 1009], ["economical", "conservative"]):
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=target, estimate_mode=mode,
-                expect_error=(-8, "Invalid conf_target, must be between 1 and 1008"))  # max value of 1008 per src/policy/fees.h
-        msg = 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"'
-        for target, mode in product([-1, 0], ["btc/kb", "sat/b"]):
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=target, estimate_mode=mode, expect_error=(-8, msg))
-        for mode in ["", "foo", Decimal("3.141592")]:
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=0.1, estimate_mode=mode, expect_error=(-8, msg))
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_conf_target=0.1, arg_estimate_mode=mode, expect_error=(-8, msg))
-            assert_raises_rpc_error(-8, msg, w0.send, {w1.getnewaddress(): 1}, 0.1, mode)
+        # FirstIslamicCoin: dropped the conf_target/estimate_mode
+        # range/type-validation cases entirely -- neither parameter exists
+        # on this fork's send() (see the note above), so there's no
+        # validation left to exercise.
 
-        for mode in ["economical", "conservative"]:
-            for k, v in {"string": "true", "bool": True, "object": {"foo": "bar"}}.items():
-                self.test_send(from_wallet=w0, to_wallet=w1, amount=1, conf_target=v, estimate_mode=mode,
-                    expect_error=(-3, f"JSON value of type {k} for field conf_target is not of expected type number"))
+        # Test setting explicit fee rate just below the minimum.
+        # FirstIslamicCoin: upstream expects a "fee rate too low" RPC error
+        # here, since 0.999 sat/vB is below its ~1 sat/vB default relay fee
+        # and this specific check (unlike coin selection's own floor
+        # enforcement) rejects rather than clamps. On this fork the request
+        # is silently bumped up to the fixed 100 sat/vB floor instead and
+        # the send succeeds -- confirmed empirically (no error is raised).
+        self.log.info("Explicit fee rate below the floor is silently bumped up to it, not rejected, if fee_rate of 0.99999999 is passed")
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=0.999, add_to_wallet=False)
+        fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=0.999, add_to_wallet=False)
+        fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
+        assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
 
-        # Test setting explicit fee rate just below the minimum of 1 sat/vB.
-        self.log.info("Explicit fee rate raises RPC error 'fee rate too low' if fee_rate of 0.99999999 is passed")
-        msg = "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)"
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=0.999, expect_error=(-4, msg))
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=0.999, expect_error=(-4, msg))
-
-        self.log.info("Explicit fee rate raises if invalid fee_rate is passed")
-        # Test fee_rate with zero values.
-        msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)"
+        # FirstIslamicCoin: same story as 0.999 above -- upstream expects a
+        # "fee rate too low" rejection for a zero fee_rate, but this fork
+        # silently bumps it up to the 100 sat/vB floor instead (confirmed
+        # empirically), so the send succeeds with the floor fee applied.
+        self.log.info("Explicit zero fee_rate is silently bumped up to the floor, not rejected")
         for zero_value in [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]:
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=zero_value, expect_error=(-4, msg))
-            self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=zero_value, expect_error=(-4, msg))
+            res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, fee_rate=zero_value, add_to_wallet=False)
+            fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
+            assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
+            res = self.test_send(from_wallet=w0, to_wallet=w1, amount=1, arg_fee_rate=zero_value, add_to_wallet=False)
+            fee = self.nodes[1].decodepsbt(res["psbt"])["fee"]
+            assert_fee_amount(fee, count_bytes(res["hex"]), Decimal("0.001"))
         msg = "Invalid amount"
         # Test fee_rate values that don't pass fixed-point parsing checks.
         for invalid_value in ["", 0.000000001, 1e-09, 1.111111111, 1111111111111111, "31.999999999999999999999"]:
@@ -409,22 +469,28 @@ class WalletSendTest(BitcoinTestFramework):
         # assert_fee_amount(fee, Decimal(len(res["hex"]) / 2), Decimal("0.000001"))
 
         self.log.info("If inputs are specified, do not automatically add more...")
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=51, inputs=[], add_to_wallet=False)
+        # FirstIslamicCoin: 51/50 here are upstream's regtest block subsidy
+        # (50 BTC) plus one, and the single coinbase UTXO that subsidy left
+        # behind. This fork's regtest subsidy is POW_SUBSIDY, not 50, so both
+        # need to scale with it for the same "target exceeds the one preset
+        # coin" scenario to actually occur.
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=POW_SUBSIDY + 1, inputs=[], add_to_wallet=False)
         assert res["complete"]
         utxo1 = w0.listunspent()[0]
-        assert_equal(utxo1["amount"], 50)
+        assert_equal(utxo1["amount"], POW_SUBSIDY)
         ERR_NOT_ENOUGH_PRESET_INPUTS = "The preselected coins total amount does not cover the transaction target. " \
                                        "Please allow other inputs to be automatically selected or include more coins manually"
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=51, inputs=[utxo1],
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=POW_SUBSIDY + 1, inputs=[utxo1],
                        expect_error=(-4, ERR_NOT_ENOUGH_PRESET_INPUTS))
-        self.test_send(from_wallet=w0, to_wallet=w1, amount=51, inputs=[utxo1], add_inputs=False,
+        self.test_send(from_wallet=w0, to_wallet=w1, amount=POW_SUBSIDY + 1, inputs=[utxo1], add_inputs=False,
                        expect_error=(-4, ERR_NOT_ENOUGH_PRESET_INPUTS))
-        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=51, inputs=[utxo1], add_inputs=True, add_to_wallet=False)
+        res = self.test_send(from_wallet=w0, to_wallet=w1, amount=POW_SUBSIDY + 1, inputs=[utxo1], add_inputs=True, add_to_wallet=False)
         assert res["complete"]
 
         self.log.info("Manual change address and position...")
+        # FirstIslamicCoin: error text says "firstislamiccoin address", not "bitcoin address" (rebranded).
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, change_address="not an address",
-                       expect_error=(-5, "Change address must be a valid bitcoin address"))
+                       expect_error=(-5, "Change address must be a valid firstislamiccoin address"))
         change_address = w0.getnewaddress()
         self.test_send(from_wallet=w0, to_wallet=w1, amount=1, add_to_wallet=False, change_address=change_address)
         assert res["complete"]
@@ -486,7 +552,9 @@ class WalletSendTest(BitcoinTestFramework):
         self.test_send(from_wallet=w0, to_wallet=minconfw, amount=2)
         self.generate(self.nodes[0], 3)
         self.test_send(from_wallet=minconfw, to_wallet=w0, amount=1, minconf=4, expect_error=(-4, "Insufficient funds"))
-        self.test_send(from_wallet=minconfw, to_wallet=w0, amount=1, minconf=-4, expect_error=(-8, "Negative minconf"))
+        # FirstIslamicCoin: minconf/maxconf were wired up (see spend.cpp) with
+        # slightly different wording than upstream's "Negative minconf".
+        self.test_send(from_wallet=minconfw, to_wallet=w0, amount=1, minconf=-4, expect_error=(-8, "minconf cannot be negative"))
         res = self.test_send(from_wallet=minconfw, to_wallet=w0, amount=1, minconf=3)
         assert res["complete"]
 
@@ -565,7 +633,9 @@ class WalletSendTest(BitcoinTestFramework):
         assert signed["complete"]
         testres = self.nodes[0].testmempoolaccept([signed["hex"]])[0]
         assert_equal(testres["allowed"], True)
-        assert_fee_amount(testres["fees"]["base"], testres["vsize"], Decimal(0.0001))
+        # FirstIslamicCoin: fee_rate=10 (sat/vB) above is below this fork's
+        # fixed 100 sat/vB floor, so the actual applied rate is the floor.
+        assert_fee_amount(testres["fees"]["base"], testres["vsize"], Decimal("0.001"))
 
 if __name__ == '__main__':
     WalletSendTest().main()

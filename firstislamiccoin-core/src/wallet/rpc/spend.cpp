@@ -843,6 +843,13 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
             }
             coinControl.m_feerate = CFeeRate(AmountFromValue(options["feeRate"]));
             coinControl.fOverrideFeeRate = true;
+        } else if (options.exists("fee_rate")) {
+            // FirstIslamicCoin: honour fee_rate (sat/vB), declared above and
+            // in this RPC's own help text but never read -- see the same
+            // fix already made for sendtoaddress. decimals=3 parses it at
+            // sat/vB scale rather than AmountFromValue's default BTC scale.
+            coinControl.m_feerate = CFeeRate(AmountFromValue(options["fee_rate"], /*decimals=*/3));
+            coinControl.fOverrideFeeRate = true;
         }
 
         if (options.exists("subtractFeeFromOutputs") || options.exists("subtract_fee_from_outputs") )

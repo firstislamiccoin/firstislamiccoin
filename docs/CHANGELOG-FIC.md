@@ -838,6 +838,144 @@ P2P/IBD-timeout-scaling group were already anticipated as needing real work
 back when Phase 2 began (above); the rest are genuinely unknown until
 looked at. Tracked as `TODO-HUMAN`.
 
+### A third pass: `wallet_backup`/`wallet_fundrawtransaction`/`mempool_limit`/`wallet_send` fully green, a real fee_rate wiring bug found, three RBF/CPFP scenarios reworked for a fork with neither
+
+Continuing the Phase 2 backlog (row 26/27 above). All four files now pass in full on the VPS.
+
+**`wallet_backup`: this fork's `DEFAULT_TXINDEX` is `true`, not upstream's `false`, inherited
+unmodified from the CodexaCoin import (`src/index/txindex.h`). The test resets node2 to "no
+chain" by deleting `blocks/` and `chainstate/`, which is sufficient upstream (txindex defaults
+off there) but leaves a stale txindex pointing at a best-block that no longer exists here,
+crashing node2 on restart (`txindex: best block of the index not found`). Fixed by also
+deleting `indexes/` in that same reset step.
+
+**A real, previously-undiscovered RPC bug: `fundrawtransaction`'s `fee_rate` (sat/vB) option was
+declared and type-checked, but never actually read.** Same bug class as the `sendtoaddress`
+fix earlier in this document ("declared but never read, as upstream's `SetFeeEstimateMode`
+did"), just missed for the shared `FundTransaction()` helper (used by `fundrawtransaction`,
+`fundpsbt`, `walletcreatefundedpsbt`, and — via its `options` parameter — `send`/`sendall`
+too). Only the older `feeRate` (FIC/kvB) key was ever wired to `coinControl.m_feerate`; `fee_rate`
+silently fell through to default fee estimation regardless of what was requested, both for
+values below this fork's floor (masked, since the floor coincidentally is the default anyway)
+and — the part that actually surfaced this — for values *above* the floor, which should have
+scaled the fee up and instead didn't at all. Fixed by wiring `fee_rate` the same way
+`sendtoaddress` already does (`AmountFromValue(value, /*decimals=*/3)`, parsing at sat/vB scale).
+Required a VPS rebuild; re-ran every previously-green file that touches `fundrawtransaction`
+fee handling afterward (`wallet_create_tx`, `rpc_packages`) to confirm no regression, plus the
+two files with already-documented, unrelated open findings (`wallet_basic`, `wallet_abandonconflict`)
+to confirm those specific failures are unchanged, not new.
+
+**`wallet_fundrawtransaction`, several distinct real bugs:**
+- `test_weight_calculation`'s second fee-size assertion assumed a P2WPKH output; this fork's
+  `DEFAULT_ADDRESS_TYPE` is `LEGACY` (inherited unmodified from CodexaCoin), so the actual output
+  was 3 bytes bigger (P2PKH). Added the missing `address_type="bech32"`.
+- `test_change_position` hardcoded a `50`-unit payment to exactly match a single coinbase UTXO for
+  a changeless-tx scenario — upstream's regtest subsidy. This fork's is `POW_SUBSIDY` (28,000,000);
+  swapped in the real constant.
+- `test_fee_p2pkh`/`test_fee_p2pkh_multi_out`/`test_fee_p2sh`/`test_fee_4of5` all call
+  `lock_outputs_type(nodes[0], "p2pkh")`, which locks out P2PKH/bare-multisig UTXOs so the test can
+  fund from "whatever's left." Upstream's default address type is bech32, so plenty is always left;
+  this fork's is legacy, so it locks out node0's *entire* balance. Added a small `fund_non_p2pkh_utxo()`
+  helper, called fresh before each of the four (its own change reverts to locked-out P2PKH once
+  spent, so a one-time top-up doesn't survive being used).
+- `test_locked_wallet`'s exact-fee "changeless tx" construction assumed a 110-vbyte P2WPKH→P2WPKH
+  tx (upstream); this fork's is a non-segwit 191-vbyte P2PKH→P2PKH tx with no witness discount. Worse,
+  `fundrawtransaction`'s own pre-signing fee *estimate* (`CalculateMaximumSignedTxSize`, used to decide
+  whether funding succeeds) comes out 2 vbytes larger than the real signed size for this exact shape —
+  binary-searched the true threshold empirically (193, not 191) rather than trust either assumption.
+  Two of that same function's exact-balance assertions (51.1/50.19 = upstream's flat 50-subsidy +
+  a spend amount) don't hold either: on this fork the matured coinbase they check for also carries
+  real transaction fees from whatever else got mined in its block, so an exact match is fragile
+  against unrelated fee amounts elsewhere in the file. Switched both to `assert_greater_than_or_equal`.
+- `test_op_return` decoded a hardcoded raw Bitcoin-wire-format hex (marker+flag, 0 inputs, 1
+  OP_RETURN output) — permanently incompatible with this chain's extra-nTime wire format, same
+  class of incompatibility as the `NTIME_OR_ADDRESS_INCOMPATIBLE_FIXTURES` set noted elsewhere in
+  this document. Replaced with the equivalent built through `createrawtransaction` itself.
+- `test_option_feerate`'s conf_target/estimate_mode validation-error cases (both don't exist on this
+  fork's `fundrawtransaction`, matching `send`'s own removal below) and its "100,000 sat/vB exceeds
+  `-maxtxfee`" case (needed roughly double that for this rawtx's real ~225-vbyte estimated size to
+  actually exceed the 1 FIC default) both needed adjusting once the `fee_rate` fix above made the
+  option functional enough to actually reach these code paths.
+- `test_input_confs_control` passed a 4th `replaceable=True` positional arg to `createrawtransaction`,
+  which only takes `(inputs, outputs, locktime)` here — RBF is fully removed, so there's no
+  replaceable flag to set. Its final "craft a BIP125-compliant replacement" scenario is dropped for
+  the same reason `bad-txns-spends-conflicting-tx` no longer applies (see `mempool_limit` below):
+  without replacement, every conflicting spend of the same input is rejected outright
+  (`txn-mempool-conflict`) regardless of how confirmed its additional inputs are, so the
+  BIP125-compliance distinction the dropped scenario existed to verify no longer has two different
+  outcomes to distinguish.
+
+**`mempool_limit`: three real architectural findings, confirmed empirically, not assumed.**
+1. The "rolling minimum fee" mechanism (`CTxMemPool::GetMinFee()`, `trackPackageRemoved()`, and the
+   `TrimToSize()` log line `fill_mempool()`'s own docstring names) is commented-out dead code in
+   `src/txmempool.cpp`, inherited unmodified from the CodexaCoin import, superseded by this fork's
+   fixed fee floor. Eviction by mempool size still runs; only the "raise the acceptance bar
+   afterwards" half is gone, so `mempoolminfee` never rises above `minrelaytxfee` no matter how full
+   the mempool gets.
+2. Confirmed empirically (deliberately submitting a below-floor parent through `submitpackage` with a
+   fee-bumping child attached) that this fork's fixed fee floor is enforced unconditionally per-transaction,
+   even inside package validation — `bad-txns-fee-not-enough`, CPFP or not. Upstream's package-CPFP
+   rescue of a too-low-fee parent has no equivalent here at all.
+3. Confirmed in `src/validation.cpp`'s `PreChecks()` (explicit comment, "Disable replacement feature
+   for now") that RBF is hard-disabled with no fallback: any transaction conflicting with an existing
+   mempool entry is rejected outright, unconditionally.
+
+Together, these three broke or invalidated large parts of `test_rbf_carveout_disallowed`,
+`test_mid_package_eviction`, and `test_mid_package_replacement` — all reworked or resolved on their
+own merits rather than uniformly skipped:
+- `test_rbf_carveout_disallowed`'s CPFP carve-out mechanism (`cpfp_carve_out_limits` in
+  `src/validation.cpp`) turned out to *not* be RBF-specific in the actual C++ despite its name — it's
+  a general "give one small, single-ancestor tx some descendant-limit slack" rule, already
+  independently fixed for RBF's removal in an earlier pass of this project (see that function's own
+  `FirstIslamicCoin` comment). Reworked the test to trigger it via a sibling output of the same parent
+  instead of an RBF replacement — same mechanism, same assertions, no replacement needed.
+- `test_mid_package_eviction`'s coins-cache-invalidation scenario (a coin disappearing mid-package
+  due to *size* eviction) doesn't depend on RBF or the dead rolling-fee mechanism at all once its
+  `cpfp_parent` is priced to individually clear the floor instead of deliberately under it — reworked
+  fee construction only, same scenario, same assertions.
+- `test_mid_package_replacement` tests a coin going stale specifically because one tx *replaces*
+  another mid-package — with replacement hard-disabled, there is no substitute construction (asked;
+  user chose skip-with-documentation over reworking, since reusing `test_mid_package_eviction`'s
+  size-eviction trick here would just duplicate that test's coverage under a different name, not
+  test this one's actual subject).
+- Several of `mempool_limit`'s own fee constructions (elsewhere in `run_test`, and in the two reworked
+  functions above) compute an assumed vsize as `target_weight // 4` and add a small upstream-sized
+  margin (`+ 0.000001` FIC, a couple of sats); confirmed empirically that `create_self_transfer[_multi]`'s
+  real, `_bulk_tx()`-padded vsize for a given `target_weight` comes out a few bytes larger than that,
+  undercutting the floor by a few hundred sats. Replaced the fragile hand-rolled margins with this
+  fork's own `get_min_fee_sat()` helper plus a comfortable buffer everywhere this pattern recurred.
+
+**`wallet_send`, the `fee_rate`/`options` conflict traced to a real structural cause, not a Python
+quirk.** The earlier-documented mystery (row 27: "trips a conflict check even on a plain call") has
+two layers. First, `AuthServiceProxy` sends every keyword argument as a literal JSON value, including
+explicit `None` as JSON `null` — `rpc/server.cpp`'s `transformNamedArguments()` doesn't skip nulls
+when merging named-only arguments into the RPC dispatcher's internal accumulator, so a call passing
+both `fee_rate=None` and `options=None` (i.e., an entirely ordinary call with neither actually set)
+still trips "conflicts with." Fixed `test_send()` to omit a kwarg entirely rather than pass it as
+`None`. Second, and structurally: upstream's `send(outputs, conf_target, estimate_mode, fee_rate,
+options)` has `fee_rate` as its own independent positional argument, so passing it alongside an
+`options` object with unrelated keys (e.g. `add_to_wallet`) is fine — no overlap. This fork's
+`send(outputs, options)` (`conf_target`/`estimate_mode` removed entirely — no dynamic fee estimation
+to configure) instead reaches `fee_rate` only via an `also_positional` alias that merges into the
+*same* dispatcher slot as the literal `options` argument, so supplying both together trips
+"conflicts with" even with non-overlapping content — a real, permanent difference from upstream's
+argument structure, not a bug. `test_send()` now routes `arg_fee_rate` into the `options` dict
+instead of passing it separately whenever `options` already has other content. The deliberate "both
+at once" conflict test's expected message was also updated: this fork hits the RPC dispatcher's
+generic message first, not the friendlier one from inside the C++ handler body upstream's structure
+lets execute. Once past the fee_rate fix above, several other places in this file requesting a
+fee_rate below the floor (7, 2, 4.531, 3, 0.999, 0, 10 sat/vB) needed their expected outcome switched
+from "rejected" to "silently bumped to the floor" — confirmed empirically that only pathologically
+tiny/malformed values are rejected outright; anything else below the floor is clamped up, not
+refused. `test_send()`'s remaining `conf_target`/`estimate_mode` cases (equivalence with the
+options-object form, and their own validation-error cases) were dropped entirely — neither parameter
+exists on this fork's `send()` in any form.
+
+Also added `-v` to the Windows CI workflow's `test\util\test_runner.py` invocation
+(`.github/workflows/core-ci.yml`), to get real per-testcase diffs out of the still-unexplained
+`bitcoin-util-test.py` Windows failures (row 28) on the next run, rather than the bare pass/fail
+count the default invocation gives.
+
 ### The win64-native MSVC CI job, actually run to a genuine build for the first time
 
 GitHub Actions billing came back during this phase, letting the real
@@ -1722,6 +1860,6 @@ those are removed.
 | 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
-| 26 | Finish triaging the ~27 still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, the rest of `mempool_*`/`rpc_*`/`wallet_*`) — see the Phase 2 "Functional suite revisited" sections above | Phase 2 |
-| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, why `wallet_send`'s test helper trips a fee_rate/options conflict check even on a plain call, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each | Phase 2 |
+| 26 | Finish triaging the still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_accept`/`mempool_package_limits`, `rpc_blockchain`/`rpc_createmultisig`/`rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_sendall`/`wallet_signrawtransactionwithwallet`/`wallet_transactiontime_rescan`) — `wallet_backup`, `wallet_fundrawtransaction`, `mempool_limit`, and `wallet_send` are now fully triaged and green, see the Phase 2 sections above | Phase 2 |
+| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each (the `wallet_send` fee_rate/options item formerly in this row is resolved — see the third-pass section above) | Phase 2 |
 | 28 | Root-cause why `test/util/test_runner.py` (`bitcoin-util-test.py`) fails close to 40 of its ~50 cases specifically on the win64-native MSVC build (its first successful build+link ever on this fork) — either its existing skip list for known-incompatible fixtures isn't taking effect on Windows, or there's a genuinely new Windows-only gap in the tool binaries/bctester harness; needs the actual per-testcase diffs from a real Windows CI run to diagnose — see the Phase 10 win64-native section above | Phase 10 |

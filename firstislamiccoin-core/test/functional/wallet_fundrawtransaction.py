@@ -10,6 +10,7 @@ from itertools import product
 from math import ceil
 
 from test_framework.descriptors import descsum_create
+from test_framework.fic import POW_SUBSIDY
 from test_framework.messages import (
     COIN,
 )
@@ -153,7 +154,14 @@ class RawTransactionsTest(BitcoinTestFramework):
     def test_change_position(self):
         """Ensure setting changePosition in fundraw with an exact match is handled properly."""
         self.log.info("Test fundrawtxn changePosition option")
-        rawmatch = self.nodes[2].createrawtransaction([], {self.nodes[2].getnewaddress():50})
+        # FirstIslamicCoin: the hardcoded 50 here is upstream's regtest block
+        # subsidy, matching the single coinbase UTXO nodes[2]'s wallet holds
+        # at this point (one block, generated in run_test() above) so that
+        # coin selection can spend it exactly and skip creating change. This
+        # fork's regtest subsidy is POW_SUBSIDY (28,000,000), not 50, so the
+        # payment amount needs to match that instead for the same "exact
+        # match, no change" scenario to actually occur.
+        rawmatch = self.nodes[2].createrawtransaction([], {self.nodes[2].getnewaddress(): POW_SUBSIDY})
         rawmatch = self.nodes[2].fundrawtransaction(rawmatch, changePosition=1, subtractFeeFromOutputs=[0])
         assert_equal(rawmatch["changepos"], -1)
 
@@ -276,7 +284,8 @@ class RawTransactionsTest(BitcoinTestFramework):
         dec_tx  = self.nodes[2].decoderawtransaction(rawtx)
         assert_equal(utx['txid'], dec_tx['vin'][0]['txid'])
 
-        assert_raises_rpc_error(-5, "Change address must be a valid bitcoin address", self.nodes[2].fundrawtransaction, rawtx, changeAddress='foobar')
+        # FirstIslamicCoin: error text says "firstislamiccoin address", not "bitcoin address" (rebranded).
+        assert_raises_rpc_error(-5, "Change address must be a valid firstislamiccoin address", self.nodes[2].fundrawtransaction, rawtx, changeAddress='foobar')
 
     def test_valid_change_address(self):
         self.log.info("Test fundrawtxn with a provided change address")
@@ -406,9 +415,26 @@ class RawTransactionsTest(BitcoinTestFramework):
         rawtx   = self.nodes[2].createrawtransaction(inputs, outputs)
         assert_raises_rpc_error(-4, "Unable to find UTXO for external input", self.nodes[2].fundrawtransaction, rawtx)
 
+    def fund_non_p2pkh_utxo(self, amount=100):
+        """
+        FirstIslamicCoin: this fork's DEFAULT_ADDRESS_TYPE is LEGACY
+        (inherited unmodified from the CodexaCoin import), so essentially
+        every UTXO node0 holds by default is P2PKH. lock_outputs_type(...,
+        "p2pkh") locks those out so a test can fund from whatever's left of
+        the wallet's other types -- on upstream, where the default type is
+        bech32, that still leaves plenty to spend; here it would lock out
+        node0's entire balance, leaving nothing. Called fresh right before
+        each such test (not once for the whole file), since spending this
+        UTXO returns its change as P2PKH by default too, so it doesn't
+        survive being used by an earlier one of these tests.
+        """
+        self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(address_type="bech32"), amount)
+        self.generate(self.nodes[0], 1)
+
     def test_fee_p2pkh(self):
         """Compare fee of a standard pubkeyhash transaction."""
         self.log.info("Test fundrawtxn p2pkh fee")
+        self.fund_non_p2pkh_utxo()
         self.lock_outputs_type(self.nodes[0], "p2pkh")
         inputs = []
         outputs = {self.nodes[1].getnewaddress():1.1}
@@ -428,6 +454,7 @@ class RawTransactionsTest(BitcoinTestFramework):
     def test_fee_p2pkh_multi_out(self):
         """Compare fee of a standard pubkeyhash transaction with multiple outputs."""
         self.log.info("Test fundrawtxn p2pkh fee with multiple outputs")
+        self.fund_non_p2pkh_utxo()
         self.lock_outputs_type(self.nodes[0], "p2pkh")
         inputs = []
         outputs = {
@@ -453,6 +480,7 @@ class RawTransactionsTest(BitcoinTestFramework):
 
     def test_fee_p2sh(self):
         """Compare fee of a 2-of-2 multisig p2sh transaction."""
+        self.fund_non_p2pkh_utxo()
         self.lock_outputs_type(self.nodes[0], "p2pkh")
         # Create 2-of-2 addr.
         addr1 = self.nodes[1].getnewaddress()
@@ -481,6 +509,7 @@ class RawTransactionsTest(BitcoinTestFramework):
     def test_fee_4of5(self):
         """Compare fee of a standard pubkeyhash transaction."""
         self.log.info("Test fundrawtxn fee with 4-of-5 addresses")
+        self.fund_non_p2pkh_utxo()
         self.lock_outputs_type(self.nodes[0], "p2pkh")
 
         # Create 4-of-5 addr.
@@ -602,7 +631,21 @@ class RawTransactionsTest(BitcoinTestFramework):
         inputs = wallet.listunspent()
 
         # Deduce exact fee to produce a changeless transaction
-        tx_size = 110  # Total tx size: 110 vbytes, p2wpkh -> p2wpkh. Input 68 vbytes + rest of tx is 42 vbytes.
+        # FirstIslamicCoin: this fork's DEFAULT_ADDRESS_TYPE is LEGACY
+        # (inherited unmodified from the CodexaCoin import), so
+        # wallet.getnewaddress() above and self.nodes[0].getnewaddress()
+        # below are both P2PKH, not the P2WPKH upstream assumed -- a
+        # non-segwit P2PKH->P2PKH tx has no witness discount and a bigger
+        # scriptSig, so it's larger than upstream's 110 vbytes. 193 is
+        # fundrawtransaction's own fee estimate for this exact input/output
+        # shape (found empirically: below it, fundrawtransaction itself
+        # reports "Insufficient funds"). It's 2 vbytes above the 191 a real
+        # signed instance of this tx actually comes out to on this build
+        # (also measured directly) -- fundrawtransaction's pre-signing dummy
+        # signature is evidently a couple of bytes more conservative than
+        # the real (low-R) signature ends up being, and it's the estimate,
+        # not the eventual real size, that decides whether funding succeeds.
+        tx_size = 193
         value = inputs[0]["amount"] - get_fee(tx_size, self.min_relay_tx_fee)
 
         outputs = {self.nodes[0].getnewaddress():value}
@@ -638,7 +681,17 @@ class RawTransactionsTest(BitcoinTestFramework):
             self.generate(self.nodes[1], 1)
 
             # Make sure funds are received at node1.
-            assert_equal(oldBalance+Decimal('51.10000000'), self.nodes[0].getbalance())
+            # FirstIslamicCoin: 51.1 = upstream's regtest block subsidy (50)
+            # + the 1.1 sent above -- a coinbase from earlier in the test
+            # matures and becomes spendable right at this generate() call.
+            # This fork's regtest subsidy is POW_SUBSIDY, not 50; unlike
+            # upstream's flat 50, that maturing coinbase also collects real
+            # transaction fees from whatever else got mined in its block, so
+            # an exact match isn't reliable here (and would make this
+            # assertion sensitive to unrelated fee amounts elsewhere in this
+            # file) -- check that at least the subsidy and the transfer
+            # landed instead.
+            assert_greater_than_or_equal(self.nodes[0].getbalance(), oldBalance + POW_SUBSIDY + Decimal('1.10000000'))
 
             # Restore pre-test wallet state
             wallet.sendall(recipients=[df_wallet.getnewaddress(), df_wallet.getnewaddress(), df_wallet.getnewaddress()])
@@ -693,12 +746,28 @@ class RawTransactionsTest(BitcoinTestFramework):
         fundedAndSignedTx = self.nodes[1].signrawtransactionwithwallet(fundedTx['hex'])
         self.nodes[1].sendrawtransaction(fundedAndSignedTx['hex'])
         self.generate(self.nodes[1], 1)
-        assert_equal(oldBalance+Decimal('50.19000000'), self.nodes[0].getbalance()) #0.19+block reward
+        # FirstIslamicCoin: 50.19 = upstream's regtest block subsidy (50) +
+        # 0.19 (the two outputs sent above) -- node0's own coinbase from
+        # generate()ing above just matures with this last confirmation.
+        # This fork's regtest subsidy is POW_SUBSIDY, not 50; unlike
+        # upstream's flat 50, that maturing coinbase also collects real
+        # transaction fees from whatever else got mined in its block, so an
+        # exact match isn't reliable here -- check that at least the subsidy
+        # and the two sent outputs landed instead.
+        assert_greater_than_or_equal(self.nodes[0].getbalance(), oldBalance + POW_SUBSIDY + Decimal('0.19000000'))
 
     def test_op_return(self):
         self.log.info("Test fundrawtxn with OP_RETURN and no vin")
 
-        rawtx   = "0100000000010000000000000000066a047465737400000000"
+        # FirstIslamicCoin: the original hardcoded hex here is a raw
+        # Bitcoin-wire-format transaction (marker+flag, 0 inputs, 1 OP_RETURN
+        # "test" output); it doesn't decode on this fork because
+        # CMutableTransaction's wire format carries an extra 4-byte nTime
+        # field Bitcoin's never had (see UnserializeTransaction/
+        # SerializeTransaction in primitives/transaction.h). Build the same
+        # 0-input, 1-OP_RETURN-output shape through the RPC instead, so it's
+        # correct for whatever this fork's actual wire format is.
+        rawtx = self.nodes[2].createrawtransaction([], {"data": "74657374"})
         dec_tx  = self.nodes[2].decoderawtransaction(rawtx)
 
         assert_equal(len(dec_tx['vin']), 0)
@@ -795,36 +864,54 @@ class RawTransactionsTest(BitcoinTestFramework):
         assert_fee_amount(result3['fee'], count_bytes(result3['hex']), 10 * result_fee_rate)
         assert_fee_amount(result4['fee'], count_bytes(result4['hex']), 10 * result_fee_rate)
 
-        # Test that funding non-standard "zero-fee" transactions is valid.
+        # FirstIslamicCoin: upstream expects a requested zero fee_rate/feeRate
+        # to fund a genuinely zero-fee transaction. This fork's
+        # GetMinimumFeeRate() always raises the effective rate to its fixed
+        # minimum regardless of what's requested (same as fee_rate=0 below
+        # the floor elsewhere), so a zero request still comes out at that
+        # same minimum, not zero.
         for param, zero_value in product(["fee_rate", "feeRate"], [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]):
-            assert_equal(self.nodes[3].fundrawtransaction(rawtx, {param: zero_value})["fee"], 0)
+            zero_result = self.nodes[3].fundrawtransaction(rawtx, {param: zero_value})
+            assert_fee_amount(zero_result["fee"], count_bytes(zero_result["hex"]), result_fee_rate)
 
-        # With no arguments passed, expect fee of 141 satoshis.
-        assert_approx(node.fundrawtransaction(rawtx)["fee"], vexp=0.00000141, vspan=0.00000001)
-        # Expect fee to be 10,000x higher when an explicit fee rate 10,000x greater is specified.
+        # FirstIslamicCoin: upstream expects 141 satoshis here, based on its
+        # ~1 sat/vB default relay fee; this fork's no-args default is
+        # whatever GetMinimumFeeRate() actually floors to (result_fee_rate,
+        # already measured above), not a number to hardcode.
+        no_args_result = node.fundrawtransaction(rawtx)
+        assert_fee_amount(no_args_result["fee"], count_bytes(no_args_result["hex"]), result_fee_rate)
+        # Expect fee to be 100x higher when an explicit fee rate 100x the
+        # floor is specified. FirstIslamicCoin: not literally 10,000x like
+        # upstream -- that scaled off their ~1 sat/vB default relay fee, and
+        # this fork's floor is 100 sat/vB, so a 10,000 sat/vB request is
+        # "only" 100x it. It's still relative to result_fee_rate here, not a
+        # hardcoded absolute rate, because fundrawtransaction reports fee
+        # against CalculateMaximumSignedTxSize()'s conservative pre-signing
+        # size estimate, not the real final vsize count_bytes() measures --
+        # result_fee_rate already bakes in whatever gap exists between them
+        # for this exact tx shape, so scaling off it (as every other check
+        # in this test does) cancels that gap out; an absolute target
+        # computed from the real vsize would not.
         result = node.fundrawtransaction(rawtx, fee_rate=10000)
-        assert_approx(result["fee"], vexp=0.0141, vspan=0.0001)
+        assert_fee_amount(result["fee"], count_bytes(result["hex"]), 100 * result_fee_rate)
 
-        self.log.info("Test fundrawtxn with invalid estimate_mode settings")
-        for k, v in {"number": 42, "object": {"foo": "bar"}}.items():
-            assert_raises_rpc_error(-3, f"JSON value of type {k} for field estimate_mode is not of expected type string",
-                node.fundrawtransaction, rawtx, estimate_mode=v, conf_target=0.1, add_inputs=True)
-        for mode in ["", "foo", Decimal("3.141592")]:
-            assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
-                node.fundrawtransaction, rawtx, estimate_mode=mode, conf_target=0.1, add_inputs=True)
-
-        self.log.info("Test fundrawtxn with invalid conf_target settings")
-        for mode in ["unset", "economical", "conservative"]:
-            self.log.debug("{}".format(mode))
-            for k, v in {"string": "", "object": {"foo": "bar"}}.items():
-                assert_raises_rpc_error(-3, f"JSON value of type {k} for field conf_target is not of expected type number",
-                    node.fundrawtransaction, rawtx, estimate_mode=mode, conf_target=v, add_inputs=True)
-            for n in [-1, 0, 1009]:
-                assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
-                    node.fundrawtransaction, rawtx, estimate_mode=mode, conf_target=n, add_inputs=True)
+        # FirstIslamicCoin: dropped the estimate_mode/conf_target
+        # validation cases entirely -- neither parameter is an option
+        # fundrawtransaction (or FundTransaction(), which it shares with
+        # send()/sendall()) recognizes on this fork; passing either now
+        # raises "Unknown named parameter" instead of the validation errors
+        # upstream expects, since there's no dynamic fee estimation for
+        # them to configure. Same underlying removal already documented in
+        # wallet_send.py.
 
         self.log.info("Test invalid fee rate settings")
-        for param, value in {("fee_rate", 100000), ("feeRate", 1.000)}:
+        # FirstIslamicCoin: bumped both values -- for this specific rawtx's
+        # ~225 vbyte conservative size estimate, upstream's 100,000 sat/vB
+        # (and its feeRate equivalent, 1.000 BTC/kvB) only comes out to
+        # 0.225 BTC, short of the 1 BTC -maxtxfee default; confirmed
+        # empirically that both need roughly double this to reliably
+        # exceed it.
+        for param, value in {("fee_rate", 2000000), ("feeRate", 20.0)}:
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 node.fundrawtransaction, rawtx, add_inputs=True, **{param: value})
             assert_raises_rpc_error(-3, "Amount out of range",
@@ -847,19 +934,10 @@ class RawTransactionsTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "Cannot specify both fee_rate (sat/vB) and feeRate (FIC/kvB)",
             node.fundrawtransaction, rawtx, fee_rate=0.1, feeRate=0.1, add_inputs=True)
 
-        self.log.info("- raises RPC error if both feeRate and estimate_mode passed")
-        assert_raises_rpc_error(-8, "Cannot specify both estimate_mode and feeRate",
-            node.fundrawtransaction, rawtx, estimate_mode="economical", feeRate=0.1, add_inputs=True)
-
-        for param in ["feeRate", "fee_rate"]:
-            self.log.info("- raises RPC error if both {} and conf_target are passed".format(param))
-            assert_raises_rpc_error(-8, "Cannot specify both conf_target and {}. Please provide either a confirmation "
-                "target in blocks for automatic fee estimation, or an explicit fee rate.".format(param),
-                node.fundrawtransaction, rawtx, {param: 1, "conf_target": 1, "add_inputs": True})
-
-        self.log.info("- raises RPC error if both fee_rate and estimate_mode are passed")
-        assert_raises_rpc_error(-8, "Cannot specify both estimate_mode and fee_rate",
-            node.fundrawtransaction, rawtx, fee_rate=1, estimate_mode="economical", add_inputs=True)
+        # FirstIslamicCoin: dropped the estimate_mode/conf_target conflict
+        # cases entirely -- see the note above on neither parameter
+        # existing on this fork; "Unknown named parameter" fires before
+        # any of these conflict checks would.
 
     def test_address_reuse(self):
         """Test no address reuse occurs."""
@@ -1076,11 +1154,14 @@ class RawTransactionsTest(BitcoinTestFramework):
         funded_tx3 = wallet.fundrawtransaction(raw_tx, solving_data={"descriptors": [desc]}, input_weights=[{"txid": ext_utxo["txid"], "vout": ext_utxo["vout"], "weight": high_input_weight}], fee_rate=2)
         assert_equal(funded_tx2["fee"], funded_tx3["fee"])
         # The feerate should be met
+        # FirstIslamicCoin: requested fee_rate=10 (sat/vB) is below this
+        # fork's fixed 100 sat/vB floor, so the actual applied rate is the
+        # floor (0.001 BTC/kvB), not upstream's requested 0.0001.
         funded_tx4 = wallet.fundrawtransaction(raw_tx, input_weights=[{"txid": ext_utxo["txid"], "vout": ext_utxo["vout"], "weight": high_input_weight}], fee_rate=10)
         input_add_weight = high_input_weight - (41 * 4)
         tx4_weight = wallet.decoderawtransaction(funded_tx4["hex"])["weight"] + input_add_weight
         tx4_vsize = int(ceil(tx4_weight / 4))
-        assert_fee_amount(funded_tx4["fee"], tx4_vsize, Decimal(0.0001))
+        assert_fee_amount(funded_tx4["fee"], tx4_vsize, Decimal(0.001))
 
         # Funding with weight at csuint boundaries should not cause problems
         funded_tx = wallet.fundrawtransaction(raw_tx, input_weights=[{"txid": ext_utxo["txid"], "vout": ext_utxo["vout"], "weight": 255}], fee_rate=2)
@@ -1271,20 +1352,29 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.nodes[0].sendtoaddress(wallet.getnewaddress(address_type="bech32"), 5)
         self.generate(self.nodes[0], 1)
 
+        # FirstIslamicCoin: requested fee_rate=10 (sat/vB) is below this
+        # fork's fixed 100 sat/vB floor, so the actual applied rate (and
+        # thus the resulting fee) is 10x what upstream's assertion expects.
         rawtx = wallet.createrawtransaction([{'txid': txid, 'vout': vout}], [{self.nodes[0].getnewaddress(address_type="bech32"): 8}])
         fundedtx = wallet.fundrawtransaction(rawtx, fee_rate=10, change_type="bech32")
         # with 71-byte signatures we should expect following tx size
         # tx overhead (10) + 2 inputs (41 each) + 2 p2wpkh (31 each) + (segwit marker and flag (2) + 2 p2wpkh 71 byte sig witnesses (107 each)) / witness scaling factor (4)
         tx_size = ceil(10 + 41*2 + 31*2 + (2 + 107*2)/4)
-        assert_equal(fundedtx['fee'] * COIN, tx_size * 10)
+        assert_equal(fundedtx['fee'] * COIN, tx_size * 100)
 
         # Using the other output should have 72 byte sigs
-        rawtx = wallet.createrawtransaction([{'txid': txid, 'vout': ext_vout}], [{self.nodes[0].getnewaddress(): 13}])
+        # FirstIslamicCoin: this fork's DEFAULT_ADDRESS_TYPE is LEGACY (inherited
+        # unmodified from the CodexaCoin import, unlike upstream Bitcoin Core's
+        # bech32 default), so getnewaddress() needs an explicit address_type
+        # here too -- otherwise this payment output is a 25-byte P2PKH script
+        # instead of the 22-byte P2WPKH the tx_size formula below assumes,
+        # throwing the fee assertion off by exactly the resulting 3 vbytes.
+        rawtx = wallet.createrawtransaction([{'txid': txid, 'vout': ext_vout}], [{self.nodes[0].getnewaddress(address_type="bech32"): 13}])
         ext_desc = self.nodes[0].getaddressinfo(ext_addr)["desc"]
         fundedtx = wallet.fundrawtransaction(rawtx, fee_rate=10, change_type="bech32", solving_data={"descriptors": [ext_desc]})
         # tx overhead (10) + 3 inputs (41 each) + 2 p2wpkh(31 each) + (segwit marker and flag (2) + 2 p2wpkh 71 bytes sig witnesses (107 each) + p2wpkh 72 byte sig witness (108)) / witness scaling factor (4)
         tx_size = ceil(10 + 41*3 + 31*2 + (2 + 107*2 + 108)/4)
-        assert_equal(fundedtx['fee'] * COIN, tx_size * 10)
+        assert_equal(fundedtx['fee'] * COIN, tx_size * 100)
 
         self.nodes[2].unloadwallet("test_weight_calculation")
 
@@ -1418,7 +1508,10 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         self.log.info("Crafting TX using an unconfirmed input")
         target_address = self.nodes[2].getnewaddress()
-        raw_tx1 = wallet.createrawtransaction([], {target_address: 0.1}, 0, True)
+        # FirstIslamicCoin: dropped the trailing `True` (replaceable) arg --
+        # createrawtransaction only takes (inputs, outputs, locktime) here;
+        # RBF is fully removed from this fork.
+        raw_tx1 = wallet.createrawtransaction([], {target_address: 0.1}, 0)
         funded_tx1 = wallet.fundrawtransaction(raw_tx1, {'fee_rate': 1, 'maxconf': 0})['hex']
 
         # Make sure we only had the one input
@@ -1443,27 +1536,30 @@ class RawTransactionsTest(BitcoinTestFramework):
         # Now fund 'raw_tx2' to fulfill the total target (1 BTC) by using all the wallet unconfirmed outputs.
         # As it was created with the first unconfirmed output, 'raw_tx2' only has 0.1 BTC covered (need to fund 0.9 BTC more).
         # So, the selection process, to cover the amount, will pick up the 'final_tx1' output as well, which is an output of the tx that this
-        # new tx is replacing!. So, once we send it to the mempool, it will return a "bad-txns-spends-conflicting-tx"
-        # because the input will no longer exist once the first tx gets replaced by this new one).
+        # new tx would be replacing on upstream.
+        # FirstIslamicCoin: RBF is fully removed from this fork -- any tx
+        # conflicting with an existing mempool entry is rejected outright
+        # (src/validation.cpp's PreChecks(), "FirstIslamicCoin: Disable
+        # replacement feature for now"), so this fails with the generic
+        # txn-mempool-conflict rather than upstream's more specific
+        # bad-txns-spends-conflicting-tx (which is itself part of BIP125
+        # replacement validation this fork doesn't run).
         funded_invalid = wallet.fundrawtransaction(raw_tx2, {'add_inputs': True, 'maxconf': 0, 'fee_rate': 10})['hex']
         final_invalid = wallet.signrawtransactionwithwallet(funded_invalid)['hex']
-        assert_raises_rpc_error(-26, "bad-txns-spends-conflicting-tx", self.nodes[0].sendrawtransaction, final_invalid)
+        assert_raises_rpc_error(-26, "txn-mempool-conflict", self.nodes[0].sendrawtransaction, final_invalid)
 
-        self.log.info("Craft a replacement adding inputs with highest depth possible")
-        funded_tx2 = wallet.fundrawtransaction(raw_tx2, {'add_inputs': True, 'minconf': 2, 'fee_rate': 10})['hex']
-        tx2_inputs = self.nodes[0].decoderawtransaction(funded_tx2)['vin']
-        assert_greater_than_or_equal(len(tx2_inputs), 2)
-        for vin in tx2_inputs:
-            if vin['txid'] != unconfirmed_txid:
-                assert_greater_than_or_equal(self.nodes[0].gettxout(vin['txid'], vin['vout'])['confirmations'], 2)
-
-        final_tx2 = wallet.signrawtransactionwithwallet(funded_tx2)['hex']
-        txid2 = self.nodes[0].sendrawtransaction(final_tx2)
-
-        mempool = self.nodes[0].getrawmempool()
-        assert txid1 not in mempool
-        assert txid2 in mempool
-
+        # FirstIslamicCoin: dropped "Craft a replacement adding inputs with
+        # highest depth possible" entirely. Upstream's point there is that
+        # a *BIP125-compliant* replacement (one that only adds
+        # sufficiently-confirmed inputs) succeeds where the
+        # maxconf=0 one above fails -- verifying the confirmation-depth
+        # rule is actually enforced. Since raw_tx2 always includes utxo1
+        # (tx1's own input) as a preset input regardless of add_inputs'
+        # minconf/maxconf, it always conflicts with tx1 either way; without
+        # replacement, that conflict is rejected unconditionally
+        # (txn-mempool-conflict, just confirmed above), so there's no
+        # confirmation-depth distinction left to draw -- both the
+        # BIP125-compliant and non-compliant versions fail identically now.
         wallet.unloadwallet()
 
 if __name__ == '__main__':

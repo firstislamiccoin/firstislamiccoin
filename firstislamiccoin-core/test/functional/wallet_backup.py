@@ -218,6 +218,15 @@ class WalletBackupTest(BitcoinTestFramework):
             #start node2 with no chain
             shutil.rmtree(self.nodes[2].blocks_path)
             shutil.rmtree(self.nodes[2].chain_path / 'chainstate')
+            # FirstIslamicCoin: unlike upstream Bitcoin Core, this fork's
+            # DEFAULT_TXINDEX is true (inherited unmodified from the
+            # CodexaCoin import), so node2 already has a txindex on disk.
+            # Left in place, it still remembers the old best block, which
+            # no longer exists once blocks/chainstate are wiped, so the
+            # node refuses to start ("best block of the index not found").
+            # Upstream's version of this test never needs this since its
+            # nodes only get a txindex if a test explicitly opts in.
+            shutil.rmtree(self.nodes[2].chain_path / 'indexes', ignore_errors=True)
 
             self.start_three(["-nowallet"])
             # Create new wallets for the three nodes.
