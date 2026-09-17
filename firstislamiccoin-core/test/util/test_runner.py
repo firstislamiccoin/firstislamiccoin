@@ -18,6 +18,7 @@ import os
 import pprint
 import subprocess
 import sys
+import traceback
 
 def main():
     config = configparser.ConfigParser()
@@ -125,6 +126,14 @@ def bctester(testDir, input_basename, buildenv):
             logging.info("PASSED: " + testObj["description"])
         except Exception:
             logging.info("FAILED: " + testObj["description"])
+            # FirstIslamicCoin: temporary diagnostic -- bctest()'s own
+            # logging.error() calls for specific mismatch types never fire
+            # for some exception paths (e.g. a raw exception from Popen or
+            # decoding), and this bare except previously swallowed the
+            # exception detail entirely, even at -v. Print it so CI logs
+            # show what's actually going wrong instead of just the
+            # description.
+            logging.error(traceback.format_exc())
             failed_testcases.append(testObj["description"])
 
     if skipped:
