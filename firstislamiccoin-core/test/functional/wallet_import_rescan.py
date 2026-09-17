@@ -127,7 +127,11 @@ class Variant(collections.namedtuple("Variant", "call data address_type rescan p
 
 
 # List of Variants for each way a key or address could be imported.
-IMPORT_VARIANTS = [Variant(*variants) for variants in itertools.product(Call, Data, AddressType, Rescan, (False, True))]
+# FirstIslamicCoin: p2sh-segwit addresses are rejected project-wide
+# (wallet/rpc/addresses.cpp, "P2SH_SEGWIT addresses are not welcome"),
+# inherited unchanged from the CodexaCoin import, so excluded from the matrix.
+IMPORT_ADDRESS_TYPES = [t for t in AddressType if t != AddressType.p2sh_segwit]
+IMPORT_VARIANTS = [Variant(*variants) for variants in itertools.product(Call, Data, IMPORT_ADDRESS_TYPES, Rescan, (False, True))]
 
 # List of nodes to import keys to. Half the nodes will have pruning disabled,
 # half will have it enabled. Different nodes will be used for imports that are

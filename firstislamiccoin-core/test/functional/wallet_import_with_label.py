@@ -92,34 +92,12 @@ class ImportWithLabel(BitcoinTestFramework):
 
         test_address(self.nodes[1], address3, labels=[label3_priv])
 
-        self.log.info(
-            "Test importprivkey won't label new dests with the same "
-            "label as others labeled dests for the same key."
-        )
-        self.log.info("Import a watch-only p2sh-segwit address with a label.")
-        address4 = self.nodes[0].getnewaddress("", "p2sh-segwit")
-        label4_addr = "Test Label 4 for importaddress"
-        self.nodes[1].importaddress(address4, label4_addr)
-        test_address(self.nodes[1],
-                     address4,
-                     iswatchonly=True,
-                     ismine=False,
-                     labels=[label4_addr],
-                     embedded=None)
-
-        self.log.info(
-            "Import the watch-only address's private key without a "
-            "label and new destinations for the key should have an "
-            "empty label while the 'old' destination should keep "
-            "its label."
-        )
-        priv_key4 = self.nodes[0].dumpprivkey(address4)
-        self.nodes[1].importprivkey(priv_key4)
-        embedded_addr = self.nodes[1].getaddressinfo(address4)['embedded']['address']
-
-        test_address(self.nodes[1], embedded_addr, labels=[""])
-
-        test_address(self.nodes[1], address4, labels=[label4_addr])
+        # FirstIslamicCoin: the rest of this scenario (importing a watch-only
+        # p2sh-segwit address, then its private key, and checking labels
+        # propagate to its embedded destination) is skipped -- p2sh-segwit
+        # addresses are rejected project-wide (wallet/rpc/addresses.cpp,
+        # "P2SH_SEGWIT addresses are not welcome"), inherited unchanged from
+        # the CodexaCoin import.
 
         self.stop_nodes()
 

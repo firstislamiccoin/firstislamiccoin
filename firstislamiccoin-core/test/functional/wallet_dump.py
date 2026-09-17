@@ -73,7 +73,7 @@ def read_dump(file_name, addrs, script_addrs, hd_master_addr_old):
                         elif addr.startswith('2'):
                             # P2SH-segwit address
                             found_p2sh_segwit_addr += 1
-                        elif addr.startswith('bcrt1'):
+                        elif addr.startswith('rfic1'):  # FirstIslamicCoin: regtest's real bech32 HRP, not Bitcoin's bcrt1
                             found_bech32_addr += 1
                         break
                     elif keytype == "change=1":
@@ -114,13 +114,13 @@ class WalletDumpTest(BitcoinTestFramework):
         wallet_unenc_dump = self.nodes[0].datadir_path / "wallet.unencrypted.dump"
         wallet_enc_dump = self.nodes[0].datadir_path / "wallet.encrypted.dump"
 
-        # generate 30 addresses to compare against the dump
+        # generate 20 addresses to compare against the dump
         # - 10 legacy P2PKH
-        # - 10 P2SH-segwit
         # - 10 bech32
+        # FirstIslamicCoin: p2sh-segwit is rejected project-wide (wallet/rpc/addresses.cpp)
         test_addr_count = 10
         addrs = []
-        for address_type in ['legacy', 'p2sh-segwit', 'bech32']:
+        for address_type in ['legacy', 'bech32']:
             for _ in range(test_addr_count):
                 addr = self.nodes[0].getnewaddress(address_type=address_type)
                 vaddr = self.nodes[0].getaddressinfo(addr)  # required to get hd keypath
@@ -165,7 +165,7 @@ class WalletDumpTest(BitcoinTestFramework):
         assert_equal(dump_best_block_1, next(c for c in found_comments if c.startswith('# * Best block')))
         assert_equal(dump_best_block_2, next(c for c in found_comments if c.startswith('#   mined on')))
         assert_equal(found_legacy_addr, test_addr_count)  # all keys must be in the dump
-        assert_equal(found_p2sh_segwit_addr, test_addr_count)  # all keys must be in the dump
+        assert_equal(found_p2sh_segwit_addr, 0)  # FirstIslamicCoin: p2sh-segwit rejected project-wide, none generated
         assert_equal(found_bech32_addr, test_addr_count)  # all keys must be in the dump
         assert_equal(found_script_addr, 1)  # all scripts must be in the dump
         assert_equal(found_addr_chg, 0)  # 0 blocks where mined
@@ -185,7 +185,7 @@ class WalletDumpTest(BitcoinTestFramework):
             assert_equal(dump_best_block_1, next(c for c in found_comments if c.startswith('# * Best block')))
             assert_equal(dump_best_block_2, next(c for c in found_comments if c.startswith('#   mined on')))
             assert_equal(found_legacy_addr, test_addr_count)  # all keys must be in the dump
-            assert_equal(found_p2sh_segwit_addr, test_addr_count)  # all keys must be in the dump
+            assert_equal(found_p2sh_segwit_addr, 0)  # FirstIslamicCoin: p2sh-segwit rejected project-wide, none generated
             assert_equal(found_bech32_addr, test_addr_count)  # all keys must be in the dump
             assert_equal(found_script_addr, 1)
             assert_equal(found_addr_chg, 90 * 2)  # old reserve keys are marked as change now

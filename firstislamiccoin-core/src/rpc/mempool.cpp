@@ -271,7 +271,6 @@ static std::vector<RPCResult> MempoolEntryDescription()
             {RPCResult{RPCResult::Type::STR_HEX, "transactionid", "parent transaction id"}}},
         RPCResult{RPCResult::Type::ARR, "spentby", "unconfirmed transactions spending outputs from this transaction",
             {RPCResult{RPCResult::Type::STR_HEX, "transactionid", "child transaction id"}}},
-        RPCResult{RPCResult::Type::BOOL, "bip125-replaceable", "Whether this transaction signals BIP125 replaceability or has an unconfirmed ancestor signaling BIP125 replaceability.\n"},
         RPCResult{RPCResult::Type::BOOL, "unbroadcast", "Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)"},
     };
 }
@@ -322,19 +321,10 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
 
     info.pushKV("spentby", spent);
 
-    /*
-    // FirstIslamicCoin
-    // Add opt-in RBF status
-    bool rbfStatus = false;
-    RBFTransactionState rbfState = IsRBFOptIn(tx, pool);
-    if (rbfState == RBFTransactionState::UNKNOWN) {
-        throw JSONRPCError(RPC_MISC_ERROR, "Transaction is not in mempool");
-    } else if (rbfState == RBFTransactionState::REPLACEABLE_BIP125) {
-        rbfStatus = true;
-    }
-
-    info.pushKV("bip125-replaceable", rbfStatus);
-    */
+    // FirstIslamicCoin: no bip125-replaceable field -- RBF opt-in signaling
+    // (IsRBFOptIn/RBFTransactionState) was removed from this fork along with
+    // the rest of RBF support, and this field's RPCResult declaration above
+    // was removed to match (it used to be pushed here unconditionally).
 
     info.pushKV("unbroadcast", pool.IsUnbroadcastTx(tx.GetHash()));
 }

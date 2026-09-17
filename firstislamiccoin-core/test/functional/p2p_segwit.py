@@ -81,7 +81,7 @@ from test_framework.script_util import (
     script_to_p2sh_script,
     script_to_p2wsh_script,
 )
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
     softfork_active,
@@ -219,6 +219,13 @@ class SegWitTest(BitcoinTestFramework):
             ["-acceptnonstdtxn=0", f"-testactivationheight=segwit@{SEGWIT_HEIGHT}"],
         ]
         self.supports_cli = False
+
+    def skip_test_if_missing_module(self):
+        # FirstIslamicCoin: SegWit is ALWAYS_ACTIVE from genesis on every
+        # network on this fork (see docs/CHANGELOG-FIC.md Phase 2), so there
+        # is no pre-activation state left to construct the way this test
+        # (via -testactivationheight=segwit@N) assumes.
+        raise SkipTest("SegWit is always active from genesis on this fork; no activation transition to test")
 
     # Helper functions
 

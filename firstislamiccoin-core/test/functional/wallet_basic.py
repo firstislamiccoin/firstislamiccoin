@@ -4,7 +4,6 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet."""
 from decimal import Decimal
-from itertools import product
 
 from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.fic import POW_SUBSIDY
@@ -289,7 +288,9 @@ class WalletTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getreceivedbyaddress(a1), expected_bal)
 
         self.log.info("Test sendmany with fee_rate param (explicit fee rate in sat/vB)")
-        fee_rate_sat_vb = 2
+        # FirstIslamicCoin: fee rate fixed at a 100 sat/vB floor (no fee
+        # estimation), so this must be at or above it, unlike upstream's 2.
+        fee_rate_sat_vb = 100
         fee_rate_btc_kvb = fee_rate_sat_vb * 1e3 / 1e8
         explicit_fee_rate_btc_kvb = Decimal(fee_rate_btc_kvb) / 1000
 
@@ -315,13 +316,15 @@ class WalletTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "Unknown named parameter feeRate", self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=1, feeRate=1)
 
         # Test setting explicit fee rate just below the minimum.
-        self.log.info("Test sendmany raises 'fee rate too low' if fee_rate of 0.99999999 is passed")
-        assert_raises_rpc_error(-6, "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)",
-            self.nodes[2].sendmany, amounts={address: 10}, fee_rate=0.999)
+        # FirstIslamicCoin: fee rate fixed at a 100 sat/vB floor (no fee
+        # estimation), unlike upstream's 1 sat/vB default relay fee.
+        self.log.info("Test sendmany raises 'fee rate too low' if fee_rate of 99.999 is passed")
+        assert_raises_rpc_error(-6, "Fee rate (99.999 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)",
+            self.nodes[2].sendmany, amounts={address: 10}, fee_rate=99.999)
 
         self.log.info("Test sendmany raises if an invalid fee_rate is passed")
         # Test fee_rate with zero values.
-        msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)"
+        msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)"
         for zero_value in [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]:
             assert_raises_rpc_error(-6, msg, self.nodes[2].sendmany, amounts={address: 1}, fee_rate=zero_value)
         msg = "Invalid amount"
@@ -337,13 +340,13 @@ class WalletTest(BitcoinTestFramework):
         for invalid_value in [True, {"foo": "bar"}]:
             assert_raises_rpc_error(-3, NOT_A_NUMBER_OR_STRING, self.nodes[2].sendmany, amounts={address: 10}, fee_rate=invalid_value)
 
-        self.log.info("Test sendmany raises if an invalid conf_target or estimate_mode is passed")
-        for target, mode in product([-1, 0, 1009], ["economical", "conservative"]):
-            assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
-                self.nodes[2].sendmany, amounts={address: 1}, conf_target=target, estimate_mode=mode)
-        for target, mode in product([-1, 0], ["btc/kb", "sat/b"]):
-            assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
-                self.nodes[2].sendmany, amounts={address: 1}, conf_target=target, estimate_mode=mode)
+        # FirstIslamicCoin: fee estimation was removed from this fork, so
+        # sendmany no longer accepts conf_target/estimate_mode at all -- they
+        # are rejected as unknown parameters rather than validated as
+        # upstream's conf_target-range/estimate_mode-value checks assume.
+        self.log.info("Test sendmany raises if conf_target or estimate_mode is passed")
+        assert_raises_rpc_error(-8, "Unknown named parameter estimate_mode",
+            self.nodes[2].sendmany, amounts={address: 1}, conf_target=1, estimate_mode="economical")
 
         self.start_node(3, self.nodes[3].extra_args)
         self.connect_nodes(0, 3)
@@ -484,7 +487,10 @@ class WalletTest(BitcoinTestFramework):
             assert prebalance > 2
             address = self.nodes[1].getnewaddress()
             amount = 3
-            fee_rate_sat_vb = 2
+            # FirstIslamicCoin: fee rate fixed at a 100 sat/vB floor (no fee
+            # estimation), so these must be at or above it, unlike upstream's
+            # 2 and 1.23.
+            fee_rate_sat_vb = 100
             fee_rate_btc_kvb = fee_rate_sat_vb * 1e3 / 1e8
             # Test passing fee_rate as an integer
             txid = self.nodes[2].sendtoaddress(address=address, amount=amount, fee_rate=fee_rate_sat_vb)
@@ -496,7 +502,7 @@ class WalletTest(BitcoinTestFramework):
 
             prebalance = self.nodes[2].getbalance()
             amount = Decimal("0.001")
-            fee_rate_sat_vb = 1.23
+            fee_rate_sat_vb = 123
             fee_rate_btc_kvb = fee_rate_sat_vb * 1e3 / 1e8
             # Test passing fee_rate as a string
             txid = self.nodes[2].sendtoaddress(address=address, amount=amount, fee_rate=str(fee_rate_sat_vb))
@@ -507,13 +513,15 @@ class WalletTest(BitcoinTestFramework):
             assert_fee_amount(fee, tx_size, Decimal(fee_rate_btc_kvb))
 
             # Test setting explicit fee rate just below the minimum.
-            self.log.info("Test sendtoaddress raises 'fee rate too low' if fee_rate of 0.99999999 is passed")
-            assert_raises_rpc_error(-6, "Fee rate (0.999 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)",
-                self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=0.999)
+            # FirstIslamicCoin: fee rate fixed at a 100 sat/vB floor (no fee
+            # estimation), unlike upstream's 1 sat/vB default relay fee.
+            self.log.info("Test sendtoaddress raises 'fee rate too low' if fee_rate of 99.999 is passed")
+            assert_raises_rpc_error(-6, "Fee rate (99.999 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)",
+                self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=99.999)
 
             self.log.info("Test sendtoaddress raises if an invalid fee_rate is passed")
             # Test fee_rate with zero values.
-            msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (1.000 sat/vB)"
+            msg = "Fee rate (0.000 sat/vB) is lower than the minimum fee rate setting (100.000 sat/vB)"
             for zero_value in [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]:
                 assert_raises_rpc_error(-6, msg, self.nodes[2].sendtoaddress, address=address, amount=1, fee_rate=zero_value)
             msg = "Invalid amount"
@@ -529,13 +537,13 @@ class WalletTest(BitcoinTestFramework):
             for invalid_value in [True, {"foo": "bar"}]:
                 assert_raises_rpc_error(-3, NOT_A_NUMBER_OR_STRING, self.nodes[2].sendtoaddress, address=address, amount=1.0, fee_rate=invalid_value)
 
-            self.log.info("Test sendtoaddress raises if an invalid conf_target or estimate_mode is passed")
-            for target, mode in product([-1, 0, 1009], ["economical", "conservative"]):
-                assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
-                    self.nodes[2].sendtoaddress, address=address, amount=1, conf_target=target, estimate_mode=mode)
-            for target, mode in product([-1, 0], ["btc/kb", "sat/b"]):
-                assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
-                    self.nodes[2].sendtoaddress, address=address, amount=1, conf_target=target, estimate_mode=mode)
+            # FirstIslamicCoin: fee estimation was removed from this fork, so
+            # sendtoaddress no longer accepts conf_target/estimate_mode at
+            # all -- rejected as unknown parameters, not validated the way
+            # upstream's conf_target-range/estimate_mode-value checks assume.
+            self.log.info("Test sendtoaddress raises if conf_target or estimate_mode is passed")
+            assert_raises_rpc_error(-8, "Unknown named parameter estimate_mode",
+                self.nodes[2].sendtoaddress, address=address, amount=1, conf_target=1, estimate_mode="economical")
 
             # 2. Import address from node2 to node1
             self.nodes[1].importaddress(address_to_import)

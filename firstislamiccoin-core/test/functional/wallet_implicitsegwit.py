@@ -5,7 +5,7 @@
 """Test the wallet implicit segwit feature."""
 
 import test_framework.address as address
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 
 # TODO: Might be nice to test p2pk here too
 address_types = ('legacy', 'bech32', 'p2sh-segwit')
@@ -48,6 +48,12 @@ class ImplicitSegwitTest(BitcoinTestFramework):
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
+        # FirstIslamicCoin: getnewaddress(address_type='p2sh-segwit') is
+        # deliberately rejected project-wide (wallet/rpc/addresses.cpp,
+        # "P2SH_SEGWIT addresses are not welcome"), inherited unchanged from
+        # the CodexaCoin import. This test exists entirely to exercise
+        # p2sh-segwit conversions, so it cannot run against this fork.
+        raise SkipTest("P2SH_SEGWIT addresses are rejected project-wide on this fork")
 
     def run_test(self):
         self.log.info("Manipulating addresses and sending transactions to all variations")

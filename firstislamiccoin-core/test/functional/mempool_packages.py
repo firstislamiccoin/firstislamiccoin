@@ -149,47 +149,38 @@ class MempoolPackagesTest(BitcoinTestFramework):
             assert_equal(mempool[x], v_descendants[x])
         assert chain[0] not in v_descendants.keys()
 
-        # Check that ancestor modified fees includes fee deltas from
-        # prioritisetransaction
-        self.nodes[0].prioritisetransaction(txid=chain[0], fee_delta=1000)
+        # FirstIslamicCoin: prioritisetransaction was removed from this fork
+        # along with the rest of RBF/fee-estimation-adjacent RPCs, so the
+        # fee-delta assertions upstream runs here don't apply. Ancestor and
+        # descendant fee fields should just equal the plain summed base fees.
         ancestor_fees = 0
         for x in chain:
             entry = self.nodes[0].getmempoolentry(x)
             ancestor_fees += entry['fees']['base']
-            assert_equal(entry['fees']['ancestor'], ancestor_fees + Decimal('0.00001'))
-
-        # Undo the prioritisetransaction for later tests
-        self.nodes[0].prioritisetransaction(txid=chain[0], fee_delta=-1000)
-
-        # Check that descendant modified fees includes fee deltas from
-        # prioritisetransaction
-        self.nodes[0].prioritisetransaction(txid=chain[-1], fee_delta=1000)
+            assert_equal(entry['fees']['ancestor'], ancestor_fees)
 
         descendant_fees = 0
         for x in reversed(chain):
             entry = self.nodes[0].getmempoolentry(x)
             descendant_fees += entry['fees']['base']
-            assert_equal(entry['fees']['descendant'], descendant_fees + Decimal('0.00001'))
+            assert_equal(entry['fees']['descendant'], descendant_fees)
 
-        # Check that prioritising a tx before it's added to the mempool works
-        # First clear the mempool by mining a block.
+        # Clear the mempool by mining a block, then restore it with
+        # invalidateblock (no prioritisetransaction call to test here).
         self.generate(self.nodes[0], 1)
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
-        # Prioritise a transaction that has been mined, then add it back to the
-        # mempool by using invalidateblock.
-        self.nodes[0].prioritisetransaction(txid=chain[-1], fee_delta=2000)
         self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
         # Keep node1's tip synced with node0
         self.nodes[1].invalidateblock(self.nodes[1].getbestblockhash())
 
-        # Now check that the transaction is in the mempool, with the right modified fee
+        # Now check that the transaction is back in the mempool, with unmodified fees
         descendant_fees = 0
         for x in reversed(chain):
             entry = self.nodes[0].getmempoolentry(x)
             descendant_fees += entry['fees']['base']
             if (x == chain[-1]):
-                assert_equal(entry['fees']['modified'], entry['fees']['base'] + Decimal("0.00002"))
-            assert_equal(entry['fees']['descendant'], descendant_fees + Decimal("0.00002"))
+                assert_equal(entry['fees']['modified'], entry['fees']['base'])
+            assert_equal(entry['fees']['descendant'], descendant_fees)
 
         # Check that node1's mempool is as expected (-> custom ancestor limit)
         mempool0 = self.nodes[0].getrawmempool(False)

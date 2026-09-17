@@ -20,7 +20,6 @@ from test_framework.util import (
     assert_raises_rpc_error,
 )
 from test_framework.wallet import (
-    DEFAULT_FEE,
     MiniWallet,
 )
 
@@ -80,7 +79,11 @@ class RPCPackagesTest(BitcoinTestFramework):
         self.test_multiple_children()
         self.test_multiple_parents()
         self.test_conflicting()
-        self.test_rbf()
+        # FirstIslamicCoin: test_rbf() tests BIP125 replace-by-fee end to end,
+        # which was removed from this fork along with the rest of RBF support
+        # (a conflicting transaction is simply disallowed, not treated as a
+        # valid fee-bumping replacement).
+        # self.test_rbf()
         self.test_submitpackage()
 
     def test_independent(self, coin):
@@ -214,8 +217,12 @@ class RPCPackagesTest(BitcoinTestFramework):
         coin = self.wallet.get_utxo()
 
         # tx1 and tx2 share the same inputs
-        tx1 = self.wallet.create_self_transfer(utxo_to_spend=coin, fee_rate=DEFAULT_FEE)
-        tx2 = self.wallet.create_self_transfer(utxo_to_spend=coin, fee_rate=2*DEFAULT_FEE)
+        # FirstIslamicCoin: DEFAULT_FEE (10 sat/vB) is below this fork's fixed
+        # 100 sat/vB floor and gets rejected outright; use create_self_transfer's
+        # own default fee_rate (300 sat/vB) for tx1, and something clearly
+        # higher but still floor-compliant for tx2.
+        tx1 = self.wallet.create_self_transfer(utxo_to_spend=coin)
+        tx2 = self.wallet.create_self_transfer(utxo_to_spend=coin, fee_rate=Decimal("0.006"))
 
         # Ensure tx1 and tx2 are valid by themselves
         assert node.testmempoolaccept([tx1["hex"]])[0]["allowed"]
@@ -294,13 +301,17 @@ class RPCPackagesTest(BitcoinTestFramework):
         package_txns = []
         presubmitted_wtxids = set()
         for _ in range(num_parents):
-            parent_tx = self.wallet.create_self_transfer(fee=DEFAULT_FEE)
+            # FirstIslamicCoin: DEFAULT_FEE (10 sat/vB) is below this fork's
+            # fixed 100 sat/vB floor and gets rejected outright; use
+            # create_self_transfer's own default fee_rate (300 sat/vB) instead.
+            parent_tx = self.wallet.create_self_transfer()
             package_txns.append(parent_tx)
             if partial_submit and random.choice([True, False]):
                 node.sendrawtransaction(parent_tx["hex"])
                 presubmitted_wtxids.add(parent_tx["wtxid"])
-        # FIC: fee must meet the consensus minimum (GetMinFee).
-        child_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=[tx["new_utxo"] for tx in package_txns], fee_per_output=100000) #DEFAULT_FEE
+        # FirstIslamicCoin: fee_per_output left unset so create_self_transfer_multi's
+        # own FIC-aware default (get_min_fee_sat, meets the consensus minimum) applies.
+        child_tx = self.wallet.create_self_transfer_multi(utxos_to_spend=[tx["new_utxo"] for tx in package_txns])
         package_txns.append(child_tx)
 
         testmempoolaccept_result = node.testmempoolaccept(rawtxs=[tx["hex"] for tx in package_txns])
@@ -315,9 +326,12 @@ class RPCPackagesTest(BitcoinTestFramework):
             tx_result = submitpackage_result["tx-results"][wtxid]
             assert_equal(tx_result["txid"], tx.rehash())
             assert_equal(tx_result["vsize"], tx.get_vsize())
-            assert_equal(tx_result["fees"]["base"], DEFAULT_FEE)
+            # FirstIslamicCoin: parents and the child no longer share one flat
+            # fee (each pays its own floor-compliant amount), so check each
+            # against the fee it was actually constructed with.
+            assert_equal(tx_result["fees"]["base"], package_txn["fee"])
             if wtxid not in presubmitted_wtxids:
-                assert_fee_amount(DEFAULT_FEE, tx.get_vsize(), tx_result["fees"]["effective-feerate"])
+                assert_fee_amount(package_txn["fee"], tx.get_vsize(), tx_result["fees"]["effective-feerate"])
                 assert_equal(tx_result["fees"]["effective-includes"], [wtxid])
 
         # submitpackage result should be consistent with testmempoolaccept and getmempoolentry

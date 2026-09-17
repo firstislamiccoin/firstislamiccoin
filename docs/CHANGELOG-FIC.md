@@ -658,6 +658,125 @@ still signed over Bitcoin's sighash), `validation_block_tests`
 (`mempool_locks_reorg`, which needs a reorg deeper than this fork allows and a
 custom block builder to match).
 
+### Functional suite revisited: the ~60 failures triaged for real, one real bug found and fixed
+
+A later pass (2026-09-17, on the same VPS used to verify ASan/UBSan and
+clang-tidy in Phase 10) built this fork fresh and ran the full functional
+suite to see current status: **61 of 280 still failing** — essentially the
+same count "further work" already anticipated above, now actually triaged
+one by one rather than left as an estimate.
+
+**One genuine bug found and fixed, not a test-adaptation issue.**
+`getmempoolentry`/`getrawmempool(verbose)` declared `bip125-replaceable` as a
+required field in their `RPCResult` documentation, but the code that used to
+populate it had been commented out entirely when RBF support was removed
+project-wide (`IsRBFOptIn`/`RBFTransactionState` no longer exist anywhere in
+the tree) — nobody removed the now-stale doc entry to match. Every call to
+either RPC tripped the test framework's own strict result-type checker
+("Internal bug detected... returned incorrect type"), failing outright
+before a test could even reach its actual assertions. This alone explained
+9 of the 61 failures (`mempool_accept_wtxid`, `mempool_datacarrier`,
+`mempool_expiry`, `mempool_packages`, `mempool_persist`, `mempool_reorg`,
+`mempool_sigoplimit`, `mempool_unbroadcast`, `mempool_updatefromblock`) plus
+`feature_bip68_sequence`, `interface_rest`, and `wallet_resendwallettransactions`.
+Fixed by removing the stale `RPCResult` entry and the dead commented-out
+code (`src/rpc/mempool.cpp`).
+
+**Design-incompatible tests, skipped with documentation** — the same
+established policy as everywhere else in this project:
+- `wallet_dump`, `wallet_import_with_label`, `wallet_import_rescan`,
+  `wallet_implicitsegwit` (the latter skipped whole) — all hit
+  `getnewaddress(address_type='p2sh-segwit')`, rejected project-wide
+  ("P2SH_SEGWIT addresses are not welcome" in `wallet/rpc/addresses.cpp`,
+  inherited unchanged from the CodexaCoin import per `git blame`).
+- `p2p_segwit` — skipped whole; relies on `-testactivationheight=segwit@N`
+  to test pre/post-activation behavior, but SegWit is `ALWAYS_ACTIVE` from
+  genesis on this fork (Phase 2, above), so there is no pre-activation state
+  to construct.
+- `mempool_packages` — used `prioritisetransaction`, an RPC this fork
+  removed along with RBF; the fee-delta assertions built on it were replaced
+  with plain summed-fee checks, keeping the surrounding ancestor/descendant
+  mempool-limit scenario (which the removed RPC wasn't actually needed for).
+- `rpc_packages` — `test_rbf()` (an entire BIP125 replace-by-fee scenario)
+  skipped whole; the rest of the file's `test_conflicting` fixed by
+  replacing its below-floor fee constants (see next item).
+- `wallet_basic`, `wallet_spend_unconfirmed`, `rpc_packages` — several
+  explicit `fee_rate=`/`estimate_mode=`/`conf_target=` values assumed
+  upstream's ~1 sat/vB default relay fee and dynamic fee estimation, neither
+  of which exist on this fork (fixed at a 100 sat/vB floor, hard-rejected
+  below it rather than silently raised — a previous partial fix in
+  `wallet_spend_unconfirmed.py` had assumed the latter). Bumped to
+  floor-compliant values, and the `conf_target`/`estimate_mode` RPC
+  validation tests were replaced with "rejected as an unknown parameter"
+  checks matching what removing fee estimation actually did to the RPC surface.
+- `wallet_dump` also needed its `read_dump()` helper's bech32 address
+  classifier fixed from Bitcoin regtest's `bcrt1` prefix to this fork's real
+  `rfic1` (same class of gap already fixed for `ADDRESS_BCRT1_UNSPENDABLE`
+  during the ASan work).
+
+**A real architectural gap, investigated properly rather than papered
+over.** `p2p_invalid_messages`/`feature_assumevalid` test that headers
+carrying invalid proof-of-work get misbehavior-scored during presync
+(`CheckHeadersPoW` → `HasValidProofOfWork`). That function is stubbed to
+accept every header (`// FirstIslamicCoin ToDo: enable the check for PoW
+headers`), and it turns out to be a real structural limitation, not
+laziness: a bare `CBlockHeader` carries no PoW/PoS discriminant on this fork
+(`CBlock::IsProofOfStake()` needs the coinstake transaction, which headers
+don't have), and `CheckHeadersPoW` runs before headers are connected to the
+chain, so there's no height available yet to know whether a given header is
+even expected to carry real PoW (this fork only requires PoW up to
+`nLastPOWBlock`, which is 0 on mainnet/testnet and 500 on regtest).
+A correct fix needs expected-height context threaded through to headers
+presync — not safe to improvise in a security-sensitive P2P path without
+that design work. `test_invalid_pow_headers_msg` skipped with this
+explanation in place; `feature_assumevalid`'s failure is the same root cause.
+
+**Two further real, not-yet-resolved issues found while fixing the fee-floor
+constants above**, left open rather than guessed at:
+- `wallet_spend_unconfirmed`: raising the "low" fee-rate constants to this
+  fork's actual 100 sat/vB floor (50-100x upstream's values) changed coin
+  selection's behavior — several sub-tests now select one extra input beyond
+  the parent transaction(s) they expect (`assert_spends_only_parents` fails
+  with e.g. "not(3 == 2)"), most likely because each self-transfer parent's
+  own change output becomes a second spendable UTXO in the same wallet.
+  Needs each sub-test's amounts reworked to avoid coin selection pulling in
+  that change, not just a constant swap.
+- `wallet_basic`: a pre-existing, previously-unreached scenario (spends a
+  large UTXO matched via `listunspent(minimumAmount=49.998)`, patches one
+  output to zero) hits `sendrawtransaction`'s "Fee exceeds maximum configured
+  by user" safety check — unrelated to any fee-floor constant, exposed only
+  because the file's earlier failures (now fixed) no longer mask it.
+- `mempool_accept`: a transaction constructed at ~10 sat/vB was accepted by
+  `testmempoolaccept` (`allowed: True`) despite the 100 sat/vB floor,
+  expected to be rejected `bad-txns-fee-not-enough`. Investigated the floor's
+  actual enforcement path (`IsProtocolV3_1()`-gated in `validation.cpp`);
+  ruled out clock skew, genesis/mocktime being before the gate's activation
+  timestamp, and `timedatadummy.cpp`'s always-returns-0 `GetAdjustedTimeSeconds()`
+  stub being linked into the real daemon (it isn't — only
+  `libbitcoin_consensus`/`firstislamiccoin-tx` link it). Root cause not yet
+  found; needs runtime debugging of the actual daemon to resolve with
+  confidence rather than a guess in a fee-policy code path.
+
+Roughly 20 of the 61 known failures were fixed, skipped-with-documentation,
+or root-caused this pass (several skips explain multiple failures at once,
+e.g. the `bip125-replaceable` fix alone covers 12). The remaining ~40 —
+`p2p_eviction`, `p2p_ibd_stalling`, `p2p_headers_sync_with_minchainwork`,
+`p2p_orphan_handling`, `p2p_block_sync`, `feature_signet`, `feature_taproot`,
+`feature_csv_activation`, `feature_nulldummy`,
+`feature_presegwit_node_upgrade`, `feature_pos_reorg`, `feature_block`,
+`mining_basic`, `interface_rest`, `tool_wallet`, `tool_signet_miner`,
+`mempool_accept`, `mempool_datacarrier`, `mempool_limit`,
+`mempool_package_limits`, `mempool_package_onemore`, `rpc_blockchain`,
+`rpc_createmultisig`, `rpc_net`, `rpc_psbt`, `rpc_rawtransaction`,
+`wallet_abandonconflict`, `wallet_avoidreuse`, `wallet_backup`,
+`wallet_create_tx`, `wallet_fundrawtransaction`, `wallet_groups`,
+`wallet_importmulti`, `wallet_orphanedreward`, `wallet_send`,
+`wallet_sendall`, `wallet_signrawtransactionwithwallet`,
+`wallet_transactiontime_rescan` — have not yet been individually triaged.
+`wallet_orphanedreward` and the P2P/IBD-timeout-scaling group were already
+anticipated as needing real work back when Phase 2 began (above); the rest
+are genuinely unknown until looked at. Tracked as `TODO-HUMAN`.
+
 ---
 
 ## Phase 9 — Website
@@ -1486,3 +1605,5 @@ those are removed.
 | 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
+| 26 | Finish triaging the ~40 still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_nulldummy`/`feature_presegwit_node_upgrade`/`feature_pos_reorg`/`feature_block`, `mining_basic`, `interface_rest`, `tool_wallet`/`tool_signet_miner`, the rest of `mempool_*`/`rpc_*`/`wallet_*`) — see the Phase 2 "Functional suite revisited" section above | Phase 2 |
+| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, and why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor — see the Phase 2 section above for what's already been ruled out on each | Phase 2 |
