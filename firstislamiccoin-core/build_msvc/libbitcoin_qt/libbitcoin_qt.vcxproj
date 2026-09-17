@@ -146,6 +146,10 @@
     <QT_MOC Include="..\..\src\qt\intro.cpp" />
     <QT_MOC Include="..\..\src\qt\overviewpage.cpp" />
     <QT_MOC Include="..\..\src\qt\rpcconsole.cpp" />
+    <!-- FirstIslamicCoin: walletmodel.cpp defines its own local WalletWorker
+         QObject (Q_OBJECT) and self-includes "qt/walletmodel.moc", the same
+         pattern as the four files above. Needs the same moc-from-cpp rule. -->
+    <QT_MOC Include="..\..\src\qt\walletmodel.cpp" />
     <MocHeaderFiles Include="..\..\src\qt\*.h" />
     <ResourceTemplates Include="..\..\src\qt\*.qrc" />
     <UiFormFiles Include="..\..\src\qt\forms\*.ui" />

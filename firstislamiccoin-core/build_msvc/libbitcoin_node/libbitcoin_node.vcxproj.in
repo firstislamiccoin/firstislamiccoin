@@ -12,6 +12,17 @@
     <ClCompile Include="..\..\src\wallet\init.cpp">
       <ObjectFileName>$(IntDir)wallet_init.obj</ObjectFileName>
     </ClCompile>
+    <!-- FirstIslamicCoin: src/Makefile.am adds these to libbitcoin_node_a_SOURCES
+         via a plus-equals continuation under "if ENABLE_WALLET", same as
+         wallet/init.cpp above. msvc-autogen.py's parser only recognizes plain
+         "_SOURCES = \" lines, so these need the same manual entry wallet/init.cpp
+         already has. -->
+    <ClCompile Include="..\..\src\wallet\staking.cpp">
+      <ObjectFileName>$(IntDir)wallet_staking.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\src\wallet\rpc\staking.cpp">
+      <ObjectFileName>$(IntDir)wallet_rpc_staking.obj</ObjectFileName>
+    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
