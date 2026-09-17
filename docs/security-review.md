@@ -113,24 +113,38 @@ weight inherited from upstream Bitcoin Core's own mirror-repo gating, always
 true for this project's actual repository name, and confusing to read as if
 it gated something real.
 
-### What running the new ASan job actually confirmed, and what it didn't
+### What running the new ASan job actually confirmed
 
 The `ci_native_asan` Docker image (Ubuntu 24.04 + clang-17 + qt5 + boost, per
 `00_setup_env_native_asan.sh`'s package list) **builds successfully** in this
 environment — confirmed by building it directly. Running the full pipeline
-end-to-end locally (via `ci/test_run_all.sh`) hit a real, pre-existing
-fragility in Bitcoin Core's own `ci/test/02_run_container.sh`: its `CI_EXEC`
-helper rejoins its arguments with `bash -c "... $*"`, which loses quoting —
-and this repository happens to be checked out at a path containing spaces
-("First Islamic Coin"), so `rsync`'s source argument splits apart mid-path.
-This is not a Windows-specific issue and not something to patch in the
-vendored script (a real GitHub Actions runner's `github.workspace` never
-contains spaces, so it would not recur there) — it is a local-checkout-path
-artifact of this specific development machine. The image build proves the
-toolchain and dependency list are correct; the actual sanitizer build/test run
-itself was not completed in this environment. Re-running `ci/test_run_all.sh`
-from a checkout at a space-free path (or via the real GitHub Actions runner
-once a repository exists — see TODO-HUMAN) would settle it definitively.
+end-to-end locally (via `ci/test_run_all.sh`) initially hit a real,
+pre-existing fragility in Bitcoin Core's own `ci/test/02_run_container.sh`:
+its `CI_EXEC` helper rejoins its arguments with `bash -c "... $*"`, which
+loses quoting — and this repository happens to be checked out at a path
+containing spaces ("First Islamic Coin"), so `rsync`'s source argument
+splits apart mid-path. Not a Windows-specific issue, and not something to
+patch in the vendored script (a real GitHub Actions runner's
+`github.workspace` never contains spaces, so it would not recur there) —
+worked around by mirroring the checkout to a space-free path on a VPS
+instead (GitHub Actions billing was unavailable for this repository for the
+entire length of this phase, so that runner path stayed closed regardless).
+
+Running the real job that way surfaced six genuine bugs — a real
+LeakSanitizer leak in `WalletModel::join()`, a signed/unsigned UB bitmask, a
+mistakenly-"flaky" coin-selection test that was actually 100% deterministic
+once its missing fee parameter was set, a leftover `./bitcoin-tx` rebrand
+gap, a stale test-fixture height assumption, and a hardcoded regtest address
+using Bitcoin's bech32 prefix instead of FIC's — plus a long tail of
+upstream test/benchmark fixtures built for vanilla Bitcoin's tx format,
+address encoding, and (for three benchmarks deserializing a real historical
+Bitcoin block) its entirely different proof-of-work algorithm, none of which
+can ever pass under this chain's real consensus rules. All fixed or
+skipped with documentation; see `docs/CHANGELOG-FIC.md`'s Phase 10 section
+for the full list. Final run: full build, all 126 unit test suites, the
+bench sanity-check gate, and libsecp256k1's own suite all pass clean.
+`linux-native-clang-tidy` has not been attempted the same way yet — see
+TODO-HUMAN.
 
 ## 4. `npm audit` — not applicable
 
@@ -227,11 +241,10 @@ than bumped blind, for the same reason as the deprecation notices above.
 
 ## Open `TODO-HUMAN` from this review
 
-- Re-run `ci/test_run_all.sh` (with `FILE_ENV=./ci/test/00_setup_env_native_
-  asan.sh`) from a checkout path with no spaces, or via the real GitHub
-  Actions runner once a repository exists, to get a completed ASan/UBSan
-  build+test result — the image builds cleanly here; the full run wasn't
-  completed in this environment (see §3).
+- Run `ci/test_run_all.sh` (with `FILE_ENV=./ci/test/00_setup_env_native_
+  tidy.sh`) the same way the ASan/UBSan job now has been (see §3), or via
+  the real GitHub Actions runner once billing is restored, to get a
+  completed `linux-native-clang-tidy` result.
 - Investigate the two failing mobile crypto tests
   (`address_test.dart`'s bech32 P2WPKH testnet round-trip,
   `keys_test.dart`'s mainnet/testnet coin-type key-derivation inequality) —

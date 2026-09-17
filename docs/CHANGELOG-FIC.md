@@ -1314,6 +1314,52 @@ checkout lives at a path containing spaces ("First Islamic Coin"). Not fixed in 
 script (a real GitHub Actions runner's workspace path never has spaces, so this would not recur
 there); tracked as `TODO-HUMAN` instead of worked around with a local-only patch.
 
+### The ASan/UBSan CI job, actually run to a genuine green state
+
+GitHub Actions billing was unavailable for this repository for the entire length of this phase,
+so the real CI job could never run there to confirm it. Rather than leave that unverified, ran the
+exact same `ci_native_asan` Docker image and `ci/test_run_all.sh`/`00_setup_env_native_asan.sh`
+config the workflow uses, directly on a VPS with a spaces-free path — sidestepping the `CI_EXEC`
+quoting snag above rather than working around it in the vendored script. Nine full build+test
+cycles over the fixes below, the last one entirely clean.
+
+Real bugs found and fixed, not simulated: `WalletModel::join()` leaked its worker thread
+(LeakSanitizer); `nStakeTimestampMask` was a signed bitmask, undefined behaviour when negated
+against the `uint32_t` `nTime` it masks (UBSan); `coinselector_tests`' `bnb_search_test` never set
+`m_long_term_feerate`, so Branch-and-Bound's win over other candidates was undetermined rather
+than a real flake — tuned to win deterministically (30/30 clean runs on its own, 8/8 on the full
+suite around it); `test/util/test_runner.py`'s `bitcoin-util-test.py` still invoked `./bitcoin-tx`
+in six entries instead of `./firstislamiccoin-tx`, a genuine leftover rebrand gap silently
+swallowed by a scoping quirk in the vendored script rather than raising a clear error.
+
+The rest were all upstream test/benchmark fixtures built for vanilla Bitcoin, structurally
+incompatible with this chain and skipped or replaced with clear documentation rather than
+force-fit: `script_assets_test`, `tx_valid`/`tx_invalid` (`nVersion<2` vectors only),
+`sighash_from_data`, and 36 `test/util/data` fixtures are all signed or encoded under vanilla
+Bitcoin's sighash/tx format, permanently incompatible with this chain's nTime-extended
+`nVersion<2` wire format; `validation_block_tests`' `mempool_locks_reorg` needs a reorg deeper
+than the sync-checkpoint anti-reorg rule allows by design (`FinalizeBlock()`'s header check
+tightened from `BOOST_CHECK` to `BOOST_REQUIRE` for defense in depth while there). Three
+benchmarks (`checkblock.cpp`, `load_external.cpp`, `rpc_blockchain.cpp`) deserialized a real 2016
+Bitcoin mainnet block that can never validate here — FIC's proof-of-work algorithm (scrypt)
+differs from Bitcoin's (SHA256d) entirely, not just the tx format — replaced with a small,
+genuinely valid FIC block generated via the same `test/util/mining.h` utilities the unit tests
+already use. `block_assemble.cpp`'s `AssembleBlock` mined past regtest's real proof-of-work
+ceiling and used a dust-sized output (`DUST_RELAY_TX_FEE` here is ~33x vanilla Bitcoin's
+default). `mempool_stress.cpp`'s `MempoolCheck` — the one caller that actually self-validates the
+mempool against real consensus rules, rather than bypassing validation like most test callers —
+exposed two latent bugs in the shared `TestChain100Setup`/`PopulateMempool` fixture: a stale
+hardcoded `spendheight` predating this fixture's real height, and `PopulateMempool` generating
+fees far below this chain's real minimum-fee floor while also seeding from coinbases that can
+never satisfy real maturity. `wallet/test/util.h`'s unspendable placeholder address used Bitcoin
+regtest's bech32 HRP (`bcrt`) instead of FIC's (`rfic`).
+
+Final run: full build, all 126 unit test suites, the bench sanity-check gate, and
+`libsecp256k1`'s own suite all pass clean, with only the same pre-existing, explicitly
+`(ignored)` `dist-hook` tarball error throughout (this VPS checkout isn't a real git clone, not a
+CI defect). This closes out the `TODO-HUMAN` item on completing a real ASan/UBSan run.
+`linux-native-clang-tidy` has not been attempted the same way and remains open.
+
 ### Real, current CVEs in both Python services, fixed
 
 `pip-audit` found Flask, PyJWT, cryptography, and requests all pinned to versions with disclosed
@@ -1363,10 +1409,10 @@ follows, not proof it happened.
 
 ### `TODO-HUMAN`
 
-The genesis key ceremony and everything downstream of a real mainnet existing; the ASan CI run
-completing somewhere without a spaces-in-path checkout; the two failing mobile crypto tests; the
-Flutter API migrations and major-version dependency bumps that need a real device to verify —
-tracked in the table below (rows 23-26).
+The genesis key ceremony and everything downstream of a real mainnet existing; the
+`linux-native-clang-tidy` CI job, never actually run the way ASan/UBSan now has been; the two
+failing mobile crypto tests; the Flutter API migrations and major-version dependency bumps that
+need a real device to verify — tracked in the table below (rows 23-26).
 
 ## Prompt items that need no work
 
@@ -1406,7 +1452,7 @@ those are removed.
 | 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
-| 23 | Complete a real ASan/UBSan CI run (`ci/test_run_all.sh` with `FILE_ENV=./ci/test/00_setup_env_native_asan.sh`) from a checkout with no spaces in its path, or via the real GitHub Actions runner once a repository exists — see `docs/security-review.md` §3 | Phase 10 |
+| 23 | Complete a real `linux-native-clang-tidy` CI run (`ci/test_run_all.sh` with `FILE_ENV=./ci/test/00_setup_env_native_tidy.sh`) the same way the ASan/UBSan job now has been, or via the real GitHub Actions runner once billing is restored — see `docs/security-review.md` §3 | Phase 10 |
 | 24 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 25 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 26 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
