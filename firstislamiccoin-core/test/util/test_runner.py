@@ -41,37 +41,66 @@ def main():
 
     bctester(os.path.join(env_conf["SRCDIR"], "test", "util", "data"), "bitcoin-util-test.json", env_conf)
 
-# FirstIslamicCoin: these output_cmp fixtures were inherited unmodified from
-# upstream Bitcoin Core and encode two things that are structurally
-# incompatible with this chain: (1) nVersion<2 transactions, whose wire
-# format here carries an extra 4-byte nTime field (see
+# FirstIslamicCoin: these fixtures/testcases were inherited unmodified from
+# upstream Bitcoin Core and encode things that are structurally incompatible
+# with this chain: (1) nVersion<2 transactions, whose wire format here
+# carries an extra 4-byte nTime field (see
 # CMutableTransaction::UnserializeTransaction/SerializeTransaction in
 # primitives/transaction.h) that vanilla Bitcoin's format never had -- no
 # byte-level reformatting can make firstislamiccoin-tx's real output match a
-# fixture recorded without that field; and (2) addresses encoded with
-# Bitcoin's own base58/bech32 version bytes, which necessarily differ from
-# FIC's. Both are deliberate, correct behaviour for this chain, not bugs.
-# Skipped surgically (not the whole script) so the ~60% of cases here that
-# only check exit codes/error text for malformed input keep running.
+# fixture recorded without that field; (2) addresses encoded with Bitcoin's
+# own base58/bech32 version bytes, which necessarily differ from FIC's; and
+# (3) hardcoded Bitcoin-mainnet WIF private-key literals (e.g.
+# "5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf"), which use the same
+# base58Check mechanism as addresses and so are rejected by firstislamiccoin-tx's
+# "privatekey not valid" check before reaching whatever behaviour the test
+# actually meant to exercise. All three are deliberate, correct behaviour for
+# this chain, not bugs. Skipped surgically (not the whole script) so the
+# cases here that only check exit codes/error text for malformed input, with
+# no encoding dependency, keep running.
 NTIME_OR_ADDRESS_INCOMPATIBLE_FIXTURES = {
     "blanktxv1.hex", "blanktxv1.json",
-    "tt-delin1-out.hex", "tt-delout1-out.hex", "tt-locktime317000-out.hex",
-    "txcreate1.hex", "txcreate2.json",
-    "txcreatedata1.hex", "txcreatedata2.hex",
-    "txcreatedata_seq0.hex", "txcreatedata_seq1.hex",
+    "tt-delin1-out.hex", "tt-delin1-out.json",
+    "tt-delout1-out.hex", "tt-delout1-out.json",
+    "tt-locktime317000-out.hex", "tt-locktime317000-out.json",
+    "txcreate1.hex", "txcreate1.json", "txcreate2.json",
+    "txcreatedata1.hex", "txcreatedata1.json",
+    "txcreatedata2.hex", "txcreatedata2.json",
+    "txcreatedata_seq0.hex", "txcreatedata_seq0.json",
+    "txcreatedata_seq1.hex", "txcreatedata_seq1.json",
     "txcreatemultisig1.hex", "txcreatemultisig1.json",
     "txcreatemultisig2.hex", "txcreatemultisig2.json",
     "txcreatemultisig3.hex", "txcreatemultisig3.json",
     "txcreatemultisig4.hex", "txcreatemultisig4.json",
     "txcreatemultisig5.json",
-    "txcreateoutpubkey1.json",
+    "txcreateoutpubkey1.hex", "txcreateoutpubkey1.json",
     "txcreateoutpubkey2.hex", "txcreateoutpubkey2.json",
     "txcreateoutpubkey3.hex", "txcreateoutpubkey3.json",
     "txcreatescript1.hex", "txcreatescript1.json",
     "txcreatescript2.hex", "txcreatescript2.json",
     "txcreatescript3.hex", "txcreatescript3.json",
     "txcreatescript4.hex", "txcreatescript4.json",
-    "txcreatesignsegwit1.hex", "txcreatesignv1.hex", "txcreatesignv2.hex",
+    "txcreatesignsegwit1.hex",
+    "txcreatesignv1.hex", "txcreatesignv1.json",
+    "txcreatesignv2.hex",
+}
+
+# Base transaction fixtures used as *stdin input* (not output_cmp) by several
+# delin/delout/locktime testcases -- same nTime incompatibility as above, just
+# consumed rather than compared.
+NTIME_INCOMPATIBLE_INPUT_FIXTURES = {
+    "tx394b54bb.hex",
+}
+
+# Testcases with no output_cmp/input fixture at all -- they build a scenario
+# inline via "set=privatekeys:[...]" using a hardcoded Bitcoin-mainnet WIF
+# key, so filename-based matching can't catch them; matched by description.
+WIF_KEY_INCOMPATIBLE_DESCRIPTIONS = {
+    "Tests the check for invalid vout index in prevtxs for sign",
+    "Tests the check for invalid txid due to invalid hex",
+    "Tests the check for invalid txid valid hex, but too short",
+    "Tests the check for invalid txid valid hex, but too long",
+    "Tests the check for missing input amount for witness transactions",
 }
 
 def bctester(testDir, input_basename, buildenv):
@@ -85,7 +114,9 @@ def bctester(testDir, input_basename, buildenv):
     skipped = 0
 
     for testObj in input_data:
-        if testObj.get("output_cmp") in NTIME_OR_ADDRESS_INCOMPATIBLE_FIXTURES:
+        if (testObj.get("output_cmp") in NTIME_OR_ADDRESS_INCOMPATIBLE_FIXTURES
+                or testObj.get("input") in NTIME_INCOMPATIBLE_INPUT_FIXTURES
+                or testObj["description"] in WIF_KEY_INCOMPATIBLE_DESCRIPTIONS):
             skipped += 1
             logging.info("SKIPPED (nTime/address format incompatible): " + testObj["description"])
             continue

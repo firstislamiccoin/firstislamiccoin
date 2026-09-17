@@ -33,7 +33,12 @@ static const DatabaseFormat DATABASE_FORMATS[] = {
 #endif
 };
 
-const std::string ADDRESS_BCRT1_UNSPENDABLE = "bcrt1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq3xueyj";
+// FirstIslamicCoin: regtest's bech32 HRP here is "rfic" (kernel/chainparams.cpp),
+// not Bitcoin's "bcrt" -- this is the same all-zero, unspendable 32-byte P2WSH
+// witness program as upstream's address, re-encoded with the real HRP so
+// DecodeDestination() (and anything calling it, e.g. test/util/mining.cpp's
+// generatetoaddress) actually accepts it instead of asserting.
+const std::string ADDRESS_BCRT1_UNSPENDABLE = "rfic1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqtr49lf";
 
 std::unique_ptr<CWallet> CreateSyncedWallet(interfaces::Chain& chain, CChain& cchain, const CKey& key);
 

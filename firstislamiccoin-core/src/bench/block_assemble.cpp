@@ -24,14 +24,28 @@ static void AssembleBlock(benchmark::Bench& bench)
     witness.stack.push_back(WITNESS_STACK_ELEM_OP_TRUE);
 
     // Collect some loose transactions that spend the coinbases of our mined blocks
-    constexpr size_t NUM_BLOCKS{1000};
-    constexpr size_t coinbaseMaturity{500};
+    // FirstIslamicCoin: regtest only accepts proof-of-work up to height 500
+    // (consensus.nLastPOWBlock, kernel/chainparams.cpp) -- every block here is
+    // mined via MineBlock()'s PoW loop, so mining NUM_BLOCKS must leave the
+    // chain tip at height <= 500. The bench.run() lambda below builds (but
+    // never connects) a candidate block on top of that tip without advancing
+    // it, so leaving one block of headroom (tip at 499, candidates targeting
+    // height 500) covers every iteration. coinbaseMaturity lowered to match
+    // regtest's real consensus.nCoinbaseMaturity (10) rather than upstream's
+    // unrelated 500; it only needs to exceed the real maturity rule, not
+    // equal it.
+    constexpr size_t NUM_BLOCKS{499};
+    constexpr size_t coinbaseMaturity{10};
     std::array<CTransactionRef, NUM_BLOCKS - coinbaseMaturity + 1> txs;
     for (size_t b{0}; b < NUM_BLOCKS; ++b) {
         CMutableTransaction tx;
         tx.vin.emplace_back(MineBlock(test_setup->m_node, P2WSH_OP_TRUE));
         tx.vin.back().scriptWitness = witness;
-        tx.vout.emplace_back(1337, P2WSH_OP_TRUE);
+        // FirstIslamicCoin: DUST_RELAY_TX_FEE (policy.h) is 100000 fils/kvB
+        // here, ~33x vanilla Bitcoin's default 3000 sat/kvB, so the dust
+        // threshold scales the same way -- upstream's 1337 sat output
+        // cleared it there but falls below it here (rejected as dust).
+        tx.vout.emplace_back(100000, P2WSH_OP_TRUE);
         if (NUM_BLOCKS - b >= coinbaseMaturity)
             txs.at(b) = MakeTransactionRef(tx);
     }

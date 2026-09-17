@@ -19,33 +19,40 @@
 
 static void DeserializeBlockTest(benchmark::Bench& bench)
 {
-    CDataStream stream(benchmark::data::block413567, SER_NETWORK);
+    // FirstIslamicCoin: block413567 (a real vanilla-Bitcoin block) can never
+    // deserialize correctly here -- see bench/data.h's GenerateSampleBlock.
+    const auto testing_setup = MakeNoLogFileContext<const TestingSetup>(ChainType::REGTEST);
+    const auto sample_block = benchmark::data::GenerateSampleBlock(testing_setup->m_node);
+    CDataStream stream(sample_block, SER_NETWORK);
     std::byte a{0};
     stream.write({&a, 1}); // Prevent compaction
 
     bench.unit("block").run([&] {
         CBlock block;
         stream >> TX_WITH_WITNESS(block);
-        bool rewound = stream.Rewind(benchmark::data::block413567.size());
+        bool rewound = stream.Rewind(sample_block.size());
         assert(rewound);
     });
 }
 
 static void DeserializeAndCheckBlockTest(benchmark::Bench& bench)
 {
-    CDataStream stream(benchmark::data::block413567, SER_NETWORK);
+    // FirstIslamicCoin: regtest, not mainnet -- see bench/data.h's
+    // GenerateSampleBlock (also explains why block413567 isn't used here).
+    ArgsManager bench_args;
+    const auto chainParams = CreateChainParams(bench_args, ChainType::REGTEST);
+    const auto testing_setup = MakeNoLogFileContext<const TestingSetup>(ChainType::REGTEST);
+    Chainstate& chainstate = testing_setup->m_node.chainman->ActiveChainstate();
+    const auto sample_block = benchmark::data::GenerateSampleBlock(testing_setup->m_node);
+
+    CDataStream stream(sample_block, SER_NETWORK);
     std::byte a{0};
     stream.write({&a, 1}); // Prevent compaction
-
-    ArgsManager bench_args;
-    const auto chainParams = CreateChainParams(bench_args, ChainType::MAIN);
-    const auto testing_setup = MakeNoLogFileContext<const TestingSetup>(ChainType::MAIN);
-    Chainstate& chainstate = testing_setup->m_node.chainman->ActiveChainstate();
 
     bench.unit("block").run([&] {
         CBlock block; // Note that CBlock caches its checked state, so we need to recreate it here
         stream >> TX_WITH_WITNESS(block);
-        bool rewound = stream.Rewind(benchmark::data::block413567.size());
+        bool rewound = stream.Rewind(sample_block.size());
         assert(rewound);
 
         BlockValidationState validationState;

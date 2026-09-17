@@ -14,6 +14,7 @@
 #include <consensus/consensus.h>
 #include <consensus/params.h>
 #include <consensus/merkle.h>
+#include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <crypto/sha256.h>
 #include <init.h>
@@ -415,7 +416,19 @@ std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContex
 {
     std::vector<CTransactionRef> mempool_transactions;
     std::deque<std::pair<COutPoint, CAmount>> unspent_prevouts;
-    std::transform(m_coinbase_txns.begin(), m_coinbase_txns.end(), std::back_inserter(unspent_prevouts),
+    // FirstIslamicCoin: m_coinbase_txns[i] is block i+1's coinbase, and this
+    // fixture mines exactly to the regtest proof-of-work ceiling (height 500,
+    // kernel/chainparams.cpp) with no headroom above it -- so the last
+    // nCoinbaseMaturity coinbases (heights 491-500) can never satisfy real
+    // maturity against any spendheight this fixture can produce and used to
+    // fail CheckTxInputs' "bad-txns-premature-spend-of-coinbase" the moment
+    // anything (e.g. CTxMemPool::check()) validated them for real. Only seed
+    // from coinbases that are actually mature as of the current tip.
+    const int tip_height = WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Height());
+    const int maturity = m_node.chainman->GetParams().GetConsensus().nCoinbaseMaturity;
+    const size_t mature_count = (tip_height > maturity) ? static_cast<size_t>(tip_height - maturity) : 0;
+    const size_t usable_coinbases = std::min(mature_count, m_coinbase_txns.size());
+    std::transform(m_coinbase_txns.begin(), m_coinbase_txns.begin() + usable_coinbases, std::back_inserter(unspent_prevouts),
         [](const auto& tx){ return std::make_pair(COutPoint(tx->GetHash(), 0), tx->vout[0].nValue); });
     while (num_transactions > 0 && !unspent_prevouts.empty()) {
         // The number of inputs and outputs are random, between 1 and 24.
@@ -430,15 +443,38 @@ std::vector<CTransactionRef> TestChain100Setup::PopulateMempool(FastRandomContex
             unspent_prevouts.pop_front();
         }
         const size_t num_outputs = det_rand.randrange(24) + 1;
-        const CAmount fee = 100 * det_rand.randrange(30);
-        const CAmount amount_per_output = (total_in - fee) / num_outputs;
+        // FirstIslamicCoin: upstream's fee here (100 * randrange(30), at most
+        // 2900) is far below this chain's real minimum (GetMinFee(),
+        // consensus/tx_verify.cpp -- TX_FEE_PER_KB scaled by size, at least
+        // MIN_TX_FEE) -- every transaction built this way used to fail
+        // CheckTxInputs' "bad-txns-fee-not-enough" the moment anything
+        // (e.g. CTxMemPool::check()) actually validated it against real
+        // consensus rules, rather than just being addUnchecked() into the
+        // pool below. Build placeholder outputs first to get a real size,
+        // then size the fee to what this chain actually requires.
         for (size_t n{0}; n < num_outputs; ++n) {
             CScript spk = CScript() << CScriptNum(num_transactions + n);
-            mtx.vout.emplace_back(amount_per_output, spk);
+            mtx.vout.emplace_back(1, spk);
+        }
+        const CAmount fee = GetMinFee(CTransaction(mtx), GetAdjustedTimeSeconds());
+        if (total_in <= fee) {
+            // FirstIslamicCoin: this branch's inputs don't cover even the real
+            // minimum fee (can happen once amounts have been split down by
+            // several chained transactions) -- drop it rather than build a
+            // transaction with a negative or zero output value.
+            --num_transactions;
+            continue;
+        }
+        const CAmount amount_per_output = (total_in - fee) / num_outputs;
+        for (auto& out : mtx.vout) {
+            out.nValue = amount_per_output;
         }
         CTransactionRef ptx = MakeTransactionRef(mtx);
         mempool_transactions.push_back(ptx);
-        if (amount_per_output > 3000) {
+        // FirstIslamicCoin: upstream's 3000 threshold predates the real
+        // MIN_TX_FEE (validation.h) of 10000 -- anything at or below it could
+        // never fund a follow-on transaction's own minimum fee anyway.
+        if (amount_per_output > 30000) {
             // If the value is high enough to fund another transaction + fees, keep track of it so
             // it can be used to build a more complex transaction graph. Insert randomly into
             // unspent_prevouts for extra randomness in the resulting structures.

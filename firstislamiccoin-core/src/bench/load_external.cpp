@@ -24,7 +24,10 @@
  */
 static void LoadExternalBlockFile(benchmark::Bench& bench)
 {
-    const auto testing_setup{MakeNoLogFileContext<const TestingSetup>(ChainType::MAIN)};
+    // FirstIslamicCoin: regtest, not mainnet -- see bench/data.h's
+    // GenerateSampleBlock (also explains why block413567 isn't used here).
+    const auto testing_setup{MakeNoLogFileContext<const TestingSetup>(ChainType::REGTEST)};
+    const auto sample_block = benchmark::data::GenerateSampleBlock(testing_setup->m_node);
 
     // Create a single block as in the blocks files (magic bytes, block size,
     // block data) as a stream object.
@@ -32,10 +35,10 @@ static void LoadExternalBlockFile(benchmark::Bench& bench)
     DataStream ss{};
     auto params{testing_setup->m_node.chainman->GetParams()};
     ss << params.MessageStart();
-    ss << static_cast<uint32_t>(benchmark::data::block413567.size());
-    // We can't use the streaming serialization (ss << benchmark::data::block413567)
+    ss << static_cast<uint32_t>(sample_block.size());
+    // We can't use the streaming serialization (ss << sample_block)
     // because that first writes a compact size.
-    ss << Span{benchmark::data::block413567};
+    ss << Span{sample_block};
 
     // Create the test file.
     {

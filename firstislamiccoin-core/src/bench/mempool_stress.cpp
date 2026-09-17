@@ -114,7 +114,10 @@ static void MempoolCheck(benchmark::Bench& bench)
 
     bench.run([&]() NO_THREAD_SAFETY_ANALYSIS {
         // Bump up the spendheight so we don't hit premature coinbase spend errors.
-        pool.check(coins_tip, /*spendheight=*/300);
+        // FirstIslamicCoin: TestChain100Setup mines to height 500 here (regtest's
+        // proof-of-work window, kernel/chainparams.cpp), not upstream's ~100, so
+        // spendheight needs to be above that real tip, not upstream's 300.
+        pool.check(coins_tip, /*spendheight=*/501);
     });
 }
 

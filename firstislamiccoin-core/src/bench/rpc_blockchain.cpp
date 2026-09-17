@@ -16,14 +16,17 @@
 namespace {
 
 struct TestBlockAndIndex {
-    const std::unique_ptr<const TestingSetup> testing_setup{MakeNoLogFileContext<const TestingSetup>(ChainType::MAIN)};
+    // FirstIslamicCoin: regtest, not mainnet -- see bench/data.h's
+    // GenerateSampleBlock (also explains why block413567 isn't used here).
+    const std::unique_ptr<const TestingSetup> testing_setup{MakeNoLogFileContext<const TestingSetup>(ChainType::REGTEST)};
     CBlock block{};
     uint256 blockHash{};
     CBlockIndex blockindex{};
 
     TestBlockAndIndex()
     {
-        CDataStream stream(benchmark::data::block413567, SER_NETWORK);
+        const auto sample_block = benchmark::data::GenerateSampleBlock(testing_setup->m_node);
+        CDataStream stream(sample_block, SER_NETWORK);
         std::byte a{0};
         stream.write({&a, 1}); // Prevent compaction
 
@@ -31,7 +34,7 @@ struct TestBlockAndIndex {
 
         blockHash = block.GetHash();
         blockindex.phashBlock = &blockHash;
-        blockindex.nBits = 403014710;
+        blockindex.nBits = block.nBits;
     }
 };
 
