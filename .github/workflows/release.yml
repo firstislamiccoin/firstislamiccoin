@@ -15,15 +15,13 @@ name: release
 # actual source tree is one level down, at firstislamiccoin-core/ --
 # every build step below sets working-directory to compensate.
 #
-# Like every other CI/deploy workflow in this project (see
-# firstislamiccoin-mobile/.github/workflows/ci.yml,
-# firstislamiccoin-website/.github/workflows/deploy.yml), this is
-# committed as ready-to-run infrastructure, not proof a release has
-# happened: no FirstIslamicCoin GitHub org/repository exists yet (`git
-# remote -v` returns nothing in this environment) for it to have ever
-# run against, and mainnet itself is still blocked on the Phase 10 key
-# ceremony (see docs/genesis.md) -- there is nothing to tag a real
-# release of yet either.
+# github.com/firstislamiccoin/firstislamiccoin exists now, and a manual
+# workflow_dispatch run (no tag pushed, so the tag-gated release-publish
+# job correctly does not run) has been used to check these build jobs
+# actually work there -- see docs/CHANGELOG-FIC.md's Phase 3 section for
+# the real result. Still true: mainnet itself is blocked on the Phase 10
+# key ceremony (see docs/genesis.md), so there is nothing to tag a real
+# release *of* yet.
 #
 # Codesigning/notarization for macOS and Authenticode signing for Windows
 # are NOT done here -- see the TODO comments below and
