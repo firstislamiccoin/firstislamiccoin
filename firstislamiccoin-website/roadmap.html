@@ -72,7 +72,7 @@
 
       <div class="roadmap-item built">
         <h3>Phase 5 — Mobile wallets (Android + iOS) <span class="roadmap-tag tag-built">Built, not deployed</span></h3>
-        <p>A single Flutter codebase rebuilt with FIC's chain parameters, its wrapped-token swap screen removed, and English/Arabic localization wired up. Not yet built for either app store — no signing keys or store accounts yet.</p>
+        <p>A single Flutter codebase rebuilt with FIC's chain parameters, its wrapped-token swap screen removed, and English/Arabic localization wired up. Two real crypto bugs (an address-decoding test fixture typo, and a genuine testnet key-derivation bug where testnet keys didn't actually differ from mainnet ones) were found and fixed. An unsigned debug build of the Android app now exists and is downloadable for testnet testing — see <a href="/wallets.html">Wallets</a> — but that's not the same as an app-store release: still not yet built for either real app store, no signing keys or store accounts yet, and the Android toolchain itself needed a real fix (Gradle/AGP were years out of date) before any build was even possible.</p>
       </div>
 
       <div class="roadmap-item done">

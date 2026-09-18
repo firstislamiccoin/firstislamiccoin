@@ -36,8 +36,10 @@
     <h2>What exists today, honestly</h2>
     <div class="prose">
       <p>
-        No packaged, downloadable wallet has been released yet — this page will start linking to
-        real installers and app-store listings the moment they exist, and not before.
+        No signed installer or app-store listing has been released yet — this page will start
+        linking to those the moment they exist, and not before. One thing is available now: a
+        <strong>debug build</strong> of the Android app, for testnet testing only. See the mobile
+        card below for exactly what that is and isn't.
       </p>
     </div>
   </section>
@@ -52,18 +54,33 @@
         <p class="card-note">No signed installers or GitHub release binaries yet — build it yourself from the public source once the repository is published (see the roadmap).</p>
       </div>
       <div class="card">
-        <span class="card-status status-planned">In development</span>
+        <span class="card-status status-live">Live</span>
         <div class="card-icon">🌐</div>
         <h3>Web wallet</h3>
-        <p>A browser-based wallet is planned, forked from and rebuilt against the same web-wallet approach used by the project FIC was built from.</p>
-        <p class="card-note">Not deployed.</p>
+        <p>A no-install browser wallet talking to the same gateway the mobile app uses, forked from and rebuilt against the same web-wallet approach used by the project FIC was built from.</p>
+        <p class="card-note">Deployed at <a href="https://wallet.firstislamiccoin.com">wallet.firstislamiccoin.com</a>, against testnet.</p>
       </div>
       <div class="card">
-        <span class="card-status status-planned">In development</span>
+        <span class="card-status status-building">Debug build available</span>
         <div class="card-icon">📱</div>
         <h3>Mobile (Android / iOS)</h3>
-        <p>A single Flutter codebase is planned for both platforms.</p>
-        <p class="card-note">Not built.</p>
+        <p>A single Flutter codebase for both platforms. iOS needs a paid Apple Developer account
+        to build at all, so only Android has a build to offer right now.</p>
+        <p class="card-note">
+          <a href="/downloads/firstislamiccoin-wallet-debug-902d974.apk">Download the Android debug build</a>
+          (174&nbsp;MB, SHA256
+          <code style="font-size:11px; word-break:break-all;">a80f6c9f76c2f1f72678c2b64ac9ac73a1dbd0ff36be214f70d39c7934fb6055</code>,
+          also in the <a href="/downloads/firstislamiccoin-wallet-debug-902d974.apk.sha256">.sha256 file</a>).
+          This is <strong>not</strong> a release: it's an unsigned debug build (Android's own debug
+          keystore, not a real signing key), built from a specific source commit
+          (<code>902d974</code>) for testnet use only. It has not been through any app-store
+          review, has not been tested on a physical device or emulator, and is not audited. Two
+          real crypto bugs in this codebase were found and fixed shortly before this build (see
+          the <a href="/roadmap.html">roadmap</a>) — treat this as a testnet preview for people who
+          want to look, not as something to hold real value in. Android will warn about installing
+          from an unknown source; that warning is expected for a debug build like this one, not a
+          sign anything is wrong with the file itself (verify the checksum above to confirm that).
+        </p>
       </div>
       <div class="card">
         <span class="card-status status-planned">In development</span>
