@@ -1303,6 +1303,53 @@ now works correctly. No skip was needed for this row-27 item after all.
 Confirmed via a final combined run of all three files. No C++ changes were needed for any of the
 seventh pass's fixes.
 
+### Live testnet node redeployed with all of the above; confirmed it has zero peers, and why
+
+With the functional-test backlog and its C++ fixes (coin-selection tie-break, the two
+`MANDATORY`/`STANDARD_SCRIPT_VERIFY_FLAGS` rounds, the two `nTargetSpacing`-scaled timeout fixes,
+the `firstislamiccoin-util grind` PoW-hash fix, the `SignetTxs::Create()`/`SegwitV0SignatureMsg()`
+determinism fixes) all committed and pushed, rebuilt and redeployed the live testnet node
+(`fic-testnet-node`, a Docker container on the VPS at 169.58.129.247, image `fic-node:latest`,
+`--network host`, chain data in the named volume `fic-testnet-data`) so it's actually running this
+work rather than a three-day-stale image.
+
+**One real deployment bug hit and fixed along the way, unrelated to the FIC fork itself:**
+`firstislamiccoin-infra/docker/Dockerfile` has three build stages (`builder`, `runtime`, `tools` —
+the last exists purely to give operators a CLI+Python tools image without a node); a plain
+`docker build` with no `--target` builds the *last* stage by default, which has no
+`ENTRYPOINT`. First build attempt silently produced a `tools`-stage image; the container failed to
+start (`exec: "-testnet": executable file not found in $PATH`, since `-testnet` was being run as
+the literal command with no entrypoint to receive it as an argument). Rebuilt with
+`--target runtime` explicitly, verified `docker inspect`'s `Entrypoint`/`Cmd` before retrying, and
+the swap succeeded cleanly: old container stopped gracefully (60 s timeout for `bitcoind`'s own
+flush), removed, new one started from the fresh image with the same volume/network/restart-policy.
+Verified via matching `bestblockhash` before/after (chain data intact through the volume, as
+expected) and confirmed the three services that depend on this node over its host-networked RPC —
+`fic-explorer.service`, `fic-gateway.service`, and both `fic-electrumx-testnet`/`testnet2`
+containers — all reconnected with no new errors.
+
+**Then found, while spot-checking that the explorer's `/api/stats` reflects the node correctly,
+that the node has exactly zero peer connections and sits at height 0 (genesis only) — both true
+before this redeploy too, not something the redeploy caused.** Root-caused, not just observed:
+`src/kernel/chainparams.cpp`'s `CTestNetParams` constructor has `vSeeds.clear()` with its own
+comment already explaining why — `// FirstIslamicCoin: no testnet DNS seeds yet; Phase 2 nodes
+connect with -addnode (TODO-HUMAN)` — and this specific container was started with no
+`-addnode`/`-connect` pointing it at any peer. `docs/dns.md`'s own DNS table already lists
+`seed{1,2,3}.firstislamiccoin.com` as "not yet live." So this isn't a bug: there is currently no
+DNS-based peer discovery for testnet by design, no manually-configured peer address was given to
+this node, and no second `firstislamiccoind` process exists anywhere on this VPS to connect to even
+by hand (confirmed via the host's process/container list) — this node is, right now, the only known
+testnet node anywhere. (A separate, earlier four-node testnet run reaching real consensus/reorg
+activity at height 206 is documented above in this Phase 2 section, under the CSV-genesis-reindex
+crash writeup — that was evidently a different, more ephemeral setup than this persistent VPS
+deployment, not a second node this one could reconnect to.)
+
+Not fixed here — provisioning real seed-node infrastructure (or standing up and documenting a
+second real testnet node's address for `-addnode`) is genuine operational work needing a human with
+deploy access to more than this one VPS, tracked as `TODO-HUMAN` (see row 6, which already covers
+the closely related mainnet seed-node gap, and the DNS-seed line in the parameters table near the
+top of this document).
+
 ### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
 
 Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
@@ -2299,3 +2346,4 @@ those are removed.
 | 27 | ~~Root-cause `wallet_spend_unconfirmed`'s extra-input coin selection, `wallet_basic`'s zero-value-tx max-fee trip, `tool_wallet`'s double-spend-acceptance scenario, and `wallet_abandonconflict`'s `-minrelaytxfee` eviction test~~ — done, all four: the coin-selection issue was fixed by the `coinselection.cpp` tie-break fix (fifth pass); `wallet_basic`'s trip was a too-broad `listunspent` filter grabbing an oversized coinbase (seventh pass); `tool_wallet`'s scenario genuinely depended on RBF and was reworked to use `generateblock` instead (seventh pass); `wallet_abandonconflict`'s eviction mechanism was never actually a no-op, just under-scaled for this fork's real fee rates (seventh pass) — no test needed to be skipped. See the seventh-pass Phase 2 section above for all four | Phase 2 |
 | 28 | ~~Root-cause `bitcoin-util-test.py`'s Windows-only failures~~ — done: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and `bitcoin-tx/bitcoin-tx.vcxproj` were never renamed from upstream, so MSBuild's default `$(TargetName)` produced `bitcoin-util.exe`/`bitcoin-tx.exe` instead of the rebranded names the test fixture correctly expects; fixed with explicit `<TargetName>` overrides — see the Phase 2 section above. Verify the fix on the next real Windows CI run | Phase 10 |
 | 29 | ~~Fix the same rename gap for the other MSVC-built binaries~~ — done: confirmed by the very next Windows CI run, whose "Run functional tests" step failed with the identical `FileNotFoundError` (`test_node.py` couldn't find `firstislamiccoind.exe` to start any node at all, since `bitcoind.vcxproj` had the same missing `<TargetName>`). Added `<TargetName>` overrides to `bitcoind`/`bitcoin-cli`/`bitcoin-wallet`/`bitcoin-qt` too, and rebranded `bitcoind.vcxproj`'s hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` while there. Verify the functional suite actually runs on the next real Windows CI run — first time it will have gotten past node startup at all | Phase 10 |
+| 30 | The live testnet node (`fic-testnet-node` on the VPS) has zero peer connections and sits at height 0 (genesis only) — root-caused, not a bug: testnet has no DNS seeds configured at all (`vSeeds.clear()` in `CTestNetParams`, `seed{1,2,3}.firstislamiccoin.com` confirmed "not yet live" per `docs/dns.md`), no `-addnode`/`-connect` peer was configured when the container was started, and no second `firstislamiccoind` process exists anywhere on this VPS to point it at by hand — this node is currently the only known testnet node anywhere. Needs either a second real testnet node stood up somewhere with its address documented for `-addnode`, or the real seed-node DNS infrastructure actually provisioned — see the "Live testnet node redeployed..." Phase 2 section above | Phase 2 |
