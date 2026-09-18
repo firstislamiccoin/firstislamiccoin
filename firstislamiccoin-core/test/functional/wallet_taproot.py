@@ -269,11 +269,6 @@ class WalletTaprootTest(BitcoinTestFramework):
         pubs_tr_enabled.unloadwallet()
         addr_gen.unloadwallet()
 
-        # Cleanup
-        privs_tr_enabled.unloadwallet()
-        pubs_tr_enabled.unloadwallet()
-        addr_gen.unloadwallet()
-
     def do_test_sendtoaddress(self, comment, pattern, privmap, treefn, keys_pay, keys_change):
         self.log.info("Testing %s through sendtoaddress" % comment)
 

@@ -774,10 +774,30 @@ class WalletMigrationTest(BitcoinTestFramework):
             locktime += 1
 
         # conflict with parent
-        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.9999}])
+        # FirstIslamicCoin: upstream broadcasts this via sendrawtransaction,
+        # relying on it displacing parent_txid in the mempool as a
+        # higher-fee RBF replacement the way it would be upstream. This
+        # fork removed RBF, so that broadcast is rejected outright as
+        # txn-mempool-conflict (parent_txid's input is already spent by an
+        # unconfirmed mempool tx). The scenario doesn't actually need
+        # mempool-level replacement though -- it only needs the conflicting
+        # tx to end up confirmed, which is what actually invalidates
+        # parent_txid/child_txid. generateblock builds a block directly
+        # from the given raw tx, bypassing mempool acceptance/policy
+        # (subject only to normal consensus validity), and connecting that
+        # block still runs the same wallet conflict bookkeeping this test
+        # is exercising -- conflicted-transaction detection happens on
+        # every block connection, not just RBF ones. Also, TestBlockValidity
+        # (used by generateblock) enforces this fork's fixed 100 sat/vB
+        # consensus fee floor (GetMinFee()), so the implied fee needs to
+        # clear that floor -- unlike upstream's tiny 0.0001 implied fee
+        # (10 - 9.9999), which was only ever sized to beat a dynamic RBF
+        # minimum-relay-fee bump, not a real floor. Same fix already applied
+        # to tool_wallet.py's near-identical test_chainless_conflicts scenario.
+        conflict_unsigned = self.nodes[0].createrawtransaction(inputs=[conflict_utxo], outputs=[{wallet.getnewaddress(): 9.999}])
         conflict_signed = wallet.signrawtransactionwithwallet(conflict_unsigned)["hex"]
-        conflict_txid = self.nodes[0].sendrawtransaction(conflict_signed)
-        self.generate(self.nodes[0], 1)
+        conflict_txid = self.nodes[0].decoderawtransaction(conflict_signed)["txid"]
+        self.generateblock(self.nodes[0], output=def_wallet.getnewaddress(), transactions=[conflict_signed])
         assert_equal(wallet.gettransaction(txid=parent_txid)["confirmations"], -1)
         assert_equal(wallet.gettransaction(txid=child_txid)["confirmations"], -1)
         assert_equal(wallet.gettransaction(txid=conflict_txid)["confirmations"], 1)

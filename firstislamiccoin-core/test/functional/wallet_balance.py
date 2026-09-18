@@ -184,6 +184,7 @@ class WalletTest(BitcoinTestFramework):
                                                  'trusted':           POW_SUBSIDY - Decimal('40.01'),  # change from node 0's send
                                                  'untrusted_pending': POW_SUBSIDY + 10},
                                    'watchonly': {'immature':          COINBASE_MATURITY * POW_SUBSIDY,
+                                                 'stake':             Decimal('0E-8'),
                                                  'trusted':           POW_SUBSIDY,
                                                  'untrusted_pending': Decimal('0E-8')}}
             expected_balances_1 = {'mine':      {'immature':          Decimal('0E-8'),
@@ -218,19 +219,24 @@ class WalletTest(BitcoinTestFramework):
 
         test_balances(fee_node_1=Decimal('0.01'))
 
-        # Node 1 bumps the transaction fee and resends
-        self.nodes[1].sendrawtransaction(txs[1]['hex'])
-        self.nodes[0].sendrawtransaction(txs[1]['hex'])  # sending on both nodes is faster than waiting for propagation
-        self.sync_all()
-
-        self.log.info("Test getbalance and getbalances.mine.untrusted_pending with conflicted unconfirmed inputs")
-        test_balances(fee_node_1=Decimal('0.02'))
+        # FirstIslamicCoin: upstream has node 1 "bump the transaction fee and
+        # resend" here -- broadcasting txs[1], a higher-fee version of the
+        # same tx spending the same inputs as the already-broadcast txs[0],
+        # to replace it in the mempool (RBF) and re-check balance tracking
+        # against the replacement's fee. This fork removed RBF entirely, so
+        # that second broadcast is rejected outright as
+        # txn-mempool-conflict rather than replacing anything; txs[0]
+        # (0.01 fee) remains the one in the mempool throughout, so the
+        # conflicted-unconfirmed-inputs re-check with the bumped 0.02 fee
+        # has nothing to test on this fork and is skipped. balance_node1
+        # below is adjusted to match txs[0] (0.01 fee) being the transaction
+        # that actually gets confirmed.
 
         self.generatetoaddress(self.nodes[1], 1, ADDRESS_WATCHONLY)
 
         # balances are correct after the transactions are confirmed
         balance_node0 = 2 * POW_SUBSIDY - Decimal('30.01')  # node 1's send plus change from node 0's send
-        balance_node1 = Decimal('29.98')  # change from node 0's send
+        balance_node1 = Decimal('29.99')  # change from node 0's send (txs[0], 0.01 fee -- see above)
         assert_equal(self.nodes[0].getbalances()['mine']['trusted'], balance_node0)
         assert_equal(self.nodes[1].getbalances()['mine']['trusted'], balance_node1)
         assert_equal(self.nodes[0].getbalance(), balance_node0)

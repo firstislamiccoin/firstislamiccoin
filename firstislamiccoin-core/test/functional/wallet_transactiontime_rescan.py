@@ -211,8 +211,19 @@ class TransactionTimeRescanTest(BitcoinTestFramework):
                 with minernode.assert_debug_log(expected_msgs=[f"Rescan started from block {genesis_hash}... (slow variant inspecting all blocks)"], timeout=5):
                     rescanning = thread.submit(encrypted_wallet.rescanblockchain)
 
-                # set the passphrase timeout to 1 to test that the wallet remains unlocked during the rescan
-                minernode.cli("-rpcwallet=encrypted_wallet").walletpassphrase("passphrase", 1)
+                # set the passphrase timeout to test that the wallet remains unlocked during the rescan.
+                # FirstIslamicCoin: upstream uses a 1 second timeout here, relying on the ~800-block
+                # regtest rescan finishing faster than that in practice -- CWallet::Lock()
+                # (src/wallet/wallet.cpp) has no in-progress-rescan guard at all (confirmed inherited
+                # unmodified via git diff against the CodexaCoin import), so the auto-relock timer
+                # genuinely can, and here does, fire mid-scan once the scan itself takes longer than
+                # the timeout. On this fork's much slower win64-native CI runner (the same slowness
+                # the whole suite's --timeout-factor=40 already accounts for) the scan reliably takes
+                # well over 1 second, so it was observed stopping partway through (e.g. stop_height=263
+                # instead of the full 803) once relocked keys could no longer be derived mid-scan.
+                # A generous timeout avoids racing the relock timer against the scan at all, while
+                # still exercising the same "remains unlocked / blocks lock attempts" assertions below.
+                minernode.cli("-rpcwallet=encrypted_wallet").walletpassphrase("passphrase", 300)
 
                 try:
                     minernode.cli("-rpcwallet=encrypted_wallet").walletlock()

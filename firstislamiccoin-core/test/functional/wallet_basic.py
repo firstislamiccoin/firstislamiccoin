@@ -355,8 +355,16 @@ class WalletTest(BitcoinTestFramework):
         # sendmany no longer accepts conf_target/estimate_mode at all -- they
         # are rejected as unknown parameters rather than validated as
         # upstream's conf_target-range/estimate_mode-value checks assume.
+        # Which of the two names the error message picks is itself
+        # unspecified: RPCHelpMan's named-parameter parser (rpc/server.cpp)
+        # collects the leftover unrecognized keys into a
+        # std::unordered_map<std::string, ...> and reports
+        # argsIn.begin()->first, and unordered_map's iteration order is
+        # implementation-defined -- MSVC's STL and libstdc++ order the same
+        # two keys differently, so asserting on one specific name is not
+        # portable. Only assert the substring both platforms agree on.
         self.log.info("Test sendmany raises if conf_target or estimate_mode is passed")
-        assert_raises_rpc_error(-8, "Unknown named parameter estimate_mode",
+        assert_raises_rpc_error(-8, "Unknown named parameter",
             self.nodes[2].sendmany, amounts={address: 1}, conf_target=1, estimate_mode="economical")
 
         self.start_node(3, self.nodes[3].extra_args)
@@ -586,8 +594,11 @@ class WalletTest(BitcoinTestFramework):
             # sendtoaddress no longer accepts conf_target/estimate_mode at
             # all -- rejected as unknown parameters, not validated the way
             # upstream's conf_target-range/estimate_mode-value checks assume.
+            # Same unordered_map iteration-order caveat as sendmany's check
+            # above: which name the error text picks isn't portable, so only
+            # assert the substring both platforms agree on.
             self.log.info("Test sendtoaddress raises if conf_target or estimate_mode is passed")
-            assert_raises_rpc_error(-8, "Unknown named parameter estimate_mode",
+            assert_raises_rpc_error(-8, "Unknown named parameter",
                 self.nodes[2].sendtoaddress, address=address, amount=1, conf_target=1, estimate_mode="economical")
 
             # 2. Import address from node2 to node1

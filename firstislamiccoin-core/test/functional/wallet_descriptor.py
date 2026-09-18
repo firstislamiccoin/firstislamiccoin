@@ -70,8 +70,18 @@ class WalletDescriptorTest(BitcoinTestFramework):
         assert addr_info['desc'].startswith('wpkh(')
         assert_equal(addr_info['hdkeypath'], 'm/84h/1h/0h/0/0')
 
-        # FirstIslamicCoin: getnewaddress refuses bech32m until taproot activates
-        assert_raises_rpc_error(-8, "Taproot addresses (bech32m) are not supported yet", self.nodes[0].getnewaddress, "", "bech32m")
+        # FirstIslamicCoin: upstream expects getnewaddress to refuse bech32m
+        # until Taproot activates on regtest (its usual bit-signaled
+        # deployment, inactive by default). This fork's Taproot deployment is
+        # ALWAYS_ACTIVE with min_activation_height=0 on every network
+        # including regtest (src/kernel/chainparams.cpp), the same "active
+        # from genesis" design already used for SegWit elsewhere in this
+        # project -- so there is no pre-activation window in which bech32m
+        # could be rejected, and getnewaddress succeeds here instead.
+        addr = self.nodes[0].getnewaddress("", "bech32m")
+        addr_info = self.nodes[0].getaddressinfo(addr)
+        assert addr_info['desc'].startswith('tr(')
+        assert_equal(addr_info['hdkeypath'], 'm/86h/1h/0h/0/0')
 
         # Check that getrawchangeaddress works
         addr = self.nodes[0].getrawchangeaddress("legacy")
@@ -183,10 +193,13 @@ class WalletDescriptorTest(BitcoinTestFramework):
 
         for addr_type, internal, desc_prefix, deriv_path, int_idx in addr_types:
             int_str = 'internal' if internal else 'external'
-            if addr_type == 'bech32m' or (not internal and addr_type == 'p2sh-segwit'):
-                # FirstIslamicCoin: getnewaddress refuses p2sh-segwit and bech32m (see above),
-                # and tr() descriptors cannot be imported while taproot is inactive, so the
-                # bech32m round trip cannot run. Internal p2sh-segwit is still exercised.
+            if not internal and addr_type == 'p2sh-segwit':
+                # FirstIslamicCoin: getnewaddress refuses p2sh-segwit
+                # (project-wide, see above); internal p2sh-segwit is still
+                # exercised. bech32m used to be skipped here too on the same
+                # stale "taproot inactive" premise already fixed above --
+                # Taproot is ALWAYS_ACTIVE on this fork, so it now runs like
+                # every other address type.
                 continue
 
             self.log.info("Testing descriptor address type for {} {}".format(addr_type, int_str))

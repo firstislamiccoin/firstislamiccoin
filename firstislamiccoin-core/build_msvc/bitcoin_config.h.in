@@ -21,10 +21,14 @@
 #define COPYRIGHT_HOLDERS "The %s developers"
 
 /* Copyright holder(s) */
-#define COPYRIGHT_HOLDERS_FINAL "The Bitcoin Core developers"
+/* FirstIslamicCoin: rebranded to match configure.ac's AC_INIT / COPYRIGHT_HOLDERS_SUBSTITUTION
+   -- this MSVC template never got the same rebrand the autotools/Linux
+   build gets from configure.ac, so every Windows build kept saying
+   "Bitcoin Core" here regardless of this fork's actual identity. */
+#define COPYRIGHT_HOLDERS_FINAL "The FirstIslamicCoin Core developers"
 
 /* Replacement for %s in copyright holders string */
-#define COPYRIGHT_HOLDERS_SUBSTITUTION "Bitcoin Core"
+#define COPYRIGHT_HOLDERS_SUBSTITUTION "FirstIslamicCoin Core"
 
 /* Copyright year */
 #define COPYRIGHT_YEAR $
@@ -116,16 +120,23 @@
 #define HAVE_DLLEXPORT_ATTRIBUTE 1
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "https://github.com/bitcoin/bitcoin/issues"
+/* FirstIslamicCoin: rebranded to match configure.ac's AC_INIT, which sets
+   this correctly for the autotools/Linux build via its bug-report-url
+   argument -- this MSVC template was never updated to match, so every
+   Windows-built binary reported bugs against upstream Bitcoin Core instead
+   of this fork (build_msvc/msvc-autogen.py's generator only substitutes
+   configure.ac's define(...) macros, never AC_INIT's own arguments, so
+   these were plain unsubstituted literals). */
+#define PACKAGE_BUGREPORT "https://github.com/FirstIslamicCoin/firstislamiccoin-core/issues"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "Bitcoin Core"
+#define PACKAGE_NAME "FirstIslamicCoin Core"
 
 /* Define to the full name and version of this package. */
 #define PACKAGE_STRING $
 
 /* Define to the home page for this package. */
-#define PACKAGE_URL "https://bitcoincore.org/"
+#define PACKAGE_URL "https://firstislamiccoin.com/"
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION $

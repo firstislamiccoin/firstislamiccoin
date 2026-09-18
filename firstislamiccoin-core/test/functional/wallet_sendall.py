@@ -176,11 +176,19 @@ class SendallTest(BitcoinTestFramework):
         # FirstIslamicCoin: upstream's 400/300 sat amounts are below this
         # fork's real dust threshold (which scales with the 100 sat/vB
         # floor), so sendtoaddress itself would reject them before ever
-        # reaching the "negative effective value" scenario below. Bumped
-        # up well clear of dust, but still far below what fee_rate=300
-        # needs to spend one economically.
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00004000)
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00003000)
+        # reaching the "negative effective value" scenario below. A first
+        # bump to 4000/3000 sat turned out to still be too low: getnewaddress()
+        # here returns this fork's DEFAULT_ADDRESS_TYPE (LEGACY, P2PKH,
+        # src/wallet/wallet.h), whose real dust threshold at this fork's
+        # DUST_RELAY_TX_FEE (100000 sat/kvB vs upstream's 3000, see
+        # src/policy/policy.h/.cpp's GetDustThreshold -- 182 bytes * rate)
+        # comes to ~18200 sat, not upstream's 546. Bumped again, well clear
+        # of that (~18200) floor but still comfortably below what
+        # fee_rate=300 (300 sat/vB) needs to spend a ~148-vbyte legacy input
+        # economically (~44400 sat), so both amounts remain negative-
+        # effective-value at that higher rate.
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00025000)
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00022000)
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 

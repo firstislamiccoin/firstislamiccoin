@@ -95,8 +95,14 @@ class PSBTTest(BitcoinTestFramework):
         self.generate(mining_node, nblocks=1, sync_fun=lambda: self.sync_all([online_node, mining_node]))
 
         # Construct an unsigned PSBT on the online node
+        # FirstIslamicCoin: leaving only 0.0001 BTC (10000 sat) fee here
+        # assumed upstream's ~1 sat/vB relay fee; this fork's consensus floor
+        # is a fixed 100 sat/vB (GetMinFee(), src/consensus/tx_verify.cpp),
+        # so a single-input/single-output tx needs more like ~12000-15000 sat
+        # and 10000 flat gets rejected with bad-txns-fee-not-enough. Bumped
+        # to leave a 0.001 BTC (100000 sat) fee, comfortably above the floor.
         utxos = wonline.listunspent(addresses=[offline_addr])
-        raw = wonline.createrawtransaction([{"txid":utxos[0]["txid"], "vout":utxos[0]["vout"]}],[{online_addr:0.9999}])
+        raw = wonline.createrawtransaction([{"txid":utxos[0]["txid"], "vout":utxos[0]["vout"]}],[{online_addr:0.999}])
         psbt = wonline.walletprocesspsbt(online_node.converttopsbt(raw))["psbt"]
         assert not "not_witness_utxo" in mining_node.decodepsbt(psbt)["inputs"][0]
 
@@ -1017,7 +1023,10 @@ class PSBTTest(BitcoinTestFramework):
             addr = self.nodes[0].getnewaddress("", "bech32m")
             txid = self.nodes[0].sendtoaddress(addr, 1)
             vout = find_vout_for_address(self.nodes[0], txid, addr)
-            psbt = self.nodes[0].createpsbt([{"txid": txid, "vout": vout}], [{self.nodes[0].getnewaddress(): 0.9999}])
+            # FirstIslamicCoin: same fee-floor bump as test_utxo_conversion()
+            # above -- 0.9999 (10000 sat fee) is below this fork's 100 sat/vB
+            # consensus floor for a tx this size.
+            psbt = self.nodes[0].createpsbt([{"txid": txid, "vout": vout}], [{self.nodes[0].getnewaddress(): 0.999}])
             signed = self.nodes[0].walletprocesspsbt(psbt)
             rawtx = signed["hex"]
             self.nodes[0].sendrawtransaction(rawtx)

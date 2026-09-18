@@ -31,6 +31,7 @@ import random
 import time
 
 from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.fic import MIN_TX_FEE_SAT
 from test_framework.messages import (
     COIN,
 )
@@ -184,13 +185,22 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
             assert_equal(nodei_utxo_hash, node3_utxo_hash)
 
     def generate_small_transactions(self, node, count, utxo_list):
-        FEE = 1000  # TODO: replace this with node relay fee based calculation
+        # FirstIslamicCoin: a hardcoded FEE = 1000 sat total (fee_per_output=333,
+        # ~3 sat/output) assumed upstream's ~1 sat/vB default relay fee. This
+        # fork enforces a fixed 100 sat/vB consensus floor (GetMinFee(),
+        # src/consensus/tx_verify.cpp) instead, so every tx built with that
+        # constant was rejected outright with bad-txns-fee-not-enough before a
+        # single one could be mined. Dropping fee_per_output lets
+        # create_self_transfer_multi() fall back to its own probe-based
+        # default (test_framework.fic.get_min_fee_sat()), which already
+        # accounts for this fork's real floor -- the same fix pattern used
+        # elsewhere in this project's fee-floor adaptations.
         num_transactions = 0
         random.shuffle(utxo_list)
         while len(utxo_list) >= 2 and num_transactions < count:
             utxos_to_spend = [utxo_list.pop() for _ in range(2)]
             input_amount = int(sum([utxo['value'] for utxo in utxos_to_spend]) * COIN)
-            if input_amount < FEE:
+            if input_amount < MIN_TX_FEE_SAT:
                 # Sanity check -- if we chose inputs that are too small, skip
                 continue
 
@@ -198,7 +208,6 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
                 from_node=node,
                 utxos_to_spend=utxos_to_spend,
                 num_outputs=3,
-                fee_per_output=FEE // 3,
             )
             num_transactions += 1
 

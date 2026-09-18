@@ -383,8 +383,16 @@ class AddressTypeTest(BitcoinTestFramework):
 
         if self.options.descriptors:
             self.log.info("Descriptor wallets have bech32m addresses")
-            # FirstIslamicCoin: getnewaddress refuses bech32m until taproot activates
-            assert_raises_rpc_error(-8, "Taproot addresses (bech32m) are not supported yet", self.nodes[4].getnewaddress, "", "bech32m")
+            # FirstIslamicCoin: upstream expects getnewaddress to refuse
+            # bech32m until Taproot activates on regtest (its usual
+            # bit-signaled deployment, inactive by default). This fork's
+            # Taproot deployment is ALWAYS_ACTIVE with min_activation_height=0
+            # on every network including regtest (src/kernel/chainparams.cpp),
+            # the same "active from genesis" design already used for SegWit
+            # elsewhere in this project -- so there is no pre-activation
+            # window in which bech32m could be rejected, and getnewaddress
+            # succeeds here instead of raising.
+            self.test_address(4, self.nodes[4].getnewaddress("", "bech32m"), multisig=False, typ="bech32m")
             self.test_address(4, self.nodes[4].getrawchangeaddress("bech32m"), multisig=False, typ="bech32m")
         else:
             self.log.info("Legacy wallets cannot make bech32m addresses")

@@ -252,7 +252,8 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         assert utxo["txid"] == txid and utxo["solvable"]
 
     def signing_test(
-        self, desc, sequence, locktime, sigs_count, stack_size, sha256_preimages
+        self, desc, sequence, locktime, sigs_count, stack_size, sha256_preimages,
+        fund_amount=0.01, fee=0.001,
     ):
         self.log.info(f"Importing private Miniscript descriptor '{desc}'")
         is_taproot = desc.startswith("tr(")
@@ -273,7 +274,7 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         self.log.info("Generating an address for it and testing it detects funds")
         addr_type = "bech32m" if is_taproot else "bech32"
         addr = self.ms_sig_wallet.getnewaddress(address_type=addr_type)
-        txid = self.funder.sendtoaddress(addr, 0.01)
+        txid = self.funder.sendtoaddress(addr, fund_amount)
         self.wait_until(lambda: txid in self.funder.getrawmempool())
         self.funder.generatetoaddress(1, self.funder.getnewaddress())
         utxo = self.ms_sig_wallet.listunspent(addresses=[addr])[0]
@@ -291,7 +292,7 @@ class WalletMiniscriptTest(BitcoinTestFramework):
                     "sequence": seq,
                 }
             ],
-            [{dest_addr: 0.009}],
+            [{dest_addr: round(fund_amount - fee, 8)}],
             lt,
         )
 
@@ -385,7 +386,16 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         ms = f"pk({TPRVS[0]}/*)"
         ms = "n" * padding + ":" + ms
         desc = f"tr({PUBKEYS[0]},{ms})"
-        self.signing_test(desc, None, None, 1, 3, None)
+        # FirstIslamicCoin: signing_test()'s default 0.001 BTC (100000 sat)
+        # fee is generous for the small scripts tested elsewhere in this
+        # file, but this script is deliberately padded out to the max
+        # standard Tapscript size (~329KB) -- its witness alone is roughly
+        # 80000+ vbytes after the segwit discount. At this fork's 100 sat/vB
+        # consensus floor (GetMinFee(), src/consensus/tx_verify.cpp) that
+        # needs well over 8000000 sat, not 100000; a generous fee is passed
+        # explicitly here rather than raising the shared default for every
+        # (much smaller) caller.
+        self.signing_test(desc, None, None, 1, 3, None, fund_amount=0.2, fee=0.15)
         # This was really the maximum size, one more byte and we can't import it.
         ms = "n" + ms
         desc = f"tr({PUBKEYS[0]},{ms})"

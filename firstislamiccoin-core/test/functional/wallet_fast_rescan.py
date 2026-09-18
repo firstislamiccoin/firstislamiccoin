@@ -63,7 +63,11 @@ class WalletFastRescanTest(BitcoinTestFramework):
                 else:
                     spk = bytes.fromhex(fixed_key.p2wpkh_script)
                     self.log.info(f"-> fixed non-range descriptor address {fixed_key.p2wpkh_addr}")
-                wallet.send_to(from_node=node, scriptPubKey=spk, amount=10000)
+                # FirstIslamicCoin: 10000 sat is right around upstream's
+                # dust threshold scaled to this fork's real dust-relay rate
+                # (DUST_RELAY_TX_FEE = 100000 sat/kvB vs upstream's 3000,
+                # src/policy/policy.h) -- comfortably above it instead.
+                wallet.send_to(from_node=node, scriptPubKey=spk, amount=50000)
             self.generate(node, 1)
 
         self.log.info("Import wallet backup with block filter index")

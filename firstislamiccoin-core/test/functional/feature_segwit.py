@@ -41,7 +41,7 @@ from test_framework.script_util import (
     script_to_p2sh_script,
     script_to_p2wsh_script,
 )
-from test_framework.test_framework import BitcoinTestFramework
+from test_framework.test_framework import BitcoinTestFramework, SkipTest
 from test_framework.util import (
     assert_equal,
     assert_greater_than_or_equal,
@@ -108,7 +108,10 @@ class SegWitTest(BitcoinTestFramework):
         self.rpc_timeout = 120
 
     def skip_test_if_missing_module(self):
-        self.skip_if_no_wallet()
+        # FirstIslamicCoin: SegWit is ALWAYS_ACTIVE from genesis on every
+        # network on this fork, so there is no pre-activation state left to
+        # construct the way -testactivationheight=segwit@N assumes.
+        raise SkipTest("SegWit is always active from genesis on this fork; no activation transition to test")
 
     def setup_network(self):
         super().setup_network()

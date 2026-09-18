@@ -163,8 +163,16 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(result[1], {'success': True})
         assert_equal(mock_wallet.getwalletinfo()["txcount"], 1)
         dest = self.nodes[0].getnewaddress(address_type='bech32')
-        # FirstIslamicCoin: no RBF, so no 'replaceable' option.
-        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {}, True)['psbt']
+        # FirstIslamicCoin: no RBF, so no 'replaceable' option. mock_wallet
+        # only ever imported tr() descriptors above (no legacy/P2PKH one),
+        # but this fork's DEFAULT_ADDRESS_TYPE is LEGACY (inherited
+        # unmodified from the CodexaCoin import, see wallet_fundrawtransaction.py's
+        # comment on the same quirk) -- without an explicit change_type, the
+        # wallet tries to generate a legacy change address it has no active
+        # descriptor for and fails with "No legacy addresses available."
+        # Requesting bech32m explicitly matches the only descriptor type
+        # this wallet actually has.
+        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {"change_type": "bech32m"}, True)['psbt']
         mock_psbt_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt, sign=True, sighashtype="ALL", bip32derivs=True)
         mock_tx = mock_psbt_signed["hex"]
         assert mock_wallet.testmempoolaccept([mock_tx])[0]["allowed"]

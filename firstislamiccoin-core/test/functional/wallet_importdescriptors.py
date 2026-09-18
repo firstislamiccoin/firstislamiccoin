@@ -696,12 +696,25 @@ class ImportDescriptorsTest(BitcoinTestFramework):
         descriptor["next_index"] = 0
 
         encrypted_wallet.walletpassphrase("passphrase", 99999)
+        # FirstIslamicCoin: the literal hash here was upstream's regtest
+        # genesis block; this fork's genesis (different PoW algorithm,
+        # premine, timestamp) has a real hash of its own (same fix as
+        # wallet_transactiontime_rescan.py's identical pattern).
+        genesis_hash = self.nodes[0].getblockhash(0)
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as thread:
-            with self.nodes[0].assert_debug_log(expected_msgs=["Rescan started from block 0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206... (slow variant inspecting all blocks)"], timeout=5):
+            with self.nodes[0].assert_debug_log(expected_msgs=[f"Rescan started from block {genesis_hash}... (slow variant inspecting all blocks)"], timeout=5):
                 importing = thread.submit(encrypted_wallet.importdescriptors, requests=[descriptor])
 
-            # Set the passphrase timeout to 1 to test that the wallet remains unlocked during the rescan
-            self.nodes[0].cli("-rpcwallet=encrypted_wallet").walletpassphrase("passphrase", 1)
+            # Set the passphrase timeout to test that the wallet remains unlocked during the rescan.
+            # FirstIslamicCoin: same 1-second-vs-slow-CI race as
+            # wallet_transactiontime_rescan.py's identical pattern -- see
+            # that file's comment for the full explanation (CWallet::Lock()
+            # has no in-progress-rescan guard, so this fork's much slower
+            # win64-native CI runner can let the auto-relock timer fire
+            # before this rescan, which covers 2*(COINBASE_MATURITY+1)
+            # blocks generated twice over, actually finishes). Generous
+            # timeout avoids racing the relock timer against the scan.
+            self.nodes[0].cli("-rpcwallet=encrypted_wallet").walletpassphrase("passphrase", 300)
 
             try:
                 self.nodes[0].cli("-rpcwallet=encrypted_wallet").walletlock()

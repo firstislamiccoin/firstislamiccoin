@@ -5,8 +5,6 @@
 """Test that the wallet resends transactions periodically."""
 import time
 
-from decimal import Decimal
-
 from test_framework.blocktools import (
     create_block,
     create_coinbase,
@@ -17,8 +15,6 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
-    get_fee,
-    try_rpc,
 )
 
 class ResendWalletTransactionsTest(BitcoinTestFramework):
@@ -86,38 +82,28 @@ class ResendWalletTransactionsTest(BitcoinTestFramework):
         # in mapWallet positioned before the parent. We cannot predict the position in mapWallet,
         # but we can observe it using listreceivedbyaddress and other related RPCs.
         #
-        # So we will create the child transaction, use listreceivedbyaddress to see what the
-        # ordering of mapWallet is, if the child is not before the parent, we will create a new
-        # child (via bumpfee) and remove the old child (via removeprunedfunds) until we get the
-        # ordering of child before parent.
+        # Upstream grinds for this ordering by repeatedly re-signing the child at a slightly
+        # different fee (changing its txid) and re-broadcasting each attempt as a fee-bump
+        # replacement (RBF) of the previous one, retrying until mapWallet happens to place the
+        # child before the parent. FirstIslamicCoin: this fork removed RBF entirely, so every
+        # attempt after the first is a same-input double-spend and is rejected outright as
+        # txn-mempool-conflict (not "insufficient fee, rejecting replacement" -- there is no
+        # replacement mechanism left to reject into) -- grinding via re-broadcast can't work at
+        # all here, not even probabilistically. mapWallet's ordering only ever comes from
+        # whichever single child_txid this produces (std::unordered_map<uint256, ...,
+        # SaltedTxidHasher>, src/wallet/wallet.h -- per-process-salted, so which specific txid we
+        # pick wouldn't let us control the order even with RBF). If that natural order already
+        # has the child before the parent, this run exercises the same resubmit-ordering code
+        # path upstream's grinding targets; if not, that one specific internal-ordering edge case
+        # goes unexercised this run rather than looping forever or crashing on the mempool
+        # conflict -- the rest of this test (eviction, resubmission, both txs ending back in the
+        # mempool) still runs and is asserted below regardless of which order came out.
         child_inputs = [{"txid": txid, "vout": 0}]
         child_txid = node.sendall(recipients=[addr], inputs=child_inputs)["txid"]
-        # Get the child tx's info for manual bumping
-        child_tx_info = node.gettransaction(txid=child_txid, verbose=True)
-        child_output_value = child_tx_info["decoded"]["vout"][0]["value"]
-        # Include an additional 1 vbyte buffer to handle when we have a smaller signature
-        additional_child_fee = get_fee(child_tx_info["decoded"]["vsize"] + 1, Decimal(0.00001100))
-        while True:
-            txids = node.listreceivedbyaddress(minconf=0, address_filter=addr)[0]["txids"]
-            if txids == [child_txid, txid]:
-                break
-            # Manually bump the tx
-            # The inputs and the output address stay the same, just changing the amount for the new fee
-            child_output_value -= additional_child_fee
-            bumped_raw = node.createrawtransaction(inputs=child_inputs, outputs=[{addr: child_output_value}])
-            bumped = node.signrawtransactionwithwallet(bumped_raw)
-            bumped_txid = node.decoderawtransaction(bumped["hex"])["txid"]
-            # Sometimes we will get a signature that is a little bit shorter than we expect which causes the
-            # feerate to be a bit higher, then the followup to be a bit lower. This results in a replacement
-            # that can't be broadcast. We can just skip that and keep grinding.
-            if try_rpc(-26, "insufficient fee, rejecting replacement", node.sendrawtransaction, bumped["hex"]):
-                continue
-            # The scheduler queue creates a copy of the added tx after
-            # send/bumpfee and re-adds it to the wallet (undoing the next
-            # removeprunedfunds). So empty the scheduler queue:
-            node.syncwithvalidationinterfacequeue()
-            node.removeprunedfunds(child_txid)
-            child_txid = bumped_txid
+        txids = node.listreceivedbyaddress(minconf=0, address_filter=addr)[0]["txids"]
+        if txids != [child_txid, txid]:
+            self.log.info("mapWallet ordering came out parent-before-child this run; "
+                           "the child-before-parent resubmit-ordering path is not exercised")
         entry_time = node.getmempoolentry(child_txid)["time"]
 
         block_time = entry_time + 6 * 60
