@@ -135,6 +135,8 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
         assert_equal(node.getpeerinfo()[0]['presynced_headers'], 2000)
 
     def test_large_reorgs_can_succeed(self):
+        # FirstIslamicCoin: this sub-test is skipped -- see the comment where it
+        # is (not) called from run_test() below for why.
         self.log.info("Test that a 2000+ block reorg, starting from a point that is more than 2000 blocks before a locator entry, can succeed")
 
         self.sync_all() # Ensure all nodes are synced.
@@ -158,7 +160,48 @@ class RejectLowDifficultyHeadersTest(BitcoinTestFramework):
     def run_test(self):
         self.test_chains_sync_when_long_enough()
 
-        self.test_large_reorgs_can_succeed()
+        # FirstIslamicCoin: test_large_reorgs_can_succeed() is skipped.
+        #
+        # Unlike upstream, this fork's AcceptBlockHeader() (src/validation.cpp,
+        # and the equivalent block-processing path in src/net_processing.cpp)
+        # enforces a Qtum/PPCoin-style "synchronized checkpoint" anti-DoS rule
+        # that has no upstream equivalent and no way to disable it (the
+        # -checkpoints flag only gates the separate *hardened* checkpoint list;
+        # this sync-checkpoint check is unconditional). Any header that doesn't
+        # extend a node's current active tip is compared against
+        # AutoSelectSyncCheckpoint(tip) -- the node's own tip walked back
+        # nCoinbaseMaturity blocks -- and is rejected as "older-than-checkpoint"
+        # if the header's timestamp predates that checkpoint's. See
+        # rpc_blockchain.py's assert_waitforheight comment and
+        # wallet_orphanedreward.py's module docstring for the same rule's
+        # height-based sibling check (ContextualCheckBlockHeader's
+        # "bad-fork-prior-to-synch-checkpoint").
+        #
+        # This sub-test's whole premise is a reorg that forks 4110+ blocks
+        # behind the tip -- deliberately far outside any nCoinbaseMaturity
+        # window, specifically to exercise the headers-presync/locator-entry
+        # logic upstream. On this fork, node1's alternate chain forks at
+        # height 2047 while node0/node2/node3's tip ends up around height
+        # 6157-6159; node1's headers from height 2048 onward carry this
+        # fork's deterministic block times (~parent.nTime + spacing, tracing
+        # back to when the shared history at height 2047 was mined), which
+        # are over an hour "older" than node0's checkpoint (~10 blocks behind
+        # its own, much-later-mined tip). Every one of those headers is
+        # rejected outright with "older-than-checkpoint", node0 and node1
+        # never reorg onto each other's chain, and sync_blocks() times out
+        # with node1 alone stuck on its own tip. The same thing happens in
+        # reverse (node1 rejects node0's headers), confirmed via each side's
+        # debug.log ("Misbehaving: ... (0 -> 1): invalid header received",
+        # the score delta unique to BlockValidationResult::BLOCK_HEADER_SYNC).
+        #
+        # Shrinking the reorg to fit inside the sync-checkpoint window would
+        # defeat the sub-test's actual purpose (BLOCKS_TO_MINE must exceed
+        # 4104 to land the first header window fully between locator
+        # entries), and weakening the consensus-level checkpoint rule to make
+        # deep reorgs possible would undermine a deliberate anti-DoS/anti-51%
+        # security feature this fork inherits from Qtum/PPCoin. So this
+        # specific scenario is left unexercised here rather than adapted.
+        # self.test_large_reorgs_can_succeed()
 
         self.test_peerinfo_includes_headers_presync_height()
 
