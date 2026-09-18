@@ -1400,6 +1400,49 @@ explicit port anywhere (`docs/dns.md`'s DNS table only records the hostname's pu
 number) -- not broken, just something a wallet operator needs to be told rather than assume.
 Updated `roadmap.html`'s Phase 4 to "Live" to match, with both real addresses named in the copy.
 
+### Web wallet checked properly too -- a real gap found and fixed; mobile confirmed genuinely not deployed
+
+Asked to also check the mobile and web wallet deployments specifically (Phases 5 and 7). Checked
+each independently rather than assuming the earlier "Live" call on the web wallet was the full
+story.
+
+**A real, previously-undiscovered gap: the deployed web wallet's frontend couldn't reach its own
+backend.** `wallet.firstislamiccoin.com`'s static files serve fine (confirmed `200` on `/`,
+`app.js` loads), but `nginx`'s `/v1/` reverse-proxy block to the staking gateway
+(`firstislamiccoin-staking-service`, `127.0.0.1:8080`) was commented out, with its own note reading
+"Wired up once firstislamiccoin-staking-service is deployed on this box." That gateway *is* now
+deployed on this box (see the `staking-api.testnet.firstislamiccoin.com` verification earlier in
+this section) -- the comment was simply never revisited once it was. Confirmed the break concretely
+before touching anything: `wallet.firstislamiccoin.com/v1/health` returned nginx's own static-file
+404 (the request never left nginx), not the gateway's. Uncommented the block (already
+written/reviewed, just inactive), validated with `nginx -t`, reloaded. Confirmed the fix for real,
+not just from a clean reload: `/v1/health` now returns the gateway's own 404 (a different page,
+proving the request reaches the Flask app), and a real route --
+`/v1/network/status` -- returns genuine live data
+(`{"backend":"rpc","backend_healthy":true,"best_block_hash":"a028...","chain_height":0,"network":"test"}`),
+matching the testnet node's actual state exactly. Static file serving re-confirmed unaffected (`200` on `/` afterward). Checked
+`explorer.firstislamiccoin.com`'s own nginx config for the identical "commented out, waiting on the
+backend" pattern too, in case it was systemic rather than a one-off -- it wasn't: its `/api/` proxy
+to the explorer backend (`127.0.0.1:8092`) was already active, consistent with the real data its
+`/api/stats` check returned earlier in this section.
+
+**Mobile (Phase 5): confirmed genuinely not deployed anywhere, nothing to fix.**
+`firstislamiccoin-mobile/.github/workflows/ci.yml` ("Mobile wallet CI") is path-filtered to only
+trigger on pushes touching `firstislamiccoin-mobile/**`; since nothing pushed to the now-real
+`firstislamiccoin/firstislamiccoin` GitHub repository during this whole project has touched that
+path, it has zero runs -- no build artifact, no app-store presence, nothing to check further. This
+matches `TODO-HUMAN` rows 11-14 exactly (needs Play Store/App Store accounts, signing keys/
+certificates, and a real device) and needed no change to `roadmap.html`'s existing accurate "Built,
+not deployed" tag for this phase.
+
+**A significant side-finding, noted but not investigated further here:** `firstislamiccoin-core`'s
+own root-level `build`/`CI` workflows (`.github/workflows/core-build.yml`/`core-ci.yml`) have
+genuinely been running -- and mostly passing -- on GitHub Actions throughout this whole session's
+commits, now that the `firstislamiccoin/firstislamiccoin` repository actually exists to run them in.
+Several earlier sections of this document describe CI jobs (ASan/UBSan, clang-tidy, the Windows
+build) as "written but never run for real" -- that framing may now be stale the same way the website
+deployment claims were. Worth a dedicated look, not done as part of this check.
+
 ### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
 
 Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
