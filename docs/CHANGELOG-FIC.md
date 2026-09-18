@@ -971,10 +971,38 @@ refused. `test_send()`'s remaining `conf_target`/`estimate_mode` cases (equivale
 options-object form, and their own validation-error cases) were dropped entirely — neither parameter
 exists on this fork's `send()` in any form.
 
-Also added `-v` to the Windows CI workflow's `test\util\test_runner.py` invocation
-(`.github/workflows/core-ci.yml`), to get real per-testcase diffs out of the still-unexplained
-`bitcoin-util-test.py` Windows failures (row 28) on the next run, rather than the bare pass/fail
-count the default invocation gives.
+### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
+
+Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
+Windows runner. First added `-v` to the Windows workflow's `test\util\test_runner.py` invocation
+(`.github/workflows/core-ci.yml`) — didn't help: `bctester()`'s per-testcase `except Exception:`
+only ever logged the failing test's description, never the exception itself, so raising the
+logging level surfaced more `SKIPPED`/`PASSED` noise but nothing about *why* the `FAILED` ones
+failed. Fixed that (log the traceback) and found a second, related gap in the same function:
+its own `try/except OSError` around running the test binary only wrapped `proc.communicate()`,
+not the `subprocess.Popen()` call that actually raises when the executable itself can't be
+found — so even the function's own "OSError, Failed to execute `<path>`" diagnostic never had a
+chance to fire for this exact failure. Fixed that too (wrap `Popen()` itself) and added a
+one-time log of `BUILDDIR`/`EXEEXT` to see exactly what path was being constructed.
+
+That combination gave a definitive answer: `FileNotFoundError` on
+`...\src\.\firstislamiccoin-util.exe` — the test harness was looking for the correctly-rebranded
+name (`test/util/data/bitcoin-util-test.json`'s `"exec"` field already says
+`"./firstislamiccoin-util"`, not `"./bitcoin-util"`), but the actual built file on disk is still
+`bitcoin-util.exe`. Root cause: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and
+`build_msvc/bitcoin-tx/bitcoin-tx.vcxproj` were never renamed as part of this fork's rebrand —
+unlike the Makefile.am-driven autotools/Linux build (where `firstislamiccoin-tx`/
+`firstislamiccoin-util` come from `configure.ac`'s `AC_INIT`), MSBuild's `$(TargetName)` defaults
+to the `.vcxproj` project's own name when not explicitly set, so the Windows build has always
+produced `bitcoin-util.exe`/`bitcoin-tx.exe` — this is simply the first time anything on Windows
+ever checked for the rebranded name and noticed. (`build_msvc/bitcoind/bitcoind.vcxproj`'s
+`AfterBuild` target has the identical gap for `test/config.ini`'s `PACKAGE_NAME`, still hardcoded
+to `"Bitcoin Core"` — harmless for this particular test since nothing reads that field for path
+construction, but the same class of oversight; not fixed here since it's cosmetic and out of
+this row's scope, but worth a `TODO-HUMAN` note for the other MSVC-built binaries.) Fixed by
+adding an explicit `<TargetName>` override to both `.vcxproj` files rather than renaming the
+project files/folders themselves, to avoid touching `.sln`/`ProjectReference` wiring for a
+fix that's otherwise fully self-contained.
 
 ### The win64-native MSVC CI job, actually run to a genuine build for the first time
 
@@ -1862,4 +1890,5 @@ those are removed.
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
 | 26 | Finish triaging the still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_accept`/`mempool_package_limits`, `rpc_blockchain`/`rpc_createmultisig`/`rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_sendall`/`wallet_signrawtransactionwithwallet`/`wallet_transactiontime_rescan`) — `wallet_backup`, `wallet_fundrawtransaction`, `mempool_limit`, and `wallet_send` are now fully triaged and green, see the Phase 2 sections above | Phase 2 |
 | 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each (the `wallet_send` fee_rate/options item formerly in this row is resolved — see the third-pass section above) | Phase 2 |
-| 28 | Root-cause why `test/util/test_runner.py` (`bitcoin-util-test.py`) fails close to 40 of its ~50 cases specifically on the win64-native MSVC build (its first successful build+link ever on this fork) — either its existing skip list for known-incompatible fixtures isn't taking effect on Windows, or there's a genuinely new Windows-only gap in the tool binaries/bctester harness; needs the actual per-testcase diffs from a real Windows CI run to diagnose — see the Phase 10 win64-native section above | Phase 10 |
+| 28 | ~~Root-cause `bitcoin-util-test.py`'s Windows-only failures~~ — done: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and `bitcoin-tx/bitcoin-tx.vcxproj` were never renamed from upstream, so MSBuild's default `$(TargetName)` produced `bitcoin-util.exe`/`bitcoin-tx.exe` instead of the rebranded names the test fixture correctly expects; fixed with explicit `<TargetName>` overrides — see the Phase 2 section above. Verify the fix on the next real Windows CI run | Phase 10 |
+| 29 | The same rename gap found for row 28 likely affects the other MSVC-built binaries too (`bitcoind`, `bitcoin-cli`, `bitcoin-wallet`, `bitcoin-qt` all still lack a `<TargetName>` override) and `build_msvc/bitcoind/bitcoind.vcxproj`'s `AfterBuild` target hardcodes `test/config.ini`'s `PACKAGE_NAME`/`PACKAGE_BUGREPORT` to upstream's `"Bitcoin Core"`/Bitcoin's issue tracker URL — neither breaks `bitcoin-util-test.py` specifically (out of row 28's scope, so not fixed here), but a real Windows install currently ships `bitcoin-cli.exe` etc. under the wrong name | Phase 10 |

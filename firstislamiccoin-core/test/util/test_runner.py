@@ -40,9 +40,6 @@ def main():
     # Add the format/level to the logger
     logging.basicConfig(format=formatter, level=level)
 
-    # FirstIslamicCoin: temporary diagnostic for the Windows-only
-    # FileNotFoundError -- confirm what BUILDDIR/EXEEXT actually resolve to.
-    logging.error("DEBUG env_conf: %s" % env_conf)
     bctester(os.path.join(env_conf["SRCDIR"], "test", "util", "data"), "bitcoin-util-test.json", env_conf)
 
 # FirstIslamicCoin: these fixtures/testcases were inherited unmodified from

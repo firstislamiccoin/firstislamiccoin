@@ -7,6 +7,16 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <!-- FirstIslamicCoin: this project folder/file were never renamed from
+         upstream's "bitcoin-util", so $(TargetName) defaulted to the
+         project name and common.vcxproj's AfterBuild copy produced
+         src\bitcoin-util.exe, not src\firstislamiccoin-util.exe. That's
+         what test/util/data/bitcoin-util-test.json's
+         "exec": "./firstislamiccoin-util" (correctly rebranded) then can't
+         find (FileNotFoundError). Override the output name instead of
+         renaming the project itself, to avoid touching the
+         .sln/ProjectReference wiring. -->
+    <TargetName>firstislamiccoin-util</TargetName>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bitcoin-util.cpp" />
