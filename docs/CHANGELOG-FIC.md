@@ -2151,6 +2151,30 @@ instruction.** The decision (build P2CS, or ship custodial-only and defer it pas
 launch) is left open; `TODO-HUMAN` row 2 below is updated to point here for context but not marked
 resolved.
 
+### `release.yml` confirmed running for real -- Linux and Windows both build clean
+
+With the GitHub org/repo gap closed (row 20, above), tested whether `release.yml` -- committed as
+"ready-to-run infrastructure" since Phase 3 first landed, never once actually executed -- genuinely
+works now that it has somewhere real to run. Triggered it manually via its own `workflow_dispatch`
+trigger (`gh workflow run release.yml --ref main`), deliberately not by pushing a version tag: the
+workflow's release-publish job is gated `if: startsWith(github.ref, 'refs/tags/v')`, so a
+`workflow_dispatch` run on `main` correctly builds without creating or publishing anything --
+verified this gate before triggering, not assumed.
+
+**Real result:** `linux-x86_64` and `windows-x86_64` both completed successfully (29m and 37m),
+producing genuine build artifacts -- a 51MB Linux tarball+`.deb` bundle and a 32MB Windows NSIS
+installer, both downloaded and confirmed present via the run's own artifact listing, not just a
+green checkmark taken on faith. `macos-x86_64` never started (stuck `queued`), the same runner-
+availability gap already documented in the Phase 2 CI section for this account's macOS runners --
+not specific to this workflow. The `Publish GitHub Release` job correctly shows as skipped (not
+run), confirming the tag-gate worked exactly as designed and this test run created nothing public.
+
+Fixed the workflow's own header comment, which still claimed "no FirstIslamicCoin GitHub org/
+repository exists yet" -- stale in the same way several other in-repo comments and TODO-HUMAN rows
+turned out to be once the real repo was found to exist. `roadmap.html`'s Phase 3 entry updated to
+match: this is real progress (two of three platforms build for real now), but still not a published
+release and still unsigned -- no code-signing certificates exist for either platform.
+
 ## Phase 4 — ElectrumX (light-client backend)
 
 Forked CAC's own `electrumx-cac` (itself a fork of `CoinBlack/electrumx-blk`, Blackcoin's ElectrumX)
