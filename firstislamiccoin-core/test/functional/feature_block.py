@@ -23,6 +23,7 @@ from test_framework.messages import (
     CTxOut,
     MAX_BLOCK_WEIGHT,
     SEQUENCE_FINAL,
+    ser_string,
     uint256_from_compact,
     uint256_from_str,
 )
@@ -64,22 +65,28 @@ class CBrokenBlock(CBlock):
         self.vtx = copy.deepcopy(base_block.vtx)
         self.hashMerkleRoot = self.calc_merkle_root()
 
-    def serialize(self, with_witness=False):
+    def serialize(self, with_witness=False, with_flags=False):
+        # FirstIslamicCoin: CBlockHeader carries an extra nFlags field on the
+        # wire (see P2P_BLOCK_HEADER_SIZE in test_framework/messages.py);
+        # msg_block.serialize() always passes with_flags=True, so it must be
+        # forwarded here too or the header comes out 4 bytes short.
         r = b""
-        r += super(CBlock, self).serialize()
+        r += super(CBlock, self).serialize(with_flags=with_flags)
         r += struct.pack("<BQ", 255, len(self.vtx))
         for tx in self.vtx:
             if with_witness:
                 r += tx.serialize_with_witness()
             else:
                 r += tx.serialize_without_witness()
+        # FirstIslamicCoin: CBlock.serialize() also appends a vchBlockSig
+        # field (this fork's PoS block-signature trailer); CBlock's own
+        # serialize() includes it, so this override must too, or it ends up
+        # 1 (empty-signature) byte short of a real block's serialization.
+        r += ser_string(self.vchBlockSig)
         return r
 
     def normal_serialize(self):
         return super().serialize()
-
-
-DUPLICATE_COINBASE_SCRIPT_SIG = b'\x01\x78'  # Valid for block at height 120
 
 
 class FullBlockTest(BitcoinTestFramework):
@@ -88,6 +95,10 @@ class FullBlockTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [[
             '-acceptnonstdtxn=1',  # This is a consensus block test, we don't care about tx policy
+            # FIC: regtest rejects proof-of-work blocks above height 500 (reject-pow) unless
+            # -lastpowblock is raised. This file's "1088 block" week-long reorg test alone mines
+            # well past that height.
+            '-lastpowblock=2147483646',
         ]]
 
     def run_test(self):
@@ -104,9 +115,19 @@ class FullBlockTest(BitcoinTestFramework):
         self.spendable_outputs = []
 
         # Create a new block
+        # FirstIslamicCoin: upstream gives this coinbase an arbitrary scriptSig
+        # (b'\x01\x78', which happens to BIP34-encode height 120) instead of its
+        # real height-1 encoding, because upstream's BIP34 is a buried deployment
+        # that isn't active this early in the regtest chain -- pre-activation
+        # coinbases don't need to encode their real height, and doing this lets an
+        # identical coinbase be replayed at a much later height for the BIP30 tests
+        # further down (the CVE-2012-1909 duplicate-coinbase-txid scenario). On
+        # this fork BIP34 is enforced unconditionally from height 1 (see
+        # validation.cpp's "BIP34 is always active"), so a non-height-1-encoding
+        # scriptSig here is simply an invalid block, not a pre-activation curiosity.
+        # Use the normal, correctly height-encoded coinbase instead; see the BIP30
+        # section further down for what this means for that coverage.
         b_dup_cb = self.next_block('dup_cb')
-        b_dup_cb.vtx[0].vin[0].scriptSig = DUPLICATE_COINBASE_SCRIPT_SIG
-        b_dup_cb.vtx[0].rehash()
         duplicate_tx = b_dup_cb.vtx[0]
         b_dup_cb = self.update_block('dup_cb', [])
         self.send_blocks([b_dup_cb])
@@ -221,6 +242,7 @@ class FullBlockTest(BitcoinTestFramework):
         self.log.info("Reject a block where the miner creates too much coinbase reward")
         self.move_tip(6)
         b9 = self.next_block(9, spend=out[4], additional_coinbase_value=1)
+        b9 = self.correct_pow_subsidy(9)  # FirstIslamicCoin: see correct_pow_subsidy() above
         self.send_blocks([b9], success=False, reject_reason='bad-cb-amount', reconnect=True)
 
         # Create a fork that ends in a block with too much fee (the one that causes the reorg)
@@ -233,6 +255,7 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b10], False)
 
         b11 = self.next_block(11, spend=out[4], additional_coinbase_value=1)
+        b11 = self.correct_pow_subsidy(11)  # FirstIslamicCoin: see correct_pow_subsidy() above
         self.send_blocks([b11], success=False, reject_reason='bad-cb-amount', reconnect=True)
 
         # Try again, but with a valid fork first
@@ -246,6 +269,7 @@ class FullBlockTest(BitcoinTestFramework):
         b13 = self.next_block(13, spend=out[4])
         self.save_spendable_output()
         b14 = self.next_block(14, spend=out[5], additional_coinbase_value=1)
+        b14 = self.correct_pow_subsidy(14)  # FirstIslamicCoin: see correct_pow_subsidy() above
         self.send_blocks([b12, b13, b14], success=False, reject_reason='bad-cb-amount', reconnect=True)
 
         # New tip should be b13.
@@ -294,8 +318,17 @@ class FullBlockTest(BitcoinTestFramework):
         #                                          \-> b12 (3) -> b13 (4) -> b15 (5) -> b20 (7)
         #                      \-> b3 (1) -> b4 (2)
         self.log.info("Reject a block spending an immature coinbase.")
+        # FirstIslamicCoin: upstream spends out[7] here because, given this
+        # test's buffer-block bootstrapping, it sits at exactly 99
+        # confirmations at this point in the chain -- one short of
+        # upstream's COINBASE_MATURITY of 100. This fork's COINBASE_MATURITY
+        # is 10, and every out[] output was mined during the buffer-block
+        # bootstrap, so by now all of them have long since matured under
+        # that much shorter window. Spend b15's own just-mined coinbase
+        # instead: it has 0 confirmations at the point b20 is built on top
+        # of it, which is still well short of maturity.
         self.move_tip(15)
-        b20 = self.next_block(20, spend=out[7])
+        b20 = self.next_block(20, spend=b15.vtx[0])
         self.send_blocks([b20], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Attempt to spend a coinbase at depth too low (on a fork this time)
@@ -308,7 +341,10 @@ class FullBlockTest(BitcoinTestFramework):
         b21 = self.next_block(21, spend=out[6])
         self.send_blocks([b21], False)
 
-        b22 = self.next_block(22, spend=out[5])
+        # FirstIslamicCoin: see the comment on b20 above -- spend b21's own
+        # just-mined coinbase instead of out[5] so the block is still
+        # genuinely immature under this fork's shorter COINBASE_MATURITY.
+        b22 = self.next_block(22, spend=b21.vtx[0])
         self.send_blocks([b22], success=False, reject_reason='bad-txns-premature-spend-of-coinbase', reconnect=True)
 
         # Create a block on either side of MAX_BLOCK_WEIGHT and make sure its accepted/rejected
@@ -318,12 +354,19 @@ class FullBlockTest(BitcoinTestFramework):
         #                      \-> b3 (1) -> b4 (2)
         self.log.info("Accept a block of weight MAX_BLOCK_WEIGHT")
         self.move_tip(15)
-        b23 = self.next_block(23, spend=out[6])
+        # FirstIslamicCoin: give the block's own auto-generated spend tx (out[6]
+        # feeds it) more than the default 1 satoshi, since the padding tx below
+        # needs real value of its own to pay this fork's consensus minimum fee
+        # (see min_consensus_fee() above). nValue doesn't affect serialized
+        # size, so this doesn't disturb the weight math below at all.
+        PADDING_SPEND_VALUE = 5 * COIN
+        b23 = self.next_block(23, spend=out[6], spend_value=PADDING_SPEND_VALUE)
         tx = CTransaction()
         script_length = (MAX_BLOCK_WEIGHT - b23.get_weight() - 276) // 4
         script_output = CScript([b'\x00' * script_length])
         tx.vout.append(CTxOut(0, script_output))
         tx.vin.append(CTxIn(COutPoint(b23.vtx[1].sha256, 0)))
+        tx.vout[0].nValue = PADDING_SPEND_VALUE - self.min_consensus_fee(len(tx.serialize()))
         b23 = self.update_block(23, [tx])
         # Make sure the math above worked out to produce a max-weighted block
         assert_equal(b23.get_weight(), MAX_BLOCK_WEIGHT)
@@ -477,23 +520,49 @@ class FullBlockTest(BitcoinTestFramework):
         redeem_script = CScript([self.coinbase_pubkey] + [OP_2DUP, OP_CHECKSIGVERIFY] * 5 + [OP_CHECKSIG])
         p2sh_script = script_to_p2sh_script(redeem_script)
 
-        # Create a transaction that spends one satoshi to the p2sh_script, the rest to OP_TRUE
+        # Create a transaction that spends P2SH_OUTPUT_VALUE to the p2sh_script, the rest to OP_TRUE
         # This must be signed because it is spending a coinbase
+        # FirstIslamicCoin: this fork's GetMinFee() (src/consensus/tx_verify.cpp)
+        # enforces a consensus-level minimum fee on every non-coinbase tx (see
+        # min_consensus_fee() above) -- unlike upstream, which only enforces
+        # this as mempool policy, which this P2P-level block test bypasses.
+        # Upstream's chain of P2SH outputs pays zero fee at every hop; here
+        # each hop instead keeps back P2SH_OUTPUT_VALUE (instead of 1 satoshi)
+        # so it can pay its own fee, both now and again later when b40/b41
+        # spend it. nValue is a fixed-size field, so none of this disturbs the
+        # sigop/weight counting this test is actually exercising.
+        P2SH_OUTPUT_VALUE = 200_000
         spend = out[11]
         tx = self.create_tx(spend, 0, 1, p2sh_script)
         tx.vout.append(CTxOut(spend.vout[0].nValue - 1, CScript([OP_TRUE])))
         self.sign_tx(tx, spend)
         tx.rehash()
+        first_hop_fee = self.min_consensus_fee(len(tx.serialize()))
+        tx.vout[0].nValue = P2SH_OUTPUT_VALUE
+        tx.vout[1].nValue = spend.vout[0].nValue - P2SH_OUTPUT_VALUE - first_hop_fee
+        # re-sign: SIGHASH_ALL covers vout, which just changed. sign_input_legacy()
+        # PREPENDS to scriptSig rather than replacing it, so it must be cleared first.
+        tx.vin[0].scriptSig = b""
+        self.sign_tx(tx, spend)
+        tx.rehash()
         b39 = self.update_block(39, [tx])
         b39_outputs += 1
 
-        # Until block is full, add tx's with 1 satoshi to p2sh_script, the rest to OP_TRUE
+        # Until block is full, add tx's with P2SH_OUTPUT_VALUE to p2sh_script, the rest to OP_TRUE
         tx_new = None
         tx_last = tx
         total_weight = b39.get_weight()
+        chain_hop_fee = None
         while total_weight < MAX_BLOCK_WEIGHT:
             tx_new = self.create_tx(tx_last, 1, 1, p2sh_script)
             tx_new.vout.append(CTxOut(tx_last.vout[1].nValue - 1, CScript([OP_TRUE])))
+            tx_new.rehash()
+            if chain_hop_fee is None:
+                chain_hop_fee = self.min_consensus_fee(len(tx_new.serialize()))
+            tx_new.vout[0].nValue = P2SH_OUTPUT_VALUE
+            tx_new.vout[1].nValue = tx_last.vout[1].nValue - P2SH_OUTPUT_VALUE - chain_hop_fee
+            # tx_last's output is OP_TRUE (anyone-can-spend), so there's no
+            # scriptSig/signature here that changing vout could invalidate.
             tx_new.rehash()
             total_weight += tx_new.get_weight()
             if total_weight >= MAX_BLOCK_WEIGHT:
@@ -528,11 +597,26 @@ class FullBlockTest(BitcoinTestFramework):
         numTxes = (MAX_BLOCK_SIGOPS - sigops) // b39_sigops_per_output
         assert_equal(numTxes <= b39_outputs, True)
 
+        # FirstIslamicCoin: as above, each hop of this chain needs to pay a
+        # real fee. Every hop has the same shape, so measure one throwaway
+        # probe tx once and reuse its size for all of them -- the real value
+        # has to be set before signing (SIGHASH_ALL covers vout), so it can't
+        # be measured from the chain's own first entry after the fact.
+        probe = CTransaction()
+        probe.vout.append(CTxOut(1, CScript([OP_TRUE])))
+        probe.vin.append(CTxIn(COutPoint(b40.vtx[1].sha256, 0), b''))
+        probe.vin.append(CTxIn(COutPoint(b39.vtx[1].sha256, 0), b''))
+        probe.vin[1].scriptSig = CScript([redeem_script])
+        sign_input_legacy(probe, 1, redeem_script, self.coinbase_key)
+        b40_chain_hop_fee = self.min_consensus_fee(len(probe.serialize()))
+
         lastOutpoint = COutPoint(b40.vtx[1].sha256, 0)
+        lastOutpoint_value = 1  # b40.vtx[1]'s starting balance (next_block()'s default spend_value=1)
         new_txs = []
         for i in range(1, numTxes + 1):
+            lastOutpoint_value = lastOutpoint_value + P2SH_OUTPUT_VALUE - b40_chain_hop_fee
             tx = CTransaction()
-            tx.vout.append(CTxOut(1, CScript([OP_TRUE])))
+            tx.vout.append(CTxOut(lastOutpoint_value, CScript([OP_TRUE])))
             tx.vin.append(CTxIn(lastOutpoint, b''))
             # second input is corresponding P2SH output from b39
             tx.vin.append(CTxIn(COutPoint(b39.vtx[i].sha256, 0), b''))
@@ -545,7 +629,8 @@ class FullBlockTest(BitcoinTestFramework):
         b40_sigops_to_fill = MAX_BLOCK_SIGOPS - (numTxes * b39_sigops_per_output + sigops) + 1
         tx = CTransaction()
         tx.vin.append(CTxIn(lastOutpoint, b''))
-        tx.vout.append(CTxOut(1, CScript([OP_CHECKSIG] * b40_sigops_to_fill)))
+        tx.vout.append(CTxOut(0, CScript([OP_CHECKSIG] * b40_sigops_to_fill)))
+        tx.vout[0].nValue = lastOutpoint_value - self.min_consensus_fee(len(tx.serialize()))
         tx.rehash()
         new_txs.append(tx)
         self.update_block(40, new_txs)
@@ -559,7 +644,8 @@ class FullBlockTest(BitcoinTestFramework):
         b41_sigops_to_fill = b40_sigops_to_fill - 1
         tx = CTransaction()
         tx.vin.append(CTxIn(lastOutpoint, b''))
-        tx.vout.append(CTxOut(1, CScript([OP_CHECKSIG] * b41_sigops_to_fill)))
+        tx.vout.append(CTxOut(0, CScript([OP_CHECKSIG] * b41_sigops_to_fill)))
+        tx.vout[0].nValue = lastOutpoint_value - self.min_consensus_fee(len(tx.serialize()))
         tx.rehash()
         self.update_block(41, [tx])
         self.send_blocks([b41], True)
@@ -634,10 +720,18 @@ class FullBlockTest(BitcoinTestFramework):
         self.move_tip(44)
         b47 = self.next_block(47)
         target = uint256_from_compact(b47.nBits)
-        while b47.sha256 <= target:
-            # Rehash nonces until an invalid too-high-hash block is found.
+        # FirstIslamicCoin: proof-of-work is checked against the block's
+        # scrypt hash (CBlockHeader::GetPoWHash(), see calc_pow_hash() in
+        # test_framework/messages.py -- also used by solve() elsewhere in
+        # this file), not its sha256d block hash (.sha256/.hash, used for
+        # block identity/merkle throughout this file). The two hashes are
+        # uncorrelated, so grinding nNonce against .sha256 (upstream's
+        # approach) doesn't reliably produce a block that's actually invalid
+        # proof-of-work under this fork's real consensus check.
+        while b47.calc_pow_hash() <= target:
+            # Grind nonces until an invalid too-high-hash block is found.
             b47.nNonce += 1
-            b47.rehash()
+        b47.rehash()
         self.send_blocks([b47], False, force_send=True, reject_reason='high-hash', reconnect=True)
 
         self.log.info("Reject a block with a timestamp >2 hours in the future")
@@ -687,15 +781,21 @@ class FullBlockTest(BitcoinTestFramework):
         self.save_spendable_output()
 
         self.log.info("Reject a block with timestamp before MedianTimePast")
+        # FirstIslamicCoin: CBlockIndex::GetMedianTimePast() (src/chain.h)
+        # short-circuits to the block's own GetBlockTime() once IsProtocolV2()
+        # is true, instead of computing upstream's real median of the last 11
+        # blocks -- and ProtocolV2 is active for every timestamp this test
+        # uses (nProtocolV2Time is a ~2014 cutoff). So MTP(b53) is simply
+        # b53.nTime here, not the older b35.nTime upstream relies on; the
+        # boundary tests below target b53.nTime instead.
         b54 = self.next_block(54, spend=out[15])
-        b54.nTime = b35.nTime - 1
+        b54.nTime = b53.nTime  # == MTP(b53); still invalid, the check is strict (<=)
         b54.solve()
         self.send_blocks([b54], False, force_send=True, reject_reason='time-too-old', reconnect=True)
 
         # valid timestamp
         self.move_tip(53)
-        b55 = self.next_block(55, spend=out[15])
-        b55.nTime = b35.nTime
+        b55 = self.next_block(55, spend=out[15])  # nTime defaults to b53.nTime + 1, just past MTP(b53)
         self.update_block(55, [])
         self.send_blocks([b55], True)
         self.save_spendable_output()
@@ -743,10 +843,17 @@ class FullBlockTest(BitcoinTestFramework):
         #  that the error was caught early, avoiding a DOS vulnerability.)
 
         # b57 - a good block with 2 txs, don't submit until end
+        # FirstIslamicCoin: see the P2SH_OUTPUT_VALUE comment on b39 above --
+        # tx1 needs to pay a real fee (min_consensus_fee()), so tx is seeded
+        # with more than 1 satoshi to fund it.
+        CHAIN_SEED_VALUE = 1_000_000
         self.move_tip(55)
         self.next_block(57)
-        tx = self.create_and_sign_transaction(out[16], 1)
+        tx = self.create_and_sign_transaction(out[16], CHAIN_SEED_VALUE)
         tx1 = self.create_tx(tx, 0, 1)
+        chain_fee = self.min_consensus_fee(len(tx1.serialize()))
+        tx1.vout[0].nValue = CHAIN_SEED_VALUE - chain_fee
+        tx1.rehash()
         b57 = self.update_block(57, [tx, tx1])
 
         # b56 - copy b57, add a duplicate tx
@@ -760,13 +867,24 @@ class FullBlockTest(BitcoinTestFramework):
         self.send_blocks([b56], success=False, reject_reason='bad-txns-duplicate', reconnect=True)
 
         # b57p2 - a good block with 6 tx'es, don't submit until end
+        # FirstIslamicCoin: see the P2SH_OUTPUT_VALUE comment on b39 above --
+        # each hop needs to pay a real fee (min_consensus_fee()).
         self.move_tip(55)
         self.next_block("57p2")
-        tx = self.create_and_sign_transaction(out[16], 1)
+        tx = self.create_and_sign_transaction(out[16], CHAIN_SEED_VALUE)
         tx1 = self.create_tx(tx, 0, 1)
+        chain_fee = self.min_consensus_fee(len(tx1.serialize()))
+        tx1.vout[0].nValue = CHAIN_SEED_VALUE - chain_fee
+        tx1.rehash()
         tx2 = self.create_tx(tx1, 0, 1)
+        tx2.vout[0].nValue = tx1.vout[0].nValue - chain_fee
+        tx2.rehash()
         tx3 = self.create_tx(tx2, 0, 1)
+        tx3.vout[0].nValue = tx2.vout[0].nValue - chain_fee
+        tx3.rehash()
         tx4 = self.create_tx(tx3, 0, 1)
+        tx4.vout[0].nValue = tx3.vout[0].nValue - chain_fee
+        tx4.rehash()
         b57p2 = self.update_block("57p2", [tx, tx1, tx2, tx3, tx4])
 
         # b56p2 - copy b57p2, duplicate two non-consecutive tx's
@@ -799,7 +917,12 @@ class FullBlockTest(BitcoinTestFramework):
         tx = CTransaction()
         assert len(out[17].vout) < 42
         tx.vin.append(CTxIn(COutPoint(out[17].sha256, 42), CScript([OP_TRUE]), SEQUENCE_FINAL))
-        tx.vout.append(CTxOut(0, b""))
+        # FirstIslamicCoin: src/consensus/tx_check.cpp additionally rejects any
+        # non-coinbase, non-coinstake tx with a fully empty output (0 value AND
+        # empty scriptPubKey, bad-txns-vout-empty) -- upstream has no such
+        # rule. A CTxOut(0, b"") placeholder here would trip that check first,
+        # before the out-of-range prevout this test is actually targeting.
+        tx.vout.append(CTxOut(0, CScript([OP_TRUE])))
         tx.calc_sha256()
         b58 = self.update_block(58, [tx])
         self.send_blocks([b58], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
@@ -827,21 +950,33 @@ class FullBlockTest(BitcoinTestFramework):
         # not-fully-spent transaction in the same chain. To test, make identical coinbases;
         # the second one should be rejected. See also CVE-2012-1909.
         #
-        self.log.info("Reject a block with a transaction with a duplicate hash of a previous transaction (BIP30)")
-        self.move_tip(60)
-        b61 = self.next_block(61)
-        b61.vtx[0].vin[0].scriptSig = DUPLICATE_COINBASE_SCRIPT_SIG
-        b61.vtx[0].rehash()
-        b61 = self.update_block(61, [])
-        assert_equal(duplicate_tx.serialize(), b61.vtx[0].serialize())
-        # BIP30 is always checked on regtest, regardless of the BIP34 activation height
-        self.send_blocks([b61], success=False, reject_reason='bad-txns-BIP30', reconnect=True)
+        # FirstIslamicCoin: skipped. Upstream builds b61's coinbase to be
+        # byte-identical to duplicate_tx (a coinbase from a much earlier height) by
+        # giving both the same arbitrary, non-height-encoding scriptSig -- legal on
+        # upstream only because BIP34 hasn't activated yet at either height (see the
+        # comment where duplicate_tx is created above). With BIP34 enforced
+        # unconditionally from height 1 on this fork, a coinbase's scriptSig must
+        # encode its own real height, so two coinbases at different heights can
+        # never serialize identically. That makes the duplicate-coinbase-txid
+        # construction this test relies on -- and the whole CVE-2012-1909 attack
+        # class -- structurally unreachable here: there is no legal way to get two
+        # transactions with the same txid into the chain in the first place, so
+        # BIP30's rejection of that case can no longer be triggered. BIP30's check
+        # itself is untouched and still runs on every block.
 
         # Test BIP30 (allow duplicate if spent)
         #
         # -> b57 (16) -> b60 ()
         #            \-> b_spend_dup_cb (b_dup_cb) -> b_dup_2 ()
         #
+        # FirstIslamicCoin: b_dup_2's coinbase can no longer be a true duplicate of
+        # duplicate_tx either, for the same reason as above, so the assertions that
+        # specifically observed the duplicate txid being accepted (matching
+        # serializations, and gettxout's confirmation count "resetting" as the
+        # reused txid's newer instance became the tip) are dropped. What's still
+        # genuinely exercised here -- spending a matured coinbase on a side branch,
+        # and that branch overtaking b60's chain via reorg once it becomes longer
+        # -- is kept.
         self.move_tip(57)
         self.next_block('spend_dup_cb')
         tx = CTransaction()
@@ -852,14 +987,8 @@ class FullBlockTest(BitcoinTestFramework):
         b_spend_dup_cb = self.update_block('spend_dup_cb', [tx])
 
         b_dup_2 = self.next_block('dup_2')
-        b_dup_2.vtx[0].vin[0].scriptSig = DUPLICATE_COINBASE_SCRIPT_SIG
-        b_dup_2.vtx[0].rehash()
         b_dup_2 = self.update_block('dup_2', [])
-        assert_equal(duplicate_tx.serialize(), b_dup_2.vtx[0].serialize())
-        assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.hash, n=0)['confirmations'], 119)
         self.send_blocks([b_spend_dup_cb, b_dup_2], success=True)
-        # The duplicate has less confirmations
-        assert_equal(self.nodes[0].gettxout(txid=duplicate_tx.hash, n=0)['confirmations'], 1)
 
         # Test tx.isFinal is properly rejected (not an exhaustive tx.isFinal test, that should be in data-driven transaction tests)
         #
@@ -908,7 +1037,11 @@ class FullBlockTest(BitcoinTestFramework):
         #
         self.log.info("Accept a valid block even if a bloated version of the block has previously been sent")
         self.move_tip('dup_2')
-        regular_block = self.next_block("64a", spend=out[18])
+        # FirstIslamicCoin: see the PADDING_SPEND_VALUE comment on b23 above --
+        # the padding tx below (shared with b64, which must fully validate)
+        # needs real value of its own to pay this fork's consensus minimum fee.
+        PADDING_SPEND_VALUE = 5 * COIN
+        regular_block = self.next_block("64a", spend=out[18], spend_value=PADDING_SPEND_VALUE)
 
         # make it a "broken_block," with non-canonical serialization
         b64a = CBrokenBlock(regular_block)
@@ -922,7 +1055,21 @@ class FullBlockTest(BitcoinTestFramework):
         script_output = CScript([b'\x00' * script_length])
         tx.vout.append(CTxOut(0, script_output))
         tx.vin.append(CTxIn(COutPoint(b64a.vtx[1].sha256, 0)))
+        tx.vout[0].nValue = PADDING_SPEND_VALUE - self.min_consensus_fee(len(tx.serialize()))
         b64a = self.update_block("64a", [tx])
+        # FirstIslamicCoin: upstream's "276" constant above can be off by a
+        # small, fork-specific amount (observed: a few bytes), so nudge the
+        # padding script by however far off the actual weight landed instead
+        # of chasing the exact source of the discrepancy.
+        weight_error = b64a.get_weight() - (MAX_BLOCK_WEIGHT + 8 * 4)
+        if weight_error != 0:
+            assert weight_error % 4 == 0
+            script_length -= weight_error // 4
+            tx.vout[0].scriptPubKey = CScript([b'\x00' * script_length])
+            tx.vout[0].nValue = PADDING_SPEND_VALUE - self.min_consensus_fee(len(tx.serialize()))
+            tx.rehash()
+            b64a.hashMerkleRoot = b64a.calc_merkle_root()
+            b64a.solve()
         assert_equal(b64a.get_weight(), MAX_BLOCK_WEIGHT + 8 * 4)
         self.send_blocks([b64a], success=False, reject_reason='non-canonical ReadCompactSize()')
 
@@ -950,7 +1097,13 @@ class FullBlockTest(BitcoinTestFramework):
         self.log.info("Accept a block with a transaction spending an output created in the same block")
         self.move_tip(64)
         self.next_block(65)
+        # FirstIslamicCoin: upstream spends out[19]'s entire value into tx1's
+        # single output (0 fee); hold back a real fee instead (see
+        # min_consensus_fee() above). tx2 already forwards 100% of whatever it
+        # receives as its own fee, so it needs no change.
         tx1 = self.create_and_sign_transaction(out[19], out[19].vout[0].nValue)
+        tx1_fee = self.min_consensus_fee(len(tx1.serialize()))
+        tx1 = self.create_and_sign_transaction(out[19], out[19].vout[0].nValue - tx1_fee)
         tx2 = self.create_and_sign_transaction(tx1, 0)
         b65 = self.update_block(65, [tx1, tx2])
         self.send_blocks([b65], True)
@@ -977,7 +1130,16 @@ class FullBlockTest(BitcoinTestFramework):
         self.log.info("Reject a block with a transaction double spending a transaction created in the same block")
         self.move_tip(65)
         self.next_block(67)
+        # FirstIslamicCoin: tx1 is processed before tx2/tx3 (it's earlier in
+        # the block), so if it pays 0 fee (upstream spends out[20]'s entire
+        # value into its single output) it gets rejected for
+        # bad-txns-fee-not-enough before tx3's double-spend is ever reached.
+        # Hold back a real fee instead (see min_consensus_fee() above); tx2
+        # and tx3 already forward 100% of whatever they receive as their own
+        # fee, so they need no change.
         tx1 = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue)
+        tx1_fee = self.min_consensus_fee(len(tx1.serialize()))
+        tx1 = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue - tx1_fee)
         tx2 = self.create_and_sign_transaction(tx1, 1)
         tx3 = self.create_and_sign_transaction(tx1, 2)
         b67 = self.update_block(67, [tx1, tx2, tx3])
@@ -995,17 +1157,26 @@ class FullBlockTest(BitcoinTestFramework):
         # b69 - coinbase with extra 10 satoshis, and a tx that gives a 10 satoshi fee
         #       this succeeds
         #
+        # FirstIslamicCoin: upstream tests a coinbase that overclaims fees by
+        # exactly 1 satoshi on top of a 9-satoshi real fee (b69 uses 10). A
+        # fee that small is itself illegal under this fork's consensus
+        # minimum fee (see min_consensus_fee() above), so a real fee is used
+        # instead below, with the coinbase still overclaiming by exactly 1
+        # satoshi on top of it in b68.
         self.log.info("Reject a block trying to claim too much subsidy in the coinbase transaction")
         self.move_tip(65)
-        self.next_block(68, additional_coinbase_value=10)
-        tx = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue - 9)
+        tx = self.create_and_sign_transaction(out[20], 1)
+        b68_fee = self.min_consensus_fee(len(tx.serialize()))
+        self.next_block(68, additional_coinbase_value=b68_fee + 1)
+        tx = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue - b68_fee)
         b68 = self.update_block(68, [tx])
+        b68 = self.correct_pow_subsidy(68)  # FirstIslamicCoin: see correct_pow_subsidy() above
         self.send_blocks([b68], success=False, reject_reason='bad-cb-amount', reconnect=True)
 
         self.log.info("Accept a block claiming the correct subsidy in the coinbase transaction")
         self.move_tip(65)
-        b69 = self.next_block(69, additional_coinbase_value=10)
-        tx = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue - 10)
+        b69 = self.next_block(69, additional_coinbase_value=b68_fee)
+        tx = self.create_and_sign_transaction(out[20], out[20].vout[0].nValue - b68_fee)
         self.update_block(69, [tx])
         self.send_blocks([b69], True)
         self.save_spendable_output()
@@ -1036,8 +1207,16 @@ class FullBlockTest(BitcoinTestFramework):
         self.log.info("Reject a block containing a duplicate transaction but with the same Merkle root (Merkle tree malleability")
         self.move_tip(69)
         self.next_block(72)
-        tx1 = self.create_and_sign_transaction(out[21], 2)
+        # FirstIslamicCoin: tx2 needs to pay a real fee (min_consensus_fee()
+        # above) instead of upstream's 1 satoshi (2 in, 1 out); seed tx1 with
+        # more than upstream's 2 satoshis so tx2 has room for it. tx1's
+        # output is OP_TRUE (anyone-can-spend), so rebuilding tx2 with the
+        # final value doesn't need re-signing.
+        CHAIN_SEED_VALUE = 1_000_000
+        tx1 = self.create_and_sign_transaction(out[21], CHAIN_SEED_VALUE)
         tx2 = self.create_and_sign_transaction(tx1, 1)
+        tx2_fee = self.min_consensus_fee(len(tx2.serialize()))
+        tx2 = self.create_and_sign_transaction(tx1, CHAIN_SEED_VALUE - tx2_fee)
         b72 = self.update_block(72, [tx1, tx2])  # now tip is 72
         b71 = copy.deepcopy(b72)
         b71.vtx.append(tx2)   # add duplicate tx2
@@ -1203,7 +1382,13 @@ class FullBlockTest(BitcoinTestFramework):
         self.next_block(83)
         op_codes = [OP_IF, OP_INVALIDOPCODE, OP_ELSE, OP_TRUE, OP_ENDIF]
         script = CScript(op_codes)
+        # FirstIslamicCoin: upstream spends out[28]'s entire value into tx1's
+        # single output (0 fee); hold back a real fee instead (see
+        # min_consensus_fee() above). tx2 already forwards 100% of whatever it
+        # receives as its own fee, so it needs no change.
         tx1 = self.create_and_sign_transaction(out[28], out[28].vout[0].nValue, script)
+        tx1_fee = self.min_consensus_fee(len(tx1.serialize()))
+        tx1 = self.create_and_sign_transaction(out[28], out[28].vout[0].nValue - tx1_fee, script)
 
         tx2 = self.create_and_sign_transaction(tx1, 0, CScript([OP_TRUE]))
         tx2.vin[0].scriptSig = CScript([OP_FALSE])
@@ -1220,11 +1405,18 @@ class FullBlockTest(BitcoinTestFramework):
         #
         self.log.info("Test re-orging blocks with OP_RETURN in them")
         self.next_block(84)
+        # FirstIslamicCoin: tx2-tx5 below each spend one of tx1's OP_TRUE
+        # outputs and, upstream, send 100% of it back out again (0 in, 0 out).
+        # That leaves nothing to pay this fork's consensus minimum fee (see
+        # min_consensus_fee() above) with, so tx1's OP_TRUE outputs are seeded
+        # with real value here; tx2-tx5 then implicitly pay the whole thing as
+        # fee (their own vout entries are untouched, still all zero-value).
+        CHAIN_SEED_VALUE = 1_000_000
         tx1 = self.create_tx(out[29], 0, 0, CScript([OP_RETURN]))
-        tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
-        tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
-        tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
-        tx1.vout.append(CTxOut(0, CScript([OP_TRUE])))
+        tx1.vout.append(CTxOut(CHAIN_SEED_VALUE, CScript([OP_TRUE])))
+        tx1.vout.append(CTxOut(CHAIN_SEED_VALUE, CScript([OP_TRUE])))
+        tx1.vout.append(CTxOut(CHAIN_SEED_VALUE, CScript([OP_TRUE])))
+        tx1.vout.append(CTxOut(CHAIN_SEED_VALUE, CScript([OP_TRUE])))
         tx1.calc_sha256()
         self.sign_tx(tx1, out[29])
         tx1.rehash()
@@ -1262,19 +1454,39 @@ class FullBlockTest(BitcoinTestFramework):
         b89a = self.update_block("89a", [tx])
         self.send_blocks([b89a], success=False, reject_reason='bad-txns-inputs-missingorspent', reconnect=True)
 
-        self.log.info("Test a re-org of one week's worth of blocks (1088 blocks)")
+        # FirstIslamicCoin: upstream reorgs 1088 blocks (one week's worth) deep
+        # here. This fork adds a Qtum/PPCoin-style "synchronized checkpoint"
+        # anti-DoS rule (BlockManager::CheckSyncCheckpoint(), src/node/
+        # blockstorage.cpp) that outright rejects any fork whose point is
+        # more than nCoinbaseMaturity blocks behind the current tip -- see
+        # the same constraint in wallet_orphanedreward.py. nCoinbaseMaturity
+        # is 10 here (vs upstream's much larger value), so a 1088-block-deep
+        # alternate chain's headers get rejected before the node ever
+        # requests them, hanging this test's wait for a getdata that never
+        # comes. Shrink the reorg to stay well inside that 10-block limit;
+        # this loses the "one week of blocks" realism but keeps the actual
+        # mechanism under test -- a multi-block reorg between two competing,
+        # fully max-weight chains -- intact.
+        self.log.info("Test a re-org of several blocks, within this fork's sync-checkpoint depth limit")
 
         self.move_tip(88)
-        LARGE_REORG_SIZE = 1088
+        LARGE_REORG_SIZE = 5
         blocks = []
         spend = out[32]
+        # FirstIslamicCoin: see the PADDING_SPEND_VALUE comment on b23 above --
+        # each iteration's padding tx needs real value of its own to pay this
+        # fork's consensus minimum fee. This is self-sustaining: each new
+        # coinbase inherits nearly all of the previous one's value as fees
+        # (minus this deduction), so the pool only grows across the loop.
+        PADDING_SPEND_VALUE = 5 * COIN
         for i in range(89, LARGE_REORG_SIZE + 89):
-            b = self.next_block(i, spend)
+            b = self.next_block(i, spend, spend_value=PADDING_SPEND_VALUE)
             tx = CTransaction()
             script_length = (MAX_BLOCK_WEIGHT - b.get_weight() - 276) // 4
             script_output = CScript([b'\x00' * script_length])
             tx.vout.append(CTxOut(0, script_output))
             tx.vin.append(CTxIn(COutPoint(b.vtx[1].sha256, 0)))
+            tx.vout[0].nValue = PADDING_SPEND_VALUE - self.min_consensus_fee(len(tx.serialize()))
             b = self.update_block(i, [tx])
             assert_equal(b.get_weight(), MAX_BLOCK_WEIGHT)
             blocks.append(b)
@@ -1340,7 +1552,7 @@ class FullBlockTest(BitcoinTestFramework):
         tx.rehash()
         return tx
 
-    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=None):
+    def next_block(self, number, spend=None, additional_coinbase_value=0, script=CScript([OP_TRUE]), *, version=None, spend_value=1):
         if self.tip is None:
             base_block_hash = self.genesis_hash
             block_time = int(time.time()) + 1
@@ -1355,9 +1567,15 @@ class FullBlockTest(BitcoinTestFramework):
         if spend is None:
             block = create_block(base_block_hash, coinbase, block_time, version=version)
         else:
-            coinbase.vout[0].nValue += spend.vout[0].nValue - 1  # all but one satoshi to fees
+            # FirstIslamicCoin: default spend_value=1 preserves upstream's
+            # "nearly everything to fees, the new tx keeps 1 satoshi" pattern.
+            # Callers whose own tx needs to independently clear this fork's
+            # consensus minimum-fee floor (see min_consensus_fee() below) --
+            # e.g. because a later transaction spends *its* output and needs
+            # real value to pay its own fee -- can raise spend_value instead.
+            coinbase.vout[0].nValue += spend.vout[0].nValue - spend_value  # all but spend_value satoshis to fees
             coinbase.rehash()
-            tx = self.create_tx(spend, 0, 1, script)  # spend 1 satoshi
+            tx = self.create_tx(spend, 0, spend_value, script)  # spend spend_value satoshis
             self.sign_tx(tx, spend)
             tx.rehash()
             block = create_block(base_block_hash, coinbase, block_time, version=version, txlist=[tx])
@@ -1397,6 +1615,42 @@ class FullBlockTest(BitcoinTestFramework):
             del self.block_heights[old_sha256]
         self.blocks[block_number] = block
         return block
+
+    # FirstIslamicCoin: test_framework.blocktools.create_coinbase() bakes in
+    # upstream Bitcoin's regtest PoW subsidy assumption -- 50 coin, halved
+    # every 150 blocks. This fork's real regtest PoW subsidy is instead a
+    # fixed, much larger consensus.nPowSubsidy (28,000,000 COIN) for every
+    # height while PoW mining is allowed (see src/kernel/chainparams.cpp),
+    # so a coinbase built on create_coinbase()'s assumption sits nowhere
+    # close to the real "too much reward" boundary that validation.cpp's
+    # bad-cb-amount check enforces. Tests that need to land exactly at, or
+    # just past, that real boundary correct the coinbase value up to it
+    # with this helper before sending the block.
+    REGTEST_POW_SUBSIDY = 28_000_000 * COIN
+
+    def correct_pow_subsidy(self, block_number):
+        block = self.blocks[block_number]
+        height = self.block_heights[block.sha256]
+        assumed_subsidy = (50 * COIN) >> (height // 150)  # blocktools.create_coinbase()'s assumption
+        block.vtx[0].vout[0].nValue += self.REGTEST_POW_SUBSIDY - assumed_subsidy
+        block.vtx[0].rehash()
+        return self.update_block(block_number, [])
+
+    # FirstIslamicCoin: src/consensus/tx_verify.cpp's GetMinFee() enforces a
+    # CONSENSUS-level minimum fee on every non-coinbase transaction -- a flat
+    # MIN_TX_FEE (10,000 sat) for anything <=100 bytes, else TX_FEE_PER_KB
+    # (100 sat/vB) -- unlike upstream Bitcoin, which has no such rule at the
+    # consensus level (only a mempool relay policy, which this P2P-level
+    # block test bypasses entirely). Many of this file's hand-built
+    # transactions were written assuming zero, or near-zero, fees are legal;
+    # anywhere that assumption doesn't hold under this fork, the transaction
+    # needs to pay at least this much to be accepted. This deliberately
+    # overpays (2x the real minimum) so small vsize-estimation slop never
+    # lands a constructed transaction just under the real boundary. Note
+    # nValue is a fixed-size field, so paying a real fee this way never
+    # disturbs whatever sigop/weight counting a given test is exercising.
+    def min_consensus_fee(self, num_bytes):
+        return max(20_000, 200 * num_bytes)
 
     def bootstrap_p2p(self, timeout=10):
         """Add a P2P connection to the node.
