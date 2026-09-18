@@ -6,6 +6,7 @@
 from decimal import Decimal
 import time
 
+from test_framework.fic import get_min_fee_sat
 from test_framework.messages import (
     CInv,
     MSG_TX,
@@ -275,12 +276,29 @@ class OrphanHandlingTest(BitcoinTestFramework):
         utxo_unconf_mempool = mempool_tx["new_utxo"]
 
         # This UTXO is unconfirmed and missing.
-        missing_tx = self.wallet.create_self_transfer()
+        # FirstIslamicCoin: force confirmed_only=True here. Without it, MiniWallet's
+        # get_utxo() (largest-value-first, ties broken in favor of height=0/unconfirmed
+        # coins) can pick mempool_tx's own brand new change output as this tx's input:
+        # its value (subsidy - fee) exactly ties the pool's many untouched subsidy-value
+        # coins whenever an earlier self-transfer's identical fee got recycled into a
+        # coinbase reward. That silently turns missing_tx into a child of mempool_tx and
+        # makes it double-spend utxo_unconf_mempool once orphan tries to spend both,
+        # which the node correctly rejects as txn-mempool-conflict. Restricting to
+        # confirmed coins keeps missing_tx's input independent, as the test intends.
+        missing_tx = self.wallet.create_self_transfer(confirmed_only=True)
         utxo_unconf_missing = missing_tx["new_utxo"]
         assert missing_tx["txid"] not in node.getrawmempool()
 
-        orphan = self.wallet.create_self_transfer_multi(utxos_to_spend=[utxo_conf_old,
-            utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing])
+        # FirstIslamicCoin: create_self_transfer_multi()'s default (fee_per_output=None)
+        # fee only clears the hard consensus floor (fic.get_min_fee_sat(), 0.001/kvB), not
+        # this test's raised -minrelaytxfee=0.002 (set above so the LOW_FEE_RATE parents
+        # elsewhere in this file are rejected by policy, not consensus). That leaves this
+        # 4-input orphan paying just half of what this node's mempool requires, so give it
+        # an explicit fee that comfortably clears -minrelaytxfee.
+        orphan_utxos = [utxo_conf_old, utxo_conf_recent, utxo_unconf_mempool, utxo_unconf_missing]
+        orphan_probe = self.wallet.create_self_transfer_multi(utxos_to_spend=orphan_utxos, amount_per_output=1)
+        orphan = self.wallet.create_self_transfer_multi(utxos_to_spend=orphan_utxos,
+            fee_per_output=2 * get_min_fee_sat(orphan_probe["tx"].get_vsize()))
 
         self.relay_transaction(peer, orphan["tx"])
         self.nodes[0].bumpmocktime(NONPREF_PEER_TX_DELAY + TXID_RELAY_DELAY)
@@ -377,14 +395,20 @@ class OrphanHandlingTest(BitcoinTestFramework):
         peer3 = node.add_p2p_connection(PeerTxRelayer())
 
         self.log.info("Test that an orphan with rejected parents, along with any descendants, cannot be retried with an alternate witness")
-        parent_low_fee_nonsegwit = self.wallet_nonsegwit.create_self_transfer(fee_rate=0)
+        # FirstIslamicCoin: use LOW_FEE_RATE instead of fee_rate=0. A literal 0-fee tx pays
+        # below GetMinFee() (the 0.001/kvB consensus floor), which is a TX_CONSENSUS
+        # rejection here (bad-txns-fee-not-enough) and gets the relaying peer discouraged
+        # and disconnected -- breaking this test, which relays with peer1 and continues
+        # using it afterwards. LOW_FEE_RATE is above the consensus floor but below this
+        # test's -minrelaytxfee, so the parent is still rejected, but by policy only.
+        parent_low_fee_nonsegwit = self.wallet_nonsegwit.create_self_transfer(fee_rate=LOW_FEE_RATE)
         assert_equal(parent_low_fee_nonsegwit["txid"], parent_low_fee_nonsegwit["tx"].getwtxid())
         child = self.wallet.create_self_transfer(utxo_to_spend=parent_low_fee_nonsegwit["new_utxo"])
         grandchild = self.wallet.create_self_transfer(utxo_to_spend=child["new_utxo"])
         assert child["txid"] != child["tx"].getwtxid()
         assert grandchild["txid"] != grandchild["tx"].getwtxid()
 
-        # Relay the parent. It should be rejected because it pays 0 fees.
+        # Relay the parent. It should be rejected because it pays too low a fee.
         self.relay_transaction(peer1, parent_low_fee_nonsegwit["tx"])
 
         # Relay the child. It should be rejected for having missing parents, and this rejection is
