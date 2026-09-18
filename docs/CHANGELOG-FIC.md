@@ -2841,6 +2841,111 @@ this change. `AutoSelectSyncCheckpoint()`/`CheckSyncCheckpoint()` in `node/block
 Decision still open: whether to apply this deletion. Needs sign-off before any `validation.cpp`/
 `net_processing.cpp` change, per the standing rule on consensus-adjacent C++.
 
+### `win64-native` verification run (commit `b850fb2`): 9 of the 11 failures were real, new bugs -- not the fee-floor/RBF/etc. fixes failing to apply
+
+The `b850fb2` triage batch was pushed to verify the row-32/33 count of 2 expected open failures. The fresh run
+(GitHub Actions run `35388987541`, job `105742657508`) came back with **11 failures**, not 2. Downloaded the
+job log the same way as before (Azure blob URL the API redirects to, fetched in Range-request chunks rather
+than one download, since the full log is ~396MB) and root-caused all 9 unexpected ones against their real
+tracebacks rather than assuming the earlier fixes were simply incomplete. Two were already correctly
+double-checked in Windows and left open (`feature_bip68_sequence.py` per row 32, `wallet_fundrawtransaction.py
+--descriptors` per row 33) -- untouched, not part of this pass.
+
+**Five were genuine test-file gaps, fixed directly (Python-only):**
+
+- **`rpc_psbt.py --descriptors`**: a *third* spot in the same file needed the fee-floor bump the first two
+  already got. `test_utxo_conversion()`'s taproot sub-case calls `watchonly.sendall([wallet.getnewaddress(),
+  addr])` with no explicit `fee_rate`, so it fell back to this fork's placeholder fee estimation (no real
+  fee estimator exists) and produced a fee under the 100 sat/vB floor -- `bad-txns-fee-not-enough`. Added
+  `fee_rate=200`, matching `wallet_taproot.py`'s identical bump for the same "wallet can't estimate script-path
+  fees" reason.
+- **`wallet_balance.py` (both variants)**: a stale hardcoded expected value, one section below the RBF fix
+  already applied in this same file. `getbalance(minconf=2)` was still asserted at `Decimal('0')`, but this
+  fork's earlier RBF-scenario removal (documented above) left node 1 with a real 29.99 balance rather than
+  upstream's exact-change amount; the 29.97-plus-0.01-fee send two lines above this assertion leaves a genuine
+  0.01 change output of its own, confirmed by the 2 blocks just mined. The actual RPC value on the failing run
+  was `0.01000000` exactly, matching that change amount -- updated the assertion to match.
+- **`wallet_miniscript.py --descriptors`**: the "max-size TapMiniscript" case's fee bump (this session's
+  earlier fix) was necessary but not sufficient -- it uncovered a second, unrelated fork-specific limit.
+  `src/policy/policy.cpp`'s `IsWitnessStandard()` carries an inherited Peercoin/Qtum-lineage check with no
+  upstream Bitcoin Core equivalent (the code comment literally says "peercoin check for exceeding max witness
+  size"): it caps the raw sum of witness stack item bytes at `MAX_STANDARD_WITNESS_SIZE` (100,000 bytes,
+  `src/policy/policy.h`). The test's own `max_tapmini_size` computation targets `MAX_STANDARD_TX_WEIGHT`
+  (400,000 weight units) instead -- the real upstream Miniscript-compiler import-layer ceiling, unrelated to
+  this fork's extra check -- and produces a ~329KB script, comfortably importable but far too large to
+  *broadcast* under the 100,000-byte cap: rejected `bad-witness-nonstandard`. Fixed by building a second,
+  smaller descriptor (90,000 bytes of padding, comfortably under the real ~99,900-byte ceiling once the
+  signature and control block are accounted for) for the actual sign-and-broadcast call, while leaving
+  `padding`/`ms`/`desc` (and the "one more byte, can't import" check right after, which tests the real,
+  unrelated import-layer maximum) untouched.
+- **`wallet_sendall.py` (both variants)**: `sendall_negative_effective_value()`'s `fee_rate=300` against its
+  47,000 sat UTXO pool landed the dynamically-assigned remainder just above this fork's real dust threshold
+  (~18,200 sat, `GetDustThreshold()`, `src/policy/policy.cpp`) instead of clearly negative -- rejected
+  "Dynamically assigned remainder results in dust output" instead of the intended "too low to pay for
+  transaction" scenario the test is actually about. Bumped `fee_rate` to 1000 sat/vB, forcing the fee to dwarf
+  the whole pool regardless of the exact vsize and landing unambiguously in the negative-effective-value case.
+- **`wallet_taproot.py --descriptors`**: `do_test_sendtoaddress()` calls `sendtoaddress()` on a wallet holding
+  only this test's own descriptor type (Taproot, for the `tr(XPRV)` case) -- never a legacy one. This fork's
+  `DEFAULT_ADDRESS_TYPE` is `LEGACY` (the same inherited quirk `wallet_fundrawtransaction.py` and
+  `wallet_signer.py` already document), and `CWallet::TransactionChangeType()` (`src/wallet/wallet.cpp`)
+  short-circuits straight to `OutputType::LEGACY` whenever `m_default_address_type` is legacy, *before* it ever
+  checks whether the wallet actually holds a legacy descriptor -- change generation failed with "No legacy
+  addresses available." Unlike `send()`/`walletcreatefundedpsbt`, `sendtoaddress` has no `change_type`
+  parameter to override this. `do_test_psbt()` two methods down, in the same file, already works around the
+  identical problem with an explicit `change_type`; switched `do_test_sendtoaddress()`'s call from
+  `sendtoaddress()` to `send()` with the same explicit `change_type`. (While implementing this, confirmed this
+  fork's `send()`/`sendall()` RPCs take only `(outputs/recipients, options)` -- the `conf_target`/
+  `estimate_mode`/`fee_rate` positional arguments upstream has before `options` were dropped, per an existing
+  comment at `src/wallet/rpc/spend.cpp:1301` -- so the fix passes `fee_rate` and `change_type` inside the
+  `options` dict rather than as upstream-style leading positional arguments.)
+
+**Two were real, previously-undiagnosed bugs, root-caused with high confidence and left open -- both would
+need `src/` C++ changes, so neither was touched, per the standing rule:**
+
+- **`feature_dbcrash.py`.** Not a fee issue at all -- the fee-floor fix (bumping the hardcoded `FEE = 1000`
+  constant to this fork's real floor) was correct and let the test run for the first time ever to its full,
+  intended ~75-minute length (4540s) instead of failing in the first few seconds on
+  `bad-txns-fee-not-enough`. It then hit a genuine failure at the very last step, `verify_utxo_hash()`:
+  after the test's ~75 minutes of randomly crashing and restarting node0/1/2 mid-chainstate-write (via
+  `-dbcrashratio`) while node3 never crashes, one of node0/1/2's final UTXO-set hash
+  (`gettxoutsetinfo()['hash_serialized_3']`) did not match node3's --
+  `not(58b183413442787b75b010329dc7b4a452b68ae8e764182b4ba097fa8a88f55c ==
+  ea85fab385153669ce8c7733bd1c5696731c7261246dc6a2868b5d58d46f2c3b)`. Checked first whether this is a
+  recurrence of the already-known, already-fixed genesis-premine `ReplayBlocks()` bug (`46655f1`, "the genesis
+  coinbase (the premine) is part of the UTXO set... if the interrupted flush was the first one -- no old tip
+  and so no fork point -- genesis has to be rolled forward too") -- confirmed that fix is still in place and
+  unrelated (`verify_utxo_hash()` runs after many crash/restart cycles across many blocks, not just an
+  interrupted first flush). This is a real UTXO-set divergence following simulated chainstate-flush crashes,
+  consensus-adjacent by nature (`ReplayBlocks()`/`DisconnectBlock()`/`ConnectBlock()`/`CCoinsViewDB` flush
+  correctness), and per the standing rule needs a human/C++ investigation rather than a guess -- likely
+  requiring a live, instrumented Windows (or reproduced Linux) run with `-dbcrashratio` and additional
+  per-crash logging to narrow down which specific crash point diverges, since the assertion only fires at the
+  very end after many crash cycles.
+- **`wallet_transactiontime_rescan.py --legacy-wallet`.** This session's earlier fix (bumping the
+  `walletpassphrase` timeout from upstream's 1 second to 300 seconds, to stop the auto-relock timer racing an
+  in-progress rescan) does **not** actually fix the failure -- the fresh run hit the exact same symptom,
+  `stop_height=263` instead of the full `803`, that the earlier fix's own writeup described. That symptom
+  recurring identically, in a subtest that completes in about 19 seconds total, rules out the auto-relock
+  timer as the cause: a 300-second scheduled relock cannot fire within 19 seconds, so the diagnosis behind the
+  first fix was wrong (or at least incomplete). Traced further: `walletlock()` and `walletpassphrasechange()`
+  (`src/wallet/rpc/encrypt.cpp`) both correctly guard against being called during an in-progress rescan via
+  `IsScanningWithPassphrase()`, refusing with the exact error the test expects -- but `walletpassphrase()`
+  itself, in the same file, has **no such guard**, unlike its two siblings. The test's own scenario calls
+  `walletpassphrase("passphrase", 300)` a second time *while the rescan from the first call is still running*
+  (deliberately, to check the wallet "remains unlocked during the rescan"), which this fork's
+  `walletpassphrase()` allows to proceed unguarded -- re-running `CWallet::Unlock()` and `TopUpKeyPool()`
+  concurrently with an active rescan that is itself reading key material. That looks like the real trigger for
+  the rescan stopping early, though pinning the exact internal race (e.g. inside `CWallet::Unlock()`'s
+  crypter/key-material state, or `TopUpKeyPool()`) needs live debugging, not a guess. This is wallet-locking
+  C++ concurrency code -- per the standing rule, left untouched and open rather than patched blind; a real fix
+  most likely needs `walletpassphrase()` to gain the same `IsScanningWithPassphrase()` guard its two siblings
+  already have, but that is a proposal for sign-off, not something applied here.
+
+Net result of this verification pass: 5 of the 9 unexpected failures fixed directly (Python-only, no
+consensus/wallet logic touched); 2 confirmed as already-correctly-open (rows 32/33, untouched); 2 new,
+real C++-adjacent bugs found, root-caused, and added to the open `TODO-HUMAN` table below (rows 34/35) rather
+than guessed at. Not yet verified on a real CI run -- that needs the next `win64-native` round-trip.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -2878,3 +2983,5 @@ Decision still open: whether to apply this deletion. Needs sign-off before any `
 | 31 | The `macos-13` GitHub Actions runner never gets assigned to any job that requests it (`core-ci.yml`'s `macos-native` and `release.yml`'s `macos-x86_64`, both confirmed stuck `queued` with `runner_id: 0` for hours across multiple separate runs) — this repo is public and owned by a personal (not org) account, and GitHub's own policy is that public repos get free Actions minutes on every runner type including macOS, so this doesn't look like an ordinary billing/spend-limit block; querying the account's actual Actions billing to confirm needs a broader OAuth scope (`user`) than this environment's `gh` token has, which needs a human's own GitHub login to grant. Possibly a new-account capacity/trust throttle, or reduced `macos-13` image availability specifically (worth someone trying `macos-14`/`macos-latest` as a quick experiment) — needs a human with real GitHub account access to actually diagnose further, not something resolvable from this environment | Phase 2 / Phase 3 |
 | 32 | **Real, consensus-adjacent bug found, fix scoped and proposed, decision still open.** `src/validation.cpp`'s and `src/net_processing.cpp`'s inherited "Qtum" sync-checkpoint timestamp checks fire on ordinary header-first sync (not just genuine reorgs) and are redundant with the already-correct, already-present height-based `nMaxReorganizationDepth`/`CheckSyncCheckpoint` checks a few lines away — confirmed as the root cause of `feature_bip68_sequence.py`'s 2427-second `win64-native` timeout. A specific, minimal proposed fix (delete both timestamp-check copies, keep the height-based ones) is written up with an exact diff, ready for review — see the "TODO row 32" section above. Needs a human sign-off before any `validation.cpp`/`net_processing.cpp` change, per the standing rule on consensus-adjacent C++ | Phase 2 |
 | 33 | `wallet_fundrawtransaction.py --descriptors`'s `test_locked_wallet` fails on `win64-native` (`fundrawtransaction` doesn't raise the expected "needs a change address" error on a locked, keypool-drained wallet) with no confident root cause found — traced the keypool-drain/encrypt/import logic and found nothing obviously platform-dependent in the C++ path, but that doesn't rule one out. Needs either a live Windows debugging session or another CI round with added diagnostic logging around keypool state at each step | Phase 2 |
+| 34 | **Real crash-recovery bug found on `win64-native`, root cause not yet pinned down.** `feature_dbcrash.py` ran to completion for the first time (75 minutes, after this session's fee-floor fix) and failed its final `verify_utxo_hash()` check: one of the three nodes that had `-dbcrashratio`-simulated crashes and restarts mid-chainstate-write during the run ended up with a UTXO-set hash (`gettxoutsetinfo` `hash_serialized_3`) that didn't match the reference node that never crashed. Confirmed this is *not* a recurrence of the already-fixed genesis-premine `ReplayBlocks()` gap (`46655f1`) — that fix is still in place and covers a different case (an interrupted first flush specifically). This is a real UTXO-set divergence following simulated chainstate-flush crash recovery, consensus-adjacent (`ReplayBlocks()`/`DisconnectBlock()`/`ConnectBlock()`/`CCoinsViewDB` flush correctness) — see the "win64-native verification run" section above. Needs a live, instrumented run (Windows or a reproduced Linux repro) with `-dbcrashratio` and extra per-crash logging to narrow down which crash point actually diverges, since the assertion only fires once, at the very end, after many crash/restart cycles | Phase 2 |
+| 35 | **Real wallet-locking concurrency bug found on `win64-native`, root cause traced but not fixed.** `wallet_transactiontime_rescan.py --legacy-wallet` still fails after this session's earlier fix (bumping the `walletpassphrase` auto-relock timeout 1s→300s) — the identical symptom (`stop_height=263` instead of `803`) recurs, which rules out the auto-relock timer as the actual cause (300 seconds cannot elapse within the ~19-second subtest). Traced further: `walletlock()`/`walletpassphrasechange()` (`src/wallet/rpc/encrypt.cpp`) both correctly refuse to run during an in-progress rescan via `IsScanningWithPassphrase()`, but `walletpassphrase()` itself has no such guard, and the test's own scenario calls it a second time *while* the rescan from the first call is still running — very likely triggering a real race between `CWallet::Unlock()`/`TopUpKeyPool()` and the active rescan reading key material. See the "win64-native verification run" section above. A real fix most likely needs `walletpassphrase()` to gain the same `IsScanningWithPassphrase()` guard its two siblings already have, but the exact internal race should be confirmed with live debugging first, not assumed | Phase 2 |

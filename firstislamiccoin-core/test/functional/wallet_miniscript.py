@@ -395,7 +395,30 @@ class WalletMiniscriptTest(BitcoinTestFramework):
         # needs well over 8000000 sat, not 100000; a generous fee is passed
         # explicitly here rather than raising the shared default for every
         # (much smaller) caller.
-        self.signing_test(desc, None, None, 1, 3, None, fund_amount=0.2, fee=0.15)
+        #
+        # That fee bump alone wasn't enough: broadcasting a script this size
+        # also hits a second, unrelated fork-specific limit. max_tapmini_size
+        # above is the real upstream import-layer ceiling (the Miniscript/
+        # descriptor compiler's own max script size, "see cpp file for
+        # details" -- unmodified on this fork), kept as-is so the "one more
+        # byte, can't import" check below still tests that real limit. But
+        # src/policy/policy.cpp's IsWitnessStandard() also carries an
+        # inherited Peercoin/Qtum-lineage check with no upstream Bitcoin Core
+        # equivalent ("peercoin check for exceeding max witness size"): it
+        # caps the raw sum of witness stack item bytes (signature + script +
+        # control block) at MAX_STANDARD_WITNESS_SIZE (100,000 bytes,
+        # src/policy/policy.h) -- far smaller than the ~329KB script built
+        # above, so broadcasting (not importing) it was rejected
+        # bad-witness-nonstandard. Sign and spend a script safely under that
+        # real relay ceiling instead -- a single-leaf control block is only
+        # 33 bytes and the signature at most 65, so 90,000 bytes of padding
+        # leaves ample headroom under 100,000 -- while leaving padding/ms/
+        # desc (and the "one more byte, can't import" check two lines down)
+        # untouched, since that check is about the unaffected import limit.
+        broadcast_padding = min(padding, 90_000)
+        broadcast_ms = "n" * broadcast_padding + ":" + f"pk({TPRVS[0]}/*)"
+        broadcast_desc = f"tr({PUBKEYS[0]},{broadcast_ms})"
+        self.signing_test(broadcast_desc, None, None, 1, 3, None, fund_amount=0.2, fee=0.15)
         # This was really the maximum size, one more byte and we can't import it.
         ms = "n" + ms
         desc = f"tr({PUBKEYS[0]},{ms})"

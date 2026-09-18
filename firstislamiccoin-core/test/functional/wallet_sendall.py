@@ -192,9 +192,19 @@ class SendallTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 
+        # FirstIslamicCoin: fee_rate=300 against this pool's real total (47000 sat)
+        # turned out to land the dynamically-assigned remainder just above this
+        # fork's real dust threshold (~18200 sat, GetDustThreshold(),
+        # src/policy/policy.cpp) rather than clearly negative -- observed
+        # rejected as "Dynamically assigned remainder results in dust output"
+        # instead of the intended "too low to pay for transaction" scenario this
+        # test is actually about. A much higher fee_rate forces the fee to
+        # dwarf the whole 47000 sat pool regardless of the exact vsize, landing
+        # unambiguously in the negative-effective-value case instead of the
+        # dust boundary.
         assert_raises_rpc_error(-6, "Total value of UTXO pool too low to pay for transaction."
                 + " Try using lower feerate or excluding uneconomic UTXOs with 'send_max' option.",
-                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=300)
+                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=1000)
 
         dust_wallet.unloadwallet()
 

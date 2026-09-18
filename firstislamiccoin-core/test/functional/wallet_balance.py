@@ -253,7 +253,13 @@ class WalletTest(BitcoinTestFramework):
         assert_equal(self.nodes[1].getbalance(minconf=3), Decimal('0'))
 
         # getbalance with minconf=2 will show the new balance.
-        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('0'))
+        # FirstIslamicCoin: upstream expects 0 here because its equivalent send
+        # spends node 1's whole balance with no change. This fork's earlier RBF
+        # scenario removal (see above) left node 1 with a 29.99 balance instead
+        # of upstream's exact-change amount, so this 29.97 send plus 0.01 fee
+        # leaves a real 0.01 change output of its own, confirmed by the 2 blocks
+        # just mined -- exactly the "new balance" the comment already describes.
+        assert_equal(self.nodes[1].getbalance(minconf=2), Decimal('0.01'))
 
         # check mempool transactions count for wallet unconfirmed balance after
         # dynamically loading the wallet.

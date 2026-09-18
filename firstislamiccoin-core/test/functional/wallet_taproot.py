@@ -300,7 +300,27 @@ class WalletTaprootTest(BitcoinTestFramework):
             test_balance = int(rpc_online.getbalance() * 100000000)
             ret_amnt = random.randrange(100000, test_balance)
             # Increase fee_rate to compensate for the wallet's inability to estimate fees for script path spends.
-            res = rpc_online.sendtoaddress(address=self.boring.getnewaddress(), amount=Decimal(ret_amnt) / 100000000, subtractfeefromamount=True, fee_rate=200)
+            # FirstIslamicCoin: rpc_online only ever imports descriptors of
+            # this test's own `pattern` type (e.g. tr(...) for Taproot), never
+            # a legacy one, but this fork's DEFAULT_ADDRESS_TYPE is LEGACY
+            # (inherited unmodified, same quirk wallet_fundrawtransaction.py
+            # and wallet_signer.py already document) -- CWallet::
+            # TransactionChangeType() (src/wallet/wallet.cpp) short-circuits
+            # to OutputType::LEGACY whenever m_default_address_type is LEGACY,
+            # before ever checking whether the wallet actually has a legacy
+            # descriptor, so change generation failed with "No legacy
+            # addresses available." sendtoaddress has no change_type
+            # parameter to override this (unlike send()/walletcreatefundedpsbt),
+            # so switched to send() here with an explicit change_type, matching
+            # do_test_psbt() below which already does exactly this for the
+            # same reason. send() here also takes only (outputs, options) --
+            # this fork dropped the conf_target/estimate_mode/fee_rate
+            # positional arguments send() has upstream (src/wallet/rpc/spend.cpp) --
+            # so fee_rate and change_type both go inside options.
+            res = rpc_online.send(
+                [{self.boring.getnewaddress(): Decimal(ret_amnt) / 100000000}],
+                {"subtract_fee_from_outputs": [0], "fee_rate": 200, "change_type": address_type},
+            )["txid"]
             self.generatetoaddress(self.nodes[0], 1, self.boring.getnewaddress(), sync_fun=self.no_op)
             assert rpc_online.gettransaction(res)["confirmations"] > 0
 

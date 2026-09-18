@@ -1006,7 +1006,15 @@ class PSBTTest(BitcoinTestFramework):
             self.generate(self.nodes[0], 1)
             self.nodes[0].importdescriptors([{"desc": descsum_create("tr({})".format(privkey)), "timestamp":"now"}])
 
-            psbt = watchonly.sendall([wallet.getnewaddress(), addr])["psbt"]
+            # FirstIslamicCoin: same fee-floor category as test_utxo_conversion() and the
+            # bech32m createpsbt() call above -- sendall() with no explicit fee_rate falls
+            # back to this fork's placeholder fee estimation (no real estimator exists,
+            # see CHANGELOG-FIC.md), which returned less than the 100 sat/vB consensus
+            # floor (GetMinFee(), src/consensus/tx_verify.cpp) for this taproot
+            # script-path spend, rejected with bad-txns-fee-not-enough. 200 sat/vB matches
+            # wallet_taproot.py's identical fee_rate bump for the same
+            # wallet-can't-estimate-script-path-fees reason.
+            psbt = watchonly.sendall(recipients=[wallet.getnewaddress(), addr], fee_rate=200)["psbt"]
             processed_psbt = self.nodes[0].walletprocesspsbt(psbt)
             txid = self.nodes[0].sendrawtransaction(processed_psbt["hex"])
             vout = find_vout_for_address(self.nodes[0], txid, addr)
