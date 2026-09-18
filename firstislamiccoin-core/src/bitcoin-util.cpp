@@ -99,7 +99,12 @@ static void grind_task(uint32_t nBits, CBlockHeader header, uint32_t offset, uin
     while (!found && header.nNonce < finish) {
         const uint32_t next = (finish - header.nNonce < 5000*step) ? finish : header.nNonce + 5000*step;
         do {
-            if (UintToArith256(header.GetHash()) <= target) {
+            // FirstIslamicCoin: consensus PoW validation (CheckProofOfWork in
+            // src/pow.cpp) always checks GetPoWHash() (scrypt), not GetHash()
+            // (sha256d, used for block identity/merkle references) -- grind
+            // needs to search for a nonce satisfying the same hash the node
+            // will actually verify.
+            if (UintToArith256(header.GetPoWHash()) <= target) {
                 if (!found.exchange(true)) {
                     proposed_nonce = header.nNonce;
                 }
