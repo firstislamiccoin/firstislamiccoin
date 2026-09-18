@@ -8,6 +8,7 @@ from decimal import Decimal
 from itertools import product
 
 from test_framework.descriptors import descsum_create
+from test_framework.fic import get_min_fee_sat
 from test_framework.key import H_POINT
 from test_framework.messages import (
     COutPoint,
@@ -925,7 +926,26 @@ class PSBTTest(BitcoinTestFramework):
             outputs={self.nodes[0].getnewaddress(): 15},
             add_inputs=True, solving_data={"descriptors": [desc]},
         )
-        assert_equal(psbt2["fee"], psbt3["fee"])
+        # FirstIslamicCoin: this can legitimately differ from psbt2 by a tiny, expected
+        # margin, not a bug. ext_utxo's real script is sh(wsh(pkh(...))) (segwit). Whether
+        # the wallet's fee *estimate* accounts for that is separate from the per-input
+        # "weight" override tested here: CalculateMaximumSignedTxSize() (src/wallet/spend.cpp,
+        # inherited unmodified from upstream) decides the whole transaction is segwit by
+        # trying to infer a descriptor for every input's scriptPubKey, and once any input is
+        # segwit, upstream's own logic adds the 2-weight-unit marker/flag plus one witness-
+        # stack-length byte per *other*, non-segwit input -- on top of, not instead of, the
+        # explicit weight override for ext_utxo itself. Without solving_data (psbt2), the
+        # wallet cannot infer ext_utxo's descriptor and so cannot tell it is segwit, so it
+        # only ever sees this as a non-segwit tx (all of this fork's own funding inputs are
+        # legacy P2PKH, since DEFAULT_ADDRESS_TYPE here is legacy, inherited from CodexaCoin).
+        # With solving_data (psbt3), the wallet correctly detects the segwit script and adds
+        # that small, genuine accounting overhead. Upstream's own wallet defaults to bech32
+        # addresses, so its funding input is already segwit either way and this never comes
+        # up there -- it's specific to this fork's legacy default, not a new bug in the PSBT
+        # or fee-estimation code itself. psbt3's fee should therefore be >= psbt2's, and only
+        # by the tiny margin that overhead accounts for (well under 1000 sat here).
+        assert_greater_than_or_equal(psbt3["fee"], psbt2["fee"])
+        assert_greater_than_or_equal(psbt2["fee"] + Decimal("0.00001"), psbt3["fee"])
 
         # Import the external utxo descriptor so that we can sign for it from the test wallet
         if self.options.descriptors:
@@ -939,7 +959,13 @@ class PSBTTest(BitcoinTestFramework):
             outputs={self.nodes[0].getnewaddress(): 15},
             add_inputs=True,
         )
-        assert_equal(psbt2["fee"], psbt3["fee"])
+        # FirstIslamicCoin: same small, expected margin as above and for the same reason --
+        # the wallet now owns ext_utxo's descriptor (just imported), so it can infer it is
+        # segwit even without solving_data being passed to this call, while psbt2 (built
+        # before the import, with no solving_data either) still could not. See the detailed
+        # comment on the first psbt2/psbt3 fee comparison above.
+        assert_greater_than_or_equal(psbt3["fee"], psbt2["fee"])
+        assert_greater_than_or_equal(psbt2["fee"] + Decimal("0.00001"), psbt3["fee"])
 
         self.log.info("Test signing inputs that the wallet has keys for but is not watching the scripts")
         self.nodes[1].createwallet(wallet_name="scriptwatchonly", disable_private_keys=True)
@@ -1083,7 +1109,13 @@ class PSBTTest(BitcoinTestFramework):
         self.sync_all()
         vout = find_output(self.nodes[0], txid, 1)
 
-        psbt = self.nodes[2].createpsbt([{"txid": txid, "vout": vout}], {self.nodes[0].getnewaddress(): 0.99999})
+        # FirstIslamicCoin: upstream leaves a flat 0.00001 (1000 sat) fee here, which clears
+        # upstream's minrelaytxfee but not this fork's real minimum-fee floor (a fixed
+        # 100 sat/vB, `GetMinFee()`; see test_framework/fic.py's get_min_fee_sat()) for even
+        # this small single-input, single-output tx. Leave a fee comfortably above the floor
+        # instead (vsize estimate padded well past this tx's real ~110-140 vbytes).
+        fee = Decimal(get_min_fee_sat(300)) / Decimal(10**8)
+        psbt = self.nodes[2].createpsbt([{"txid": txid, "vout": vout}], {self.nodes[0].getnewaddress(): Decimal("1") - fee})
         decoded = self.nodes[2].decodepsbt(psbt)
         test_psbt_input_keys(decoded['inputs'][0], [])
 
