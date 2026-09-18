@@ -46,10 +46,15 @@ class SlowP2PInterface(P2PInterface):
 class P2PEvict(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        # The choice of maxconnections=32 results in a maximum of 21 inbound connections
-        # (32 - 10 outbound - 1 feeler). 20 inbound peers are protected from eviction:
+        # FirstIslamicCoin: MAX_OUTBOUND_FULL_RELAY_CONNECTIONS is 16 here
+        # (src/net.h), not upstream's 8 -- inherited unmodified from the
+        # CodexaCoin import, a genuine, permanent design choice. That makes
+        # this fork's total outbound 16 + 2 (block-relay) = 18, not
+        # upstream's 10, so maxconnections needs to be 40 (not 32) for the
+        # same maximum of 21 inbound connections (40 - 18 outbound - 1
+        # feeler). 20 inbound peers are protected from eviction:
         # 4 by netgroup, 4 that sent us blocks, 4 that sent us transactions and 8 via lowest ping time
-        self.extra_args = [['-maxconnections=32']]
+        self.extra_args = [['-maxconnections=40']]
 
     def run_test(self):
         protected_peers = set()  # peers that we expect to be protected from eviction

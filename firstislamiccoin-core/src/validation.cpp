@@ -2263,7 +2263,23 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
                 //  artificially set the default assumed verified block further back.
                 // The test against the minimum chain work prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+                // FirstIslamicCoin: the literal "2 weeks" threshold below is calibrated for
+                // Bitcoin's 600-second block spacing -- it's really a stand-in for "roughly
+                // 2016 blocks' worth of chainwork" (2016 == Bitcoin's difficulty-retarget
+                // window: 1209600s / 600s). GetBlockProofEquivalentTime() already expresses
+                // its result using *this* chain's own consensus.nTargetSpacing, so on regtest
+                // (spacing as low as 1 second, see chainparams.cpp) the literal 1,209,600-second
+                // threshold would require burying the assumevalid block under ~1.2 million
+                // blocks to ever skip script checks, which is impractical to test. Scale the
+                // threshold by regtest's own nTargetSpacing so it keeps demanding the same
+                // ~2016-block-equivalent amount of buried chainwork, preserving the intent of
+                // the check while making it reachable in a regtest functional test. Mainnet,
+                // testnet and signet all use real (non-regtest) spacing and keep the original,
+                // untouched 2-week threshold -- this carve-out never weakens assumevalid there.
+                const int64_t assumevalid_window = (params.GetChainType() == ChainType::REGTEST)
+                    ? (60 * 60 * 24 * 7 * 2 / 600) * params.GetConsensus().nTargetSpacing
+                    : 60 * 60 * 24 * 7 * 2;
+                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, params.GetConsensus()) <= assumevalid_window);
             }
         }
     }

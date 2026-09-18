@@ -6125,7 +6125,19 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
         if (state.vBlocksInFlight.size() > 0) {
             QueuedBlock &queuedBlock = state.vBlocksInFlight.front();
             int nOtherPeersWithValidatedDownloads = m_peers_downloading_from - 1;
-            if (current_time > state.m_downloading_since + std::chrono::seconds{consensusParams.nTargetSpacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
+            // FirstIslamicCoin: this timeout is meant to scale with how long
+            // we'd normally expect to wait between blocks, not with how fast
+            // this specific chain actually produces them. Regtest's
+            // nTargetSpacing is 1 second (src/kernel/chainparams.cpp), which
+            // would give a peer under a couple of real seconds to deliver a
+            // single requested block -- easily exceeded by ordinary test
+            // harness/relay latency and unrelated to any deliberate stalling.
+            // Use Bitcoin's real spacing (600s) for this specific timeout's
+            // scale on regtest only; mainnet/testnet/signet are untouched.
+            const int64_t download_timeout_spacing = (m_chainparams.GetChainType() == ChainType::REGTEST)
+                ? 600
+                : consensusParams.nTargetSpacing;
+            if (current_time > state.m_downloading_since + std::chrono::seconds{download_timeout_spacing} * (BLOCK_DOWNLOAD_TIMEOUT_BASE + BLOCK_DOWNLOAD_TIMEOUT_PER_PEER * nOtherPeersWithValidatedDownloads)) {
                 LogPrintf("Timeout downloading block %s from peer=%d%s, disconnecting\n", queuedBlock.pindex->GetBlockHash().ToString(), pto->GetId(), fLogIPs ? strprintf(" peeraddr=%s", pto->addr.ToStringAddrPort()) : "");
                 pto->fDisconnect = true;
                 return true;
