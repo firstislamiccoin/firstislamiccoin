@@ -1563,6 +1563,15 @@ Domain/registrar access, a Cloudflare account and its two CI secrets, real DNS r
 Arabic/Urdu translation review all need a human with access this environment doesn't have —
 tracked in the `TODO-HUMAN` table below.
 
+**Update, Phase 2 section (below in this document, dated the same day):** most of the above turned
+out to already be resolved by the time it was checked again — `firstislamiccoin.com` is live with a
+real Let's Encrypt cert and correct DNS (not via the Cloudflare Pages `deploy.yml` workflow, which
+still needs its API token secrets; deployed directly to the same VPS running the rest of this
+project's infra instead), and `explorer.firstislamiccoin.com`/`wallet.firstislamiccoin.com`/
+`staking-api.testnet.firstislamiccoin.com` are all genuinely live too. `roadmap.html` was updated to
+match (was still claiming "not yet deployed" for all of it). Arabic/Urdu translation review is still
+a real, open gap — that part of this note still stands.
+
 ---
 
 ## Phase 8 — Block explorer
