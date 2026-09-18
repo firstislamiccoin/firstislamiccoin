@@ -245,14 +245,25 @@ class WalletTest(BitcoinTestFramework):
         fee_per_byte = Decimal('0.001') / 1000
         self.nodes[2].settxfee(fee_per_byte * 1000)
         txid = self.nodes[2].sendtoaddress(address, 10, "", "", False)
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        # FirstIslamicCoin: this whole "Test sendmany" section confirms
+        # node2's own just-broadcast sends by having node2 itself mine the
+        # next block (guaranteeing inclusion without relying on mempool
+        # propagation timing to another node). Upstream's COINBASE_MATURITY
+        # =100 guarantees those coinbases never mature within the rest of
+        # this test, but this fork's is only 10 (see CHANGELOG-FIC.md), so
+        # several of these self-mined rewards would otherwise mature
+        # mid-test and silently inflate node2's real balance behind the
+        # hardcoded node_2_bal bookkeeping below. Mine to node1's known
+        # deterministic address instead of node2's own, so node2 remains the
+        # (block-including) miner but the reward doesn't land in its wallet.
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
 
         node_2_bal = self.check_fee_amount(self.nodes[2].getbalance(), 2 * POW_SUBSIDY - 16, fee_per_byte, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
         assert_equal(self.nodes[0].getbalance(), Decimal('10'))
 
         # Send 10 FIC with subtract fee from amount
         txid = self.nodes[2].sendtoaddress(address, 10, "", "", True)
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         node_2_bal -= Decimal('10')
         assert_equal(self.nodes[2].getbalance(), node_2_bal)
         node_0_bal = self.check_fee_amount(self.nodes[0].getbalance(), Decimal('20'), fee_per_byte, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
@@ -261,14 +272,14 @@ class WalletTest(BitcoinTestFramework):
 
         # Sendmany 10 FIC
         txid = self.nodes[2].sendmany('', {address: 10}, 0, "", [])
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         node_0_bal += Decimal('10')
         node_2_bal = self.check_fee_amount(self.nodes[2].getbalance(), node_2_bal - Decimal('10'), fee_per_byte, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
         assert_equal(self.nodes[0].getbalance(), node_0_bal)
 
         # Sendmany 10 FIC with subtract fee from amount
         txid = self.nodes[2].sendmany('', {address: 10}, 0, "", [address])
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         node_2_bal -= Decimal('10')
         assert_equal(self.nodes[2].getbalance(), node_2_bal)
         node_0_bal = self.check_fee_amount(self.nodes[0].getbalance(), node_0_bal + Decimal('10'), fee_per_byte, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
@@ -277,7 +288,7 @@ class WalletTest(BitcoinTestFramework):
         a0 = self.nodes[0].getnewaddress()
         a1 = self.nodes[0].getnewaddress()
         txid = self.nodes[2].sendmany(dummy='', amounts={a0: 5, a1: 5}, subtractfeefrom=[a0, a1])
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         node_2_bal -= Decimal('10')
         assert_equal(self.nodes[2].getbalance(), node_2_bal)
         tx = self.nodes[2].gettransaction(txid)
@@ -296,7 +307,7 @@ class WalletTest(BitcoinTestFramework):
 
         # Test passing fee_rate as a string
         txid = self.nodes[2].sendmany(amounts={address: 10}, fee_rate=str(fee_rate_sat_vb))
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         balance = self.nodes[2].getbalance()
         node_2_bal = self.check_fee_amount(balance, node_2_bal - Decimal('10'), explicit_fee_rate_btc_kvb, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
         assert_equal(balance, node_2_bal)
@@ -306,7 +317,7 @@ class WalletTest(BitcoinTestFramework):
         # Test passing fee_rate as an integer
         amount = Decimal("0.0001")
         txid = self.nodes[2].sendmany(amounts={address: amount}, fee_rate=fee_rate_sat_vb)
-        self.generate(self.nodes[2], 1, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
+        self.generatetoaddress(self.nodes[2], 1, self.nodes[1].get_deterministic_priv_key().address, sync_fun=lambda: self.sync_all(self.nodes[0:3]))
         balance = self.nodes[2].getbalance()
         node_2_bal = self.check_fee_amount(balance, node_2_bal - amount, explicit_fee_rate_btc_kvb, self.get_vsize(self.nodes[2].gettransaction(txid)['hex']))
         assert_equal(balance, node_2_bal)
@@ -357,8 +368,24 @@ class WalletTest(BitcoinTestFramework):
         # 2. hex-changed one output to 0.0
         # 3. sign and send
         # 4. check if recipient (node0) can list the zero value tx
-        usp = self.nodes[1].listunspent(query_options={'minimumAmount': '49.998'})[0]
-        inputs = [{"txid": usp['txid'], "vout": usp['vout']}]
+        #
+        # FirstIslamicCoin: upstream picked the input for this raw tx via
+        # listunspent(minimumAmount=49.998), relying on node1 coincidentally
+        # holding a UTXO only slightly above that value at this point in the
+        # test. This fork's POW_SUBSIDY (28,000,000) means node1's untouched
+        # coinbase UTXOs are all many orders of magnitude above 49.998, so
+        # that filter instead matches one of those -- and since the tx below
+        # is a raw (non-funded) transaction, whatever isn't covered by its
+        # literal outputs becomes "fee", which sendrawtransaction's default
+        # maxfeerate safety cap then rejects as astronomically too high. Fund
+        # a UTXO of exactly the size this scenario expects instead of hoping
+        # the filter finds one coincidentally. Left unconfirmed (no extra
+        # block mined) so later block-height-dependent balance bookkeeping
+        # in this test (coinbase maturity timing) isn't disturbed.
+        funding_address = self.nodes[1].getnewaddress()
+        funding_txid = self.nodes[1].sendtoaddress(funding_address, Decimal('50.01'))
+        funding_vout = find_vout_for_address(self.nodes[1], funding_txid, funding_address)
+        inputs = [{"txid": funding_txid, "vout": funding_vout}]
         outputs = {self.nodes[1].getnewaddress(): 49.998, self.nodes[0].getnewaddress(): 11.11}
 
         raw_tx = self.nodes[1].createrawtransaction(inputs, outputs).replace("c0833842", "00000000")  # replace 11.11 with 0.0 (int32)
@@ -449,7 +476,21 @@ class WalletTest(BitcoinTestFramework):
             assert_raises_rpc_error(-5, "Invalid private key encoding", self.nodes[0].importprivkey, "invalid")
 
             # This will raise an exception for importing an address with the PS2H flag
-            temp_address = self.nodes[1].getnewaddress("", "p2sh-segwit")
+            # FirstIslamicCoin: this fork rejects address_type='p2sh-segwit'
+            # outright project-wide ("P2SH_SEGWIT addresses are not welcome",
+            # src/wallet/rpc/addresses.cpp, inherited unchanged from the
+            # CodexaCoin import), so upstream's p2sh-segwit address can't be
+            # used here. The two checks below need a genuine script-type
+            # (not single-key) address though -- the importaddress p2sh-flag
+            # check fires for any valid address regardless of type (see
+            # src/wallet/rpc/backup.cpp), but dumpprivkey's "does not refer
+            # to a key" only fires for a destination with no single key
+            # behind it. A plain legacy P2SH multisig address (unaffected by
+            # the p2sh-segwit restriction, which is only about segwit
+            # wrapped in P2SH) satisfies both the same way the original
+            # p2sh-segwit address did.
+            multisig_pubkeys = [self.nodes[1].getaddressinfo(self.nodes[1].getnewaddress())['pubkey'] for _ in range(2)]
+            temp_address = self.nodes[1].addmultisigaddress(2, multisig_pubkeys)['address']
             assert_raises_rpc_error(-5, "Cannot use the p2sh flag with an address - use a script instead", self.nodes[0].importaddress, temp_address, "label", False, True)
 
             # This will raise an exception for attempting to dump the private key of an address you do not own
@@ -471,7 +512,11 @@ class WalletTest(BitcoinTestFramework):
             assert_raises_rpc_error(-5, "Pubkey is not a valid public key", self.nodes[0].importpubkey, "5361746f736869204e616b616d6f746f")
 
             # Bech32m addresses cannot be imported into a legacy wallet
-            assert_raises_rpc_error(-5, "Bech32m addresses cannot be imported into legacy wallets", self.nodes[0].importaddress, "bcrt1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqc8gma6")
+            # FirstIslamicCoin: re-encoded from upstream's Bitcoin-regtest
+            # literal (bcrt1...) to this fork's real regtest HRP (rfic1...)
+            # via test_framework.segwit_addr, same witness program (same
+            # fix pattern already applied in wallet_importmulti.py).
+            assert_raises_rpc_error(-5, "Bech32m addresses cannot be imported into legacy wallets", self.nodes[0].importaddress, "rfic1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzzp8xp")
 
             # Import address and private key to check correct behavior of spendable unspents
             # 1. Send some coins to generate new UTXO
@@ -597,9 +642,15 @@ class WalletTest(BitcoinTestFramework):
         self.log.info("Test -reindex")
         self.stop_nodes()
         # set lower ancestor limit for later
-        self.start_node(0, ['-reindex', "-walletrejectlongchains=0", "-limitancestorcount=" + str(chainlimit)])
-        self.start_node(1, ['-reindex', "-limitancestorcount=" + str(chainlimit)])
-        self.start_node(2, ['-reindex', "-limitancestorcount=" + str(chainlimit)])
+        # FirstIslamicCoin: re-pass -dustrelayfee=0 (dropped by this restart
+        # upstream too, but harmless there) -- this fork's DUST_RELAY_TX_FEE
+        # is 100000 sat/kvB (100 sat/vB, matching the fee floor elsewhere,
+        # src/policy/policy.h, inherited unchanged), which makes the tiny
+        # 0.0001 FIC outputs sent below actually dust without the override,
+        # unlike upstream's much smaller default.
+        self.start_node(0, ['-reindex', "-dustrelayfee=0", "-walletrejectlongchains=0", "-limitancestorcount=" + str(chainlimit)])
+        self.start_node(1, ['-reindex', "-dustrelayfee=0", "-limitancestorcount=" + str(chainlimit)])
+        self.start_node(2, ['-reindex', "-dustrelayfee=0", "-limitancestorcount=" + str(chainlimit)])
         # reindex will leave rpc warm up "early"; Wait for it to finish
         self.wait_until(lambda: [block_count] * 3 == [self.nodes[i].getblockcount() for i in range(3)])
         assert_equal(balance_nodes, [self.nodes[i].getbalance() for i in range(3)])
@@ -640,7 +691,12 @@ class WalletTest(BitcoinTestFramework):
         # Try with walletrejectlongchains
         # Double chain limit but require combining inputs, so we pass AttemptSelection
         self.stop_node(0)
-        extra_args = ["-walletrejectlongchains", "-limitancestorcount=" + str(2 * chainlimit)]
+        # FirstIslamicCoin: keep -dustrelayfee=0 across this restart too --
+        # mempool.dat reload re-validates every saved tx against the
+        # restarted node's current policy, and the chainlimit*2 dust-sized
+        # (0.0001 FIC) transactions from above would otherwise be rejected
+        # on reload under this fork's real (much higher) dust relay fee.
+        extra_args = ["-dustrelayfee=0", "-walletrejectlongchains", "-limitancestorcount=" + str(2 * chainlimit)]
         self.start_node(0, extra_args=extra_args)
 
         # wait until the wallet has submitted all transactions to the mempool
@@ -712,11 +768,15 @@ class WalletTest(BitcoinTestFramework):
         assert_equal(tx[verbose_field], self.nodes[0].decoderawtransaction(tx["hex"]))
 
         self.log.info("Test send* RPCs with verbose=True")
+        # FirstIslamicCoin: fee estimation was removed from this fork, so
+        # sendtoaddress/sendmany's verbose "fee_reason" is unconditionally
+        # "Minimum required fee" (src/wallet/rpc/spend.cpp) rather than
+        # upstream's dynamic FeeReason-derived string (e.g. "Fallback fee").
         address = self.nodes[0].getnewaddress("test")
         txid_feeReason_one = self.nodes[2].sendtoaddress(address=address, amount=5, verbose=True)
-        assert_equal(txid_feeReason_one["fee_reason"], "Fallback fee")
+        assert_equal(txid_feeReason_one["fee_reason"], "Minimum required fee")
         txid_feeReason_two = self.nodes[2].sendmany(dummy='', amounts={address: 5}, verbose=True)
-        assert_equal(txid_feeReason_two["fee_reason"], "Fallback fee")
+        assert_equal(txid_feeReason_two["fee_reason"], "Minimum required fee")
         self.log.info("Test send* RPCs with verbose=False")
         txid_feeReason_three = self.nodes[2].sendtoaddress(address=address, amount=5, verbose=False)
         assert_equal(self.nodes[2].gettransaction(txid_feeReason_three)['txid'], txid_feeReason_three)

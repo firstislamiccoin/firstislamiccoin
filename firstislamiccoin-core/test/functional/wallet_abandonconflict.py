@@ -107,7 +107,16 @@ class AbandonConflictTest(BitcoinTestFramework):
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        # FirstIslamicCoin: mempool reload on restart re-validates every
+        # saved tx via CheckFeeRate() (src/validation.cpp), which checks
+        # both this fork's fixed consensus floor (GetMinFee(), 100 sat/vB --
+        # unaffected by -minrelaytxfee) *and* the node's configured
+        # -minrelaytxfee separately (m_pool.m_min_relay_feerate). Upstream's
+        # 0.0001 (~10 sat/vB) bump relied solely on the latter and was never
+        # near this fork's txs' real ~135-160 sat/vB rate, so it was a no-op
+        # here; raised well above that so the same restart-reload mechanism
+        # still evicts them via the live -minrelaytxfee check.
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.005"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
 
@@ -165,7 +174,11 @@ class AbandonConflictTest(BitcoinTestFramework):
         balance = newbalance
 
         # Remove using high relay fee again
-        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        # FirstIslamicCoin: see the comment on the earlier restart above --
+        # raised well above this fork's real ~135-160 sat/vB tx rate so the
+        # live -minrelaytxfee check in CheckFeeRate() actually evicts these
+        # on mempool reload.
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.005"])
         alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
         assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
