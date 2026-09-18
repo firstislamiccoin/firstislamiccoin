@@ -71,7 +71,12 @@ class RawTransactionsTest(BitcoinTestFramework):
         self.extra_args = [
             ["-txindex"],
             ["-txindex"],
-            [],  # FirstIslamicCoin: pruning is not supported (no -prune/-fastprune)
+            # FirstIslamicCoin: pruning is not supported (no -prune/-fastprune),
+            # and unlike upstream, DEFAULT_TXINDEX (src/index/txindex.h) is
+            # true here -- a node gets a full tx index even without -txindex,
+            # so the "no index" scenario this node is meant to exercise needs
+            # an explicit -txindex=0.
+            ["-txindex=0"],
         ]
         # whitelist all peers to speed up tx relay / mempool sync
         for args in self.extra_args:
@@ -178,9 +183,16 @@ class RawTransactionsTest(BitcoinTestFramework):
             self.nodes[n].reconsiderblock(block1)
             assert_equal(self.nodes[n].getbestblockhash(), block2)
 
-        self.log.info("Test getrawtransaction on genesis block coinbase returns an error")
+        # FirstIslamicCoin: getrawtransaction() no longer special-cases the
+        # genesis block coinbase (commit 604a308 dropped the check when the
+        # premine was added, src/rpc/rawtransaction.cpp) -- this fork's
+        # genesis coinbase carries the spendable premine outputs and is
+        # retrievable like any ordinary transaction.
+        self.log.info("Test getrawtransaction on genesis block coinbase succeeds")
         block = self.nodes[0].getblock(self.nodes[0].getblockhash(0))
-        assert_raises_rpc_error(-5, "The genesis block coinbase is not considered an ordinary transaction", self.nodes[0].getrawtransaction, block['merkleroot'])
+        genesis_coinbase = self.nodes[0].getrawtransaction(block['merkleroot'], True)
+        assert_equal(genesis_coinbase['txid'], block['merkleroot'])
+        assert_equal(genesis_coinbase['blockhash'], block['hash'])
 
     def getrawtransaction_verbosity_tests(self):
         tx = self.wallet.send_self_transfer(from_node=self.nodes[1])['txid']
@@ -303,17 +315,18 @@ class RawTransactionsTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "Invalid parameter, key-value pair must contain exactly one key", self.nodes[0].createrawtransaction, [], [{'a': 1, 'b': 2}])
         assert_raises_rpc_error(-8, "Invalid parameter, key-value pair not an object as expected", self.nodes[0].createrawtransaction, [], [['key-value pair1'], ['2']])
 
-        # Test `createrawtransaction` mismatch between sequence number(s) and `replaceable` option
-        assert_raises_rpc_error(-8, "Invalid parameter combination: Sequence number(s) contradict replaceable option",
-                                self.nodes[0].createrawtransaction, [{'txid': TXID, 'vout': 0, 'sequence': MAX_BIP125_RBF_SEQUENCE+1}], {}, 0, True)
+        # FirstIslamicCoin: createrawtransaction has no "replaceable" argument
+        # at all (CreateTxDoc() in src/rpc/rawtransaction.cpp only ever
+        # declared inputs/outputs/locktime, same as createpsbt -- inherited
+        # unmodified from the CodexaCoin import's own RBF removal), so both
+        # the sequence/replaceable mismatch check and the invalid-replaceable-
+        # type check below are dropped; passing a 4th argument at all just
+        # raises a generic "too many parameters" error, not either of these.
 
         # Test `createrawtransaction` invalid `locktime`
         assert_raises_rpc_error(-3, "JSON value of type string is not of expected type number", self.nodes[0].createrawtransaction, [], {}, 'foo')
         assert_raises_rpc_error(-8, "Invalid parameter, locktime out of range", self.nodes[0].createrawtransaction, [], {}, -1)
         assert_raises_rpc_error(-8, "Invalid parameter, locktime out of range", self.nodes[0].createrawtransaction, [], {}, 4294967296)
-
-        # Test `createrawtransaction` invalid `replaceable`
-        assert_raises_rpc_error(-3, "JSON value of type string is not of expected type bool", self.nodes[0].createrawtransaction, [], {}, 0, 'foo')
 
         # Test that createrawtransaction accepts an array and object as outputs
         # One output
@@ -440,13 +453,21 @@ class RawTransactionsTest(BitcoinTestFramework):
 
     def decoderawtransaction_tests(self):
         self.log.info("Test decoderawtransaction")
+        # FirstIslamicCoin: these two hand-crafted vectors are bumped from
+        # upstream's nVersion=1 ("01000000") to nVersion=2 ("02000000").
+        # src/primitives/transaction.h serializes an extra 4-byte nTime field
+        # for nVersion<2 (a Peercoin/PPCoin-style addition, inherited
+        # unmodified from the CodexaCoin import), which these plain-Bitcoin-
+        # format bytes don't carry, so nVersion=1 here reads 4 bytes too many
+        # and fails with "TX decode failed". Only the witness-marker parsing
+        # is under test, so the version bump doesn't change what's verified.
         # witness transaction
-        encrawtx = "010000000001010000000000000072c1a6a246ae63f74f931e8365e15a089c68d61900000000000000000000ffffffff0100e1f50500000000000102616100000000"
+        encrawtx = "020000000001010000000000000072c1a6a246ae63f74f931e8365e15a089c68d61900000000000000000000ffffffff0100e1f50500000000000102616100000000"
         decrawtx = self.nodes[0].decoderawtransaction(encrawtx, True)  # decode as witness transaction
         assert_equal(decrawtx['vout'][0]['value'], Decimal('1.00000000'))
         assert_raises_rpc_error(-22, 'TX decode failed', self.nodes[0].decoderawtransaction, encrawtx, False) # force decode as non-witness transaction
         # non-witness transaction
-        encrawtx = "01000000010000000000000072c1a6a246ae63f74f931e8365e15a089c68d61900000000000000000000ffffffff0100e1f505000000000000000000"
+        encrawtx = "02000000010000000000000072c1a6a246ae63f74f931e8365e15a089c68d61900000000000000000000ffffffff0100e1f505000000000000000000"
         decrawtx = self.nodes[0].decoderawtransaction(encrawtx, False)  # decode as non-witness transaction
         assert_equal(decrawtx['vout'][0]['value'], Decimal('1.00000000'))
         # known ambiguous transaction in the chain (see https://github.com/bitcoin/bitcoin/issues/20579)
@@ -548,7 +569,13 @@ class RawTransactionsTest(BitcoinTestFramework):
         rawTx = self.nodes[0].decoderawtransaction(rawTxSigned['hex'])
         self.sync_all()
         self.generate(self.nodes[0], 1)
-        assert_equal(self.nodes[0].getbalance(), bal + Decimal('50.00000000') + Decimal('2.19000000'))  # block reward + tx
+        # FirstIslamicCoin: upstream's "+ 50" assumed a coinbase mined
+        # COINBASE_MATURITY (100 there) blocks ago maturing on exactly this
+        # generate() call. With this fork's real COINBASE_MATURITY (10), the
+        # block that matures here isn't one node0 mined, so there's no
+        # newly-matured reward to add -- confirmed empirically (balance
+        # increases by exactly the 2.19 tx, no reward component).
+        assert_equal(self.nodes[0].getbalance(), bal + Decimal('2.19000000'))  # tx only, no reward matures on this block
 
         # 2of2 test for combining transactions
         bal = self.nodes[2].getbalance()
@@ -591,7 +618,10 @@ class RawTransactionsTest(BitcoinTestFramework):
         rawTx2 = self.nodes[0].decoderawtransaction(rawTxComb)
         self.sync_all()
         self.generate(self.nodes[0], 1)
-        assert_equal(self.nodes[0].getbalance(), bal + Decimal('50.00000000') + Decimal('2.19000000'))  # block reward + tx
+        # FirstIslamicCoin: see the same comment on the first occurrence of
+        # this assertion above -- COINBASE_MATURITY (10, not upstream's 100)
+        # means no reward matures on this specific block for node0.
+        assert_equal(self.nodes[0].getbalance(), bal + Decimal('2.19000000'))  # tx only, no reward matures on this block
 
 
 if __name__ == '__main__':
