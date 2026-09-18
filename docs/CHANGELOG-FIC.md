@@ -2759,6 +2759,88 @@ output, rather than requiring it embedded in the coinstake *output*), which is c
 a mistake there (every node, every block). No harm done: this was caught entirely on a throwaway VPS regtest
 test directory, never committed and never deployed to the production testnet.
 
+### TODO row 19: web wallet multisig, watch-only/xpub, message sign/verify, and PIN-lock, actually clicked through against the live deployment
+
+Previously only read for correctness and lightly exercised. Drove all four through the real browser UI at
+`wallet.firstislamiccoin.com` (testnet) this pass:
+
+**PIN-lock**: set a PIN, confirmed the recovery phrase is reported encrypted at rest, clicked "Lock now",
+confirmed the app actually locks (unlock screen replaces the wallet UI), tried an intentionally wrong PIN
+(rejected with a visible "Incorrect PIN" error, wallet stays locked), then the correct PIN (unlocks cleanly
+back to the wallet).
+
+**Message sign/verify**: signed a real message with the wallet's own key, verified the resulting signature
+against the matching address/message (accepted: "Valid signature -- this address signed this exact
+message."), then re-verified the same signature against a tampered message (correctly rejected: "Invalid
+signature -- does not match this address/message.") -- both the positive and negative case behave correctly.
+
+**Multisig**: generated a real 1-of-2 P2SH multisig address from the wallet's own compressed pubkey plus a
+second (externally-supplied, secp256k1-valid) cosigner pubkey; the resulting redeem script
+(`5121<pubkey1>21<pubkey2>52ae`) is structurally correct OP_1 ... OP_2 OP_CHECKMULTISIG, and the derived
+address is a proper testnet P2SH address (`2...` prefix). Attempted to propose a spend from that
+(intentionally unfunded) address and got a correct, clear error -- "Insufficient funds at this address: have
+0.00000000, need 1.00007800" -- rather than a silent failure or a crash. Completing an actual funded
+propose-sign-broadcast round trip needs real testnet coins in a second independent wallet, which this
+environment doesn't have on hand; the generation and validation logic is confirmed correct as far as it can
+be exercised without that.
+
+**Watch-only / xpub**: fetched the wallet's own account xpub (correctly `tpub`-prefixed for testnet, matching
+the active network), then used "Watch from an xpub" to batch-derive 3 addresses from it -- derived address
+#0 exactly matched the wallet's own real receive address, confirming the watch-only derivation path uses the
+identical derivation as the wallet's own signing path rather than a separate, potentially-diverging
+implementation. Also exercised the single "Add address" path (watching the multisig address from the test
+above) and "Remove" on both watch types -- all worked as expected, each watched entry independently queries
+and displays its real on-chain balance via the gateway's `/v1/address/.../balance` and `/utxos` endpoints.
+
+No bugs found in any of the four flows.
+
+### TODO row 32 (header-sync consensus bug): scoped, fix designed, decision still open
+
+Picked back up row 32 (the `feature_bip68_sequence.py` `win64-native` timeout, root-caused to `validation.cpp`'s
+inherited Qtum "sync-checkpoint" header check) for research and scoping only, matching how P2CS was handled
+above -- no code changed, this is a proposal for a human to review and sign off on.
+
+The bug is actually **three duplicate evaluations of the same anti-deep-reorg question for a single incoming
+block, only one of which is correct**. `AcceptBlockHeader()` (`src/validation.cpp:4067-4076`) and
+`ProcessNetBlock()` (`src/net_processing.cpp:1687-1699`, which additionally penalizes the sending peer's ban
+score via `Misbehaving()` on trigger) both run a timestamp-based check: if an incoming header/block's
+`hashPrevBlock` isn't the receiving node's own *connected* chain tip, walk back `nCoinbaseMaturity` blocks
+from that tip and reject if the new header's timestamp is older than that point. The problem: `hashPrevBlock
+!= connected tip` is true not just for genuine competing/reorg branches, but for perfectly ordinary
+header-first sync too, since a header's parent is often only itself an accepted header, not yet the
+*connected/validated* tip (block connection lags header acceptance). `feature_bip68_sequence.py` hits this
+because it calls `setmocktime()` to jump block timestamps forward by ~6600s during one subtest, then resets
+to real time before mining ~430 more blocks and syncing two nodes in one shot -- the resulting timestamp
+ordering, combined with a slow (`win64-native`-only) node lagging behind during that sync, makes the
+checkpoint's timestamp look newer than perfectly honest incoming headers, and the check wrongly rejects them
+forever, hanging `sync_blocks()` until the test framework's 2427s timeout.
+
+Immediately after the buggy check, `AcceptBlockHeader()` already calls `ContextualCheckBlockHeader()`
+(`validation.cpp:3909-3965`), which runs the *correct*, height-based protection: `nMaxReorganizationDepth`
+and `CheckSyncCheckpoint()` (`node/blockstorage.cpp:450-459`), both anchored to the new header's own claimed
+height rather than to how far behind the locally-connected chain happens to be. That distinction is exactly
+what the timestamp check gets wrong. Since `AcceptBlock()` always calls `AcceptBlockHeader()` first, this
+height-based protection already covers the full-block path too -- meaning `net_processing.cpp`'s copy is not
+just redundant with `validation.cpp`'s, it's a third independent (and also buggy) evaluation of the same
+question.
+
+**Proposed fix** (not applied): delete both copies of the timestamp check (`validation.cpp:4067-4076` and
+`net_processing.cpp:1687-1699`), relying entirely on the already-present, already-correct height-based checks
+that already run on the same header/block. This is a pure deletion of demonstrably duplicate/buggy logic, not
+new consensus logic -- smaller and lower-risk than P2CS. One thing worth double-checking before sign-off,
+flagged rather than silently assumed safe: `AutoSelectSyncCheckpoint()`'s span is `nCoinbaseMaturity` while
+`CheckSyncCheckpoint()`'s effective bound also involves `nMaxReorganizationDepth` -- on regtest the former
+(10) is tighter than the latter (50), so removing the timestamp check does not loosen the effective
+reorg-depth bound there, but mainnet/testnet's actual constants for both should be compared before applying
+this to be sure that holds everywhere, not just regtest.
+
+`BlockValidationResult::BLOCK_HEADER_SYNC` stays in use elsewhere (`src/pos.cpp:168`), so it isn't orphaned by
+this change. `AutoSelectSyncCheckpoint()`/`CheckSyncCheckpoint()` in `node/blockstorage.cpp` are untouched --
+`CheckSyncCheckpoint()` remains the active protection, called from `ContextualCheckBlockHeader()`.
+
+Decision still open: whether to apply this deletion. Needs sign-off before any `validation.cpp`/
+`net_processing.cpp` change, per the standing rule on consensus-adjacent C++.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -2781,7 +2863,7 @@ test directory, never committed and never deployed to the production testnet.
 | 16 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
 | 17 | **Real, consensus-adjacent bug found, fix attempted and reverted after breaking consensus.** A staked coin's resulting UTXO comes back `solvable: false` (bare P2PK output), unspendable via `sendtoaddress` in a descriptor wallet despite the wallet holding the key, because `CreateCoinStake()` (`src/wallet/staking.cpp`) downgrades `PUBKEYHASH`-kernel inputs to bare-P2PK outputs. Root cause: this isn't arbitrary — `SignBlock()` (`src/node/miner.cpp`) and `CheckBlockSignature()` (`src/validation.cpp`, real consensus validation) both require the coinstake output to be `TxoutType::PUBKEY` so a validator with no wallet access can recover the signing pubkey directly from the output script. A first fix (paying the reward back to the original P2PKH script) built and looked correct, but regtest verification caught it silently halting all staking (`SignBlock` fails on every attempt) before it was ever committed — reverted. A real fix needs `SignBlock()`/`CheckBlockSignature()` changed to recover the pubkey from the kernel input's scriptSig instead of the coinstake output, which is consensus code needing its own sign-off — see the "TODO row 17" section above for the full writeup | Phase 6 / core |
 | 18 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
-| 19 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
+| 19 | ~~Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet~~ — done, all four driven through the real browser UI against the live `wallet.firstislamiccoin.com` deployment, no bugs found: PIN-lock (set/lock/wrong-PIN-reject/correct-unlock), message sign/verify (valid signature accepted, tampered message correctly rejected), multisig (1-of-2 P2SH address + redeem script generated correctly, unfunded spend proposal correctly rejected with a clear error instead of failing silently), watch-only (single address plus xpub batch-derivation, derived address #0 exactly matches the wallet's own real receive address). Still open: a funded propose-sign-broadcast multisig round trip, which needs real testnet coins in a second independent wallet not available in this environment — see the "TODO row 19" section above | Phase 7 |
 | 20 | ~~Create a FirstIslamicCoin GitHub org/repository~~ — done, `github.com/firstislamiccoin/firstislamiccoin` exists and every commit since has been pushed there for real (see the Phase 2 section on CI genuinely running). Still open: obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts — this environment has no path to either | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
@@ -2794,5 +2876,5 @@ test directory, never committed and never deployed to the production testnet.
 | 29 | ~~Fix the same rename gap for the other MSVC-built binaries~~ — done: confirmed by the very next Windows CI run, whose "Run functional tests" step failed with the identical `FileNotFoundError` (`test_node.py` couldn't find `firstislamiccoind.exe` to start any node at all, since `bitcoind.vcxproj` had the same missing `<TargetName>`). Added `<TargetName>` overrides to `bitcoind`/`bitcoin-cli`/`bitcoin-wallet`/`bitcoin-qt` too, and rebranded `bitcoind.vcxproj`'s hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` while there. Verify the functional suite actually runs on the next real Windows CI run — first time it will have gotten past node startup at all | Phase 10 |
 | 30 | ~~The live testnet node had zero peer connections~~ — the immediate symptom is fixed: a second node (`fic-testnet-node-2`, same VPS, own data volume and ports) is now running and bidirectionally peered with the first, confirmed via `getpeerinfo` on both sides. What's still open: real DNS-seed infrastructure (`seed{1,2,3}.firstislamiccoin.com` still "not yet live") and genuine peer diversity beyond two containers on one VPS, needed before other people's nodes can discover this testnet on their own — see the "A second local testnet node stood up..." Phase 2 section above | Phase 2 |
 | 31 | The `macos-13` GitHub Actions runner never gets assigned to any job that requests it (`core-ci.yml`'s `macos-native` and `release.yml`'s `macos-x86_64`, both confirmed stuck `queued` with `runner_id: 0` for hours across multiple separate runs) — this repo is public and owned by a personal (not org) account, and GitHub's own policy is that public repos get free Actions minutes on every runner type including macOS, so this doesn't look like an ordinary billing/spend-limit block; querying the account's actual Actions billing to confirm needs a broader OAuth scope (`user`) than this environment's `gh` token has, which needs a human's own GitHub login to grant. Possibly a new-account capacity/trust throttle, or reduced `macos-13` image availability specifically (worth someone trying `macos-14`/`macos-latest` as a quick experiment) — needs a human with real GitHub account access to actually diagnose further, not something resolvable from this environment | Phase 2 / Phase 3 |
-| 32 | **Real, consensus-adjacent bug found, not fixed.** `src/validation.cpp`'s inherited "Qtum" sync-checkpoint check in `AcceptBlockHeader` (`BlockValidationResult::BLOCK_HEADER_SYNC`, "older-than-checkpoint") can reject a legitimately-mined header as invalid whenever a receiving node's own tip is far enough behind a peer that just delivered a large batch of new headers at once — confirmed as the actual root cause of `feature_bip68_sequence.py`'s 2427-second `win64-native` timeout (see the section above). Needs a human decision before any fix: this is P2P/consensus validation code inherited unmodified from the CodexaCoin/Qtum lineage (`git diff 3df79ad0` confirms), not something FIC added, and the standing rule is no consensus-adjacent C++ without sign-off | Phase 2 |
+| 32 | **Real, consensus-adjacent bug found, fix scoped and proposed, decision still open.** `src/validation.cpp`'s and `src/net_processing.cpp`'s inherited "Qtum" sync-checkpoint timestamp checks fire on ordinary header-first sync (not just genuine reorgs) and are redundant with the already-correct, already-present height-based `nMaxReorganizationDepth`/`CheckSyncCheckpoint` checks a few lines away — confirmed as the root cause of `feature_bip68_sequence.py`'s 2427-second `win64-native` timeout. A specific, minimal proposed fix (delete both timestamp-check copies, keep the height-based ones) is written up with an exact diff, ready for review — see the "TODO row 32" section above. Needs a human sign-off before any `validation.cpp`/`net_processing.cpp` change, per the standing rule on consensus-adjacent C++ | Phase 2 |
 | 33 | `wallet_fundrawtransaction.py --descriptors`'s `test_locked_wallet` fails on `win64-native` (`fundrawtransaction` doesn't raise the expected "needs a change address" error on a locked, keypool-drained wallet) with no confident root cause found — traced the keypool-drain/encrypt/import logic and found nothing obviously platform-dependent in the C++ path, but that doesn't rule one out. Needs either a live Windows debugging session or another CI round with added diagnostic logging around keypool state at each step | Phase 2 |
