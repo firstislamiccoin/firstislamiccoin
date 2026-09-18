@@ -1382,6 +1382,24 @@ VPS is not the kind of independent, geographically/operationally distinct peer d
 testnet needs before other people's nodes can find it. Row 30 below is updated to reflect the
 narrower remaining scope rather than marked resolved.
 
+### ElectrumX checked properly -- it was already live, an earlier hedge in the roadmap was wrong
+
+While updating `roadmap.html`'s Phase 4 (ElectrumX) entry alongside Phases 6-8 above, initially left
+it as "Built, not deployed" on the reasoning that its DNS hostnames
+(`testnet-electrum{1,2}.firstislamiccoin.com`) had no nginx proxying in front of them the way the
+HTTP-based services do. That reasoning doesn't actually apply to a raw TCP protocol like Electrum --
+nginx is only needed to multiplex multiple domains onto the same HTTP(S) port; a dedicated TCP port
+doesn't need it. Checked properly instead of assuming: both hostnames resolve correctly
+(`169.58.129.247`), both servers' ports are reachable from outside the VPS (confirmed with a real
+TCP connection test, not just `docker ps`), and a real Electrum protocol `server.version` request
+against each gets a real, correct response (`"ElectrumX 2.0.0"`) -- not just an open port answering
+garbage. Both are genuinely live: `testnet-electrum1.firstislamiccoin.com:51001` and
+`testnet-electrum2.firstislamiccoin.com:51011` (TCP; the adjacent port on each is TLS). Note these
+are non-standard ports (Electrum's usual default is `50001`/`50002`), not documented with an
+explicit port anywhere (`docs/dns.md`'s DNS table only records the hostname's purpose, not a port
+number) -- not broken, just something a wallet operator needs to be told rather than assume.
+Updated `roadmap.html`'s Phase 4 to "Live" to match, with both real addresses named in the copy.
+
 ### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
 
 Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
