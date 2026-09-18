@@ -7,6 +7,11 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <!-- FirstIslamicCoin: same rename gap as bitcoin-util.vcxproj (see its
+         comment), confirmed here too: functional test_node.py couldn't
+         find src\firstislamiccoind.exe to start any node at all, since
+         this project still defaults to producing bitcoind.exe. -->
+    <TargetName>firstislamiccoind</TargetName>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bitcoind.cpp" />
@@ -55,10 +60,12 @@
   </PropertyGroup>
   <Target Name="AfterBuild">
     <Copy SourceFiles="$(ConfigIniIn)" DestinationFiles="$(ConfigIniOut)" ></Copy>
+    <!-- FirstIslamicCoin: rebranded (was "Bitcoin Core" / bitcoin/bitcoin's
+         issue tracker, unmodified from upstream). -->
     <ReplaceInFile FilePath="$(ConfigIniOut)"
-                   Replace="@PACKAGE_NAME@" By="Bitcoin Core"></ReplaceInFile>
+                   Replace="@PACKAGE_NAME@" By="FirstIslamicCoin Core"></ReplaceInFile>
     <ReplaceInFile FilePath="$(ConfigIniOut)"
-                   Replace="@PACKAGE_BUGREPORT@" By="https://github.com/bitcoin/bitcoin/issues"></ReplaceInFile>
+                   Replace="@PACKAGE_BUGREPORT@" By="https://github.com/FirstIslamicCoin/firstislamiccoin-core/issues"></ReplaceInFile>
     <ReplaceInFile FilePath="$(ConfigIniOut)"
                    Replace="@abs_top_srcdir@" By="..\.." ToFullPath="true"></ReplaceInFile>
     <ReplaceInFile FilePath="$(ConfigIniOut)"

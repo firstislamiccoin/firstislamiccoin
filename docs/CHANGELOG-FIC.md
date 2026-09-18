@@ -999,10 +999,22 @@ ever checked for the rebranded name and noticed. (`build_msvc/bitcoind/bitcoind.
 `AfterBuild` target has the identical gap for `test/config.ini`'s `PACKAGE_NAME`, still hardcoded
 to `"Bitcoin Core"` — harmless for this particular test since nothing reads that field for path
 construction, but the same class of oversight; not fixed here since it's cosmetic and out of
-this row's scope, but worth a `TODO-HUMAN` note for the other MSVC-built binaries.) Fixed by
-adding an explicit `<TargetName>` override to both `.vcxproj` files rather than renaming the
-project files/folders themselves, to avoid touching `.sln`/`ProjectReference` wiring for a
-fix that's otherwise fully self-contained.
+this row's scope, so flagged as a `TODO-HUMAN` note rather than fixed here.) Fixed by adding an
+explicit `<TargetName>` override to both `.vcxproj` files rather than renaming the project
+files/folders themselves, to avoid touching `.sln`/`ProjectReference` wiring for a fix that's
+otherwise fully self-contained.
+
+That `TODO-HUMAN` note didn't stay theoretical for long: the very next Windows CI run confirmed
+`bitcoin-util-test.py` genuinely fixed (clean pass), but progressed further and hit the identical
+`FileNotFoundError` in a completely different step — `test/functional/test_node.py` couldn't find
+`firstislamiccoind.exe` to start *any* node at all, blocking the entire functional suite from
+running a single test on Windows. Same root cause, `bitcoind.vcxproj` has the same missing
+`<TargetName>`. Fixed that and, while already in the file, the other three MSVC-built binaries
+with the identical gap (`bitcoin-cli`, `bitcoin-wallet`, `bitcoin-qt`) plus `bitcoind.vcxproj`'s
+`AfterBuild` target's hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` noted above.
+This is the first time the Windows functional suite will have gotten past node startup at all;
+whatever it actually surfaces once it does needs a real CI run to see, same as everything else in
+this section.
 
 ### The win64-native MSVC CI job, actually run to a genuine build for the first time
 
@@ -1891,4 +1903,4 @@ those are removed.
 | 26 | Finish triaging the still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_accept`/`mempool_package_limits`, `rpc_blockchain`/`rpc_createmultisig`/`rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_sendall`/`wallet_signrawtransactionwithwallet`/`wallet_transactiontime_rescan`) — `wallet_backup`, `wallet_fundrawtransaction`, `mempool_limit`, and `wallet_send` are now fully triaged and green, see the Phase 2 sections above | Phase 2 |
 | 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each (the `wallet_send` fee_rate/options item formerly in this row is resolved — see the third-pass section above) | Phase 2 |
 | 28 | ~~Root-cause `bitcoin-util-test.py`'s Windows-only failures~~ — done: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and `bitcoin-tx/bitcoin-tx.vcxproj` were never renamed from upstream, so MSBuild's default `$(TargetName)` produced `bitcoin-util.exe`/`bitcoin-tx.exe` instead of the rebranded names the test fixture correctly expects; fixed with explicit `<TargetName>` overrides — see the Phase 2 section above. Verify the fix on the next real Windows CI run | Phase 10 |
-| 29 | The same rename gap found for row 28 likely affects the other MSVC-built binaries too (`bitcoind`, `bitcoin-cli`, `bitcoin-wallet`, `bitcoin-qt` all still lack a `<TargetName>` override) and `build_msvc/bitcoind/bitcoind.vcxproj`'s `AfterBuild` target hardcodes `test/config.ini`'s `PACKAGE_NAME`/`PACKAGE_BUGREPORT` to upstream's `"Bitcoin Core"`/Bitcoin's issue tracker URL — neither breaks `bitcoin-util-test.py` specifically (out of row 28's scope, so not fixed here), but a real Windows install currently ships `bitcoin-cli.exe` etc. under the wrong name | Phase 10 |
+| 29 | ~~Fix the same rename gap for the other MSVC-built binaries~~ — done: confirmed by the very next Windows CI run, whose "Run functional tests" step failed with the identical `FileNotFoundError` (`test_node.py` couldn't find `firstislamiccoind.exe` to start any node at all, since `bitcoind.vcxproj` had the same missing `<TargetName>`). Added `<TargetName>` overrides to `bitcoind`/`bitcoin-cli`/`bitcoin-wallet`/`bitcoin-qt` too, and rebranded `bitcoind.vcxproj`'s hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` while there. Verify the functional suite actually runs on the next real Windows CI run — first time it will have gotten past node startup at all | Phase 10 |

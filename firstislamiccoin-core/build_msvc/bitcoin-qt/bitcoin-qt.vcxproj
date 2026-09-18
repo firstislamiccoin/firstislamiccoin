@@ -6,6 +6,9 @@
     <ProjectGuid>{7E99172D-7FF2-4CB6-B736-AC9B76ED412A}</ProjectGuid>
     <ConfigurationType>Application</ConfigurationType>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <!-- FirstIslamicCoin: same rename gap as bitcoin-util.vcxproj, see its
+         comment for the full explanation. -->
+    <TargetName>firstislamiccoin-qt</TargetName>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\qt\main.cpp" />

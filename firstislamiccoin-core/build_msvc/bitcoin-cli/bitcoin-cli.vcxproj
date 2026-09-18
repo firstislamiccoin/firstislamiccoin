@@ -7,6 +7,9 @@
   <PropertyGroup>
     <ConfigurationType>Application</ConfigurationType>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <!-- FirstIslamicCoin: same rename gap as bitcoin-util.vcxproj, see its
+         comment for the full explanation. -->
+    <TargetName>firstislamiccoin-cli</TargetName>
   </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bitcoin-cli.cpp" />
