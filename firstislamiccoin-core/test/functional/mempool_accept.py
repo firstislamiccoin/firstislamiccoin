@@ -96,7 +96,12 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = Decimal('0.0001')  # FirstIslamicCoin: GetMinFee is 10000 sat for a tx of <= 100 vbytes
+        # FirstIslamicCoin: GetMinFee is max(10000 sat flat, 100 sat/vB).
+        # MiniWallet's default self-transfer tx is 104 vbytes, just over the
+        # <=100-vbyte threshold where the flat 10000 sat minimum would have
+        # applied, so the rate-based component (10400 sat) governs instead;
+        # 10000 sat alone is rejected (bad-txns-fee-not-enough).
+        fee = Decimal('0.00011')
         utxo_to_spend = self.wallet.get_utxo(txid=txid_in_block)  # use 0.3 BTC UTXO
         tx = self.wallet.create_self_transfer(utxo_to_spend=utxo_to_spend, sequence=MAX_BIP125_RBF_SEQUENCE)['tx']
         tx.vout[0].nValue = int((Decimal('0.3') - fee) * COIN)

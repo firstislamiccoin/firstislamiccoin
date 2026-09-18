@@ -971,6 +971,89 @@ refused. `test_send()`'s remaining `conf_target`/`estimate_mode` cases (equivale
 options-object form, and their own validation-error cases) were dropped entirely — neither parameter
 exists on this fork's `send()` in any form.
 
+### A fourth pass: `mempool_accept`, `rpc_createmultisig`, `wallet_transactiontime_rescan`, `wallet_sendall`, `rpc_blockchain` fully triaged and green
+
+Continued the Phase 2 functional-test backlog (row 26). `mempool_accept.py`: the "transaction not in
+the mempool" sub-test paid exactly `10000` sat (upstream's `<=100`-vbyte flat-minimum assumption) for
+`MiniWallet`'s 104-vbyte default self-transfer, which crosses into the rate-based half of
+`GetMinFee()`'s `max(10000 flat, 100 sat/vB * vsize)`; needed `10400` sat, not `10000`, to actually
+clear the floor (this closes the mempool_accept item in row 27's list — the "lets a ~10 sat/vB
+transaction through" description there was itself based on the same too-low fee, not a real floor
+bypass). `rpc_createmultisig.py`'s `checkbalances()` hardcoded upstream's `149*50 + (height-249)*25`
+(Bitcoin's regtest subsidy/halving and 100-block maturity); replaced with this fork's real
+`(height - COINBASE_MATURITY) * POW_SUBSIDY` (flat, non-halving `nPowSubsidy`, `nCoinbaseMaturity=10`).
+`wallet_transactiontime_rescan.py` hardcoded upstream's regtest genesis hash as the expected
+`"Rescan started from block ..."` debug-log message; this fork's genesis (different PoW algorithm,
+premine, timestamp) has its own hash — now fetched live via `getblockhash(0)` instead of a literal.
+`wallet_sendall.py`'s `sendall_negative_effective_value()` sent `400`/`300` sat, both below this
+fork's real dust threshold (which scales with the 100 sat/vB floor), so `sendtoaddress` rejected them
+before the test's actual "negative effective value" scenario was ever reached; bumped to `4000`/`3000`
+sat — still well under what the test's `fee_rate=300` needs to spend economically, but clear of dust.
+
+`rpc_blockchain.py` needed the most work of the four, five separate issues surfacing one after another
+as each got fixed:
+
+- **`mediantime`/`TIME_RANGE_MTP`** (the module-level time constants): `CBlockIndex::GetMedianTimePast()`
+  in `src/chain.h` short-circuits to the block's own `GetBlockTime()` once `IsProtocolV2()` is active
+  ("use `GetBlockTime()` since ProtocolV2") instead of computing upstream's true running median of the
+  last 11 blocks. `nProtocolV2Time` is a ~2014 timestamp for every network including regtest, so this is
+  always active for realistic test timestamps — confirmed via an empirical VPS probe (`mediantime`
+  equalled every block's own `time` field exactly, heights 190-200). `TIME_RANGE_MTP` now equals
+  `TIME_RANGE_TIP` instead of upstream's `TIME_RANGE_TIP - 5*TIME_RANGE_STEP`.
+- **`_test_gettxoutsetinfo()`**: upstream's `total_amount`/`transactions`/`txouts`/`bogosize`/`disk_size`
+  values all assume Bitcoin's subsidy with no premine. This fork's genesis coinbase carries the
+  `PREMINE` (14,000,000,000 coins) as 1000 separate spendable outputs (`GenesisPremineOutputs()` in
+  `src/kernel/chainparams.cpp`), which `ConnectBlock()` adds to the UTXO set — so `total_amount` is
+  `PREMINE + HEIGHT*POW_SUBSIDY` (not upstream's Bitcoin-subsidy-based `2000000`), and the genesis
+  coinbase's 1000 outputs add 1 to `transactions` and 1000 to `txouts`/`bogosize`/`disk_size` beyond
+  upstream's per-block-coinbase-only counts (confirmed exact `bogosize`/`disk_size` values via an
+  empirical VPS probe, since the RPC's internal per-entry byte accounting isn't a simple constant
+  multiple of `txouts`). The same applies to the "just the genesis block" scenario after
+  `invalidateblock(height 1)`: contrary to upstream (an empty chainstate, all zeros), height 0 here
+  already holds the premine's 1000 UTXOs — real, not "should be empty".
+- **`getdifficulty`'s `RPCResult` doc mismatch** — a real, if long-latent, C++ bug: `src/rpc/blockchain.cpp`
+  actually returns `{"proof-of-work": ..., "proof-of-stake": ...}` (this fork's own dual-PoW/PoS-difficulty
+  addition, inherited unmodified from the CodexaCoin import) but its `RPCResult` metadata still declared
+  a single `Type::NUM`, tripping the RPC framework's own runtime result-type self-check ("Internal bug
+  detected: ... returned type is object, but declared as number in doc") the moment any caller actually
+  exercised strict type checking — which nothing had, until this test called it. Fixed the `RPCResult`
+  declaration to `Type::OBJ` with both sub-fields, and updated `_test_getdifficulty()` to read
+  `difficulty['proof-of-work']` (all blocks mined so far are PoW).
+- **`_test_waitforblockheight()`'s deep fork** — another real, previously-undocumented design difference:
+  `ChainstateManager::AcceptBlockHeader()` (`src/validation.cpp`) enforces a Qtum/PPCoin-style "sync
+  checkpoint" anti-DoS rule with no upstream Bitcoin equivalent — a header that doesn't extend the
+  current tip is rejected outright as `older-than-checkpoint` if its timestamp predates
+  `AutoSelectSyncCheckpoint()`'s auto-selected checkpoint, which sits only `nCoinbaseMaturity` (10)
+  blocks behind the tip. Upstream's test forks 100 blocks back from the tip to exercise
+  `invalidateblock`/`waitforblockheight`; on this fork that fork point falls hopelessly outside the
+  10-block checkpoint window, so both manually-constructed blocks were silently rejected
+  (`net_processing.cpp`'s `Misbehaving(... "Peer N sent us invalid header")`, which discards the real
+  reject reason before logging — traced the actual cause by reading `AcceptBlockHeader()` directly).
+  Changed `fork_height` to stay within the checkpoint span (`current_height - (COINBASE_MATURITY - 2)`).
+- **`_test_getblock()`'s fee rate** — the familiar pattern: upstream's 10 sat/vB is below the 100 sat/vB
+  floor; bumped to 150 sat/vB.
+- **`_test_getdeploymentinfo()`** — two real, inherited-unmodified design differences.
+  `src/deploymentinfo.cpp`'s `GetBuriedDeployment()` has its `"segwit"` branch commented out (only
+  `"csv"` is recognized), because this fork moved segwit from a buried (hardcoded-height) deployment to
+  an always-active BIP9 deployment (`consensus.vDeployments[DEPLOYMENT_SEGWIT].nStartTime =
+  ALWAYS_ACTIVE` in `src/kernel/chainparams.cpp`) — so `-testactivationheight=segwit@N` is now a
+  genuinely invalid argument, and `getdeploymentinfo()`'s real `segwit` entry is structured exactly like
+  `taproot`'s (`type: bip9`, `status: active`), not upstream's `type: buried`. Separately,
+  `nMinerConfirmationWindow`/`nRuleChangeActivationThreshold` for regtest are `150`/`120` (80%) here, not
+  upstream's `144`/`108` (75%), shifting every period-boundary-dependent expectation (`since`, `elapsed`,
+  `count`, the `height >= 144 and height <= 287` bounds, the "block just prior to lock-in" generate
+  count). All values confirmed via direct VPS probes of the live RPC output rather than derived by hand.
+- **`_test_y2106()`** — a genuine consequence of the `GetMedianTimePast()` finding above, not a new
+  separate bug: upstream mines 6 blocks at `nTime = 2**32-1`, relying on its true 11-block median to lag
+  behind the tip for the first several of them. On this fork, `mediantime` becomes `2**32-1` (the block's
+  own time) the instant one block is mined there, so the very next block would need `nTime > 2**32-1`,
+  which doesn't fit the 32-bit field — `node/miner.cpp`'s time-selection arithmetic (correctly computed
+  as `int64_t`) silently truncates on assignment to the `uint32_t` header field, producing `nTime = 0` and
+  a `time-too-old` `TestBlockValidity` failure. This fork's zero-runway median design makes mining a
+  *second* consecutive block at the exact `2**32-1` ceiling mathematically impossible, not a bug to
+  patch — reduced the test to 1 block, which still fully verifies this fork's own year-2106 handling
+  (the field correctly holds and reports `2**32-1`).
+
 ### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
 
 Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
@@ -1900,7 +1983,7 @@ those are removed.
 | 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
-| 26 | Finish triaging the still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_accept`/`mempool_package_limits`, `rpc_blockchain`/`rpc_createmultisig`/`rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_sendall`/`wallet_signrawtransactionwithwallet`/`wallet_transactiontime_rescan`) — `wallet_backup`, `wallet_fundrawtransaction`, `mempool_limit`, and `wallet_send` are now fully triaged and green, see the Phase 2 sections above | Phase 2 |
-| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, why `mempool_accept` lets a ~10 sat/vB transaction through `testmempoolaccept` despite the floor, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each (the `wallet_send` fee_rate/options item formerly in this row is resolved — see the third-pass section above) | Phase 2 |
+| 26 | Finish triaging the still-untriaged functional test failures (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_pos_reorg`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_package_limits`, `rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_signrawtransactionwithwallet`) — `wallet_backup`, `wallet_fundrawtransaction`, `mempool_limit`, `wallet_send`, `mempool_accept`, `rpc_createmultisig`, `wallet_transactiontime_rescan`, `wallet_sendall`, and `rpc_blockchain` are now fully triaged and green, see the Phase 2 sections above | Phase 2 |
+| 27 | Root-cause why `wallet_spend_unconfirmed`'s ancestor-aware sub-tests now select an extra input beyond the expected parent transaction(s) after the 100 sat/vB floor fix, why `wallet_basic`'s zero-value-tx scenario trips `sendrawtransaction`'s max-fee safety check, whether `tool_wallet`'s double-spend-acceptance scenario ever worked upstream, and how (or whether) to adapt `wallet_abandonconflict`'s `-minrelaytxfee`-based eviction test now that the real floor doesn't derive from that setting — see the Phase 2 sections above for what's already been ruled out on each (the `wallet_send` fee_rate/options item and the `mempool_accept` floor-bypass item formerly in this row are both resolved — see the third-pass and fourth-pass sections above) | Phase 2 |
 | 28 | ~~Root-cause `bitcoin-util-test.py`'s Windows-only failures~~ — done: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and `bitcoin-tx/bitcoin-tx.vcxproj` were never renamed from upstream, so MSBuild's default `$(TargetName)` produced `bitcoin-util.exe`/`bitcoin-tx.exe` instead of the rebranded names the test fixture correctly expects; fixed with explicit `<TargetName>` overrides — see the Phase 2 section above. Verify the fix on the next real Windows CI run | Phase 10 |
 | 29 | ~~Fix the same rename gap for the other MSVC-built binaries~~ — done: confirmed by the very next Windows CI run, whose "Run functional tests" step failed with the identical `FileNotFoundError` (`test_node.py` couldn't find `firstislamiccoind.exe` to start any node at all, since `bitcoind.vcxproj` had the same missing `<TargetName>`). Added `<TargetName>` overrides to `bitcoind`/`bitcoin-cli`/`bitcoin-wallet`/`bitcoin-qt` too, and rebranded `bitcoind.vcxproj`'s hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` while there. Verify the functional suite actually runs on the next real Windows CI run — first time it will have gotten past node startup at all | Phase 10 |

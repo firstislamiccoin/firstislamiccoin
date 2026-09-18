@@ -10,6 +10,7 @@ import os
 
 from test_framework.address import address_to_scriptpubkey
 from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.fic import POW_SUBSIDY
 from test_framework.authproxy import JSONRPCException
 from test_framework.descriptors import descsum_create, drop_origins
 from test_framework.key import ECPubKey
@@ -144,7 +145,14 @@ class RpcCreateMultiSigTest(BitcoinTestFramework):
 
         height = node0.getblockchaininfo()["blocks"]
         assert 150 < height < 350
-        total = 149 * 50 + (height - 149 - 100) * 25
+        # FirstIslamicCoin: upstream's 149*50 + (height-149-100)*25 assumes
+        # Bitcoin's subsidy (50, halving at regtest height 150) and its
+        # coinbase maturity (100). This fork's PoW subsidy is POW_SUBSIDY,
+        # flat with no halving (GetBlockSubsidy() in validation.cpp), and
+        # its real regtest coinbase maturity is COINBASE_MATURITY (10), not
+        # 100 -- so every block up to the last COINBASE_MATURITY mined pays
+        # the same subsidy.
+        total = (height - COINBASE_MATURITY) * POW_SUBSIDY
         assert bal1 == 0
         assert bal2 == self.moved
         assert_equal(bal0 + bal1 + bal2 + balw, total)

@@ -173,8 +173,14 @@ class SendallTest(BitcoinTestFramework):
         self.nodes[0].createwallet("dustwallet")
         dust_wallet = self.nodes[0].get_wallet_rpc("dustwallet")
 
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000400)
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00000300)
+        # FirstIslamicCoin: upstream's 400/300 sat amounts are below this
+        # fork's real dust threshold (which scales with the 100 sat/vB
+        # floor), so sendtoaddress itself would reject them before ever
+        # reaching the "negative effective value" scenario below. Bumped
+        # up well clear of dust, but still far below what fee_rate=300
+        # needs to spend one economically.
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00004000)
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00003000)
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 

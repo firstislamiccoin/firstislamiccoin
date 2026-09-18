@@ -28,11 +28,13 @@ import subprocess
 import textwrap
 
 from test_framework.blocktools import (
+    COINBASE_MATURITY,
     MAX_FUTURE_BLOCK_TIME,
     TIME_GENESIS_BLOCK,
     create_block,
     create_coinbase,
 )
+from test_framework.fic import PREMINE, POW_SUBSIDY
 from test_framework.messages import (
     CBlockHeader,
     from_hex,
@@ -55,8 +57,15 @@ from test_framework.wallet import MiniWallet
 
 HEIGHT = 200  # blocks mined
 TIME_RANGE_STEP = 600  # ten-minute steps
-TIME_RANGE_MTP = TIME_GENESIS_BLOCK + (HEIGHT - 6) * TIME_RANGE_STEP
 TIME_RANGE_TIP = TIME_GENESIS_BLOCK + (HEIGHT - 1) * TIME_RANGE_STEP
+# FirstIslamicCoin: CBlockIndex::GetMedianTimePast() in src/chain.h short-circuits
+# to the block's own GetBlockTime() once IsProtocolV2() is true ("use
+# GetBlockTime() since ProtocolV2") instead of computing a real running
+# median of the last 11 blocks. Consensus::Params::nProtocolV2Time is a
+# ~2014 timestamp for every network including regtest, so it's already
+# active for the mock times this test uses -- mediantime always equals the
+# tip's own time here, not upstream's true median (5 steps behind the tip).
+TIME_RANGE_MTP = TIME_RANGE_TIP
 TIME_RANGE_END = TIME_GENESIS_BLOCK + HEIGHT * TIME_RANGE_STEP
 
 
@@ -189,14 +198,34 @@ class BlockchainTest(BitcoinTestFramework):
         assert_greater_than(res['size_on_disk'], 0)
 
     def check_signalling_deploymentinfo_result(self, gdi_result, height, blockhash, status_next):
-        assert height >= 144 and height <= 287
+        # FirstIslamicCoin: regtest's versionbits window/threshold
+        # (nMinerConfirmationWindow/nRuleChangeActivationThreshold in
+        # src/kernel/chainparams.cpp) are 150/120 (80%), not upstream's
+        # 144/108 (75%), so the second period spans [150, 300) not [144, 288).
+        assert height >= 150 and height <= 299
 
         assert_equal(gdi_result, {
           "hash": blockhash,
           "height": height,
           "deployments": {
             'csv': {'type': 'buried', 'active': True, 'height': 5},
-            'segwit': {'type': 'buried', 'active': True, 'height': 6},
+            # FirstIslamicCoin: segwit is no longer a buried deployment on
+            # this fork (src/deploymentinfo.cpp's GetBuriedDeployment has its
+            # "segwit" branch commented out) -- it moved to an always-active
+            # BIP9 deployment instead, structured just like taproot below.
+            'segwit': {
+                'type': 'bip9',
+                'bip9': {
+                    'start_time': -1,
+                    'timeout': 9223372036854775807,
+                    'min_activation_height': 0,
+                    'status': 'active',
+                    'status_next': 'active',
+                    'since': 0,
+                },
+                'height': 0,
+                'active': True
+            },
             'testdummy': {
                 'type': 'bip9',
                 'bip9': {
@@ -206,15 +235,15 @@ class BlockchainTest(BitcoinTestFramework):
                     'min_activation_height': 0,
                     'status': 'started',
                     'status_next': status_next,
-                    'since': 144,
+                    'since': 150,
                     'statistics': {
-                        'period': 144,
-                        'threshold': 108,
-                        'elapsed': height - 143,
-                        'count': height - 143,
+                        'period': 150,
+                        'threshold': 120,
+                        'elapsed': height - 149,
+                        'count': height - 149,
                         'possible': True,
                     },
-                    'signalling': '#'*(height-143),
+                    'signalling': '#'*(height-149),
                 },
                 'active': False
             },
@@ -240,18 +269,20 @@ class BlockchainTest(BitcoinTestFramework):
 
         self.log.info("Test getdeploymentinfo")
         self.stop_node(0)
+        # FirstIslamicCoin: segwit can no longer be set via
+        # -testactivationheight (see check_signalling_deploymentinfo_result's
+        # comment above) -- only buried deployments ('csv') support it now.
         self.start_node(0, extra_args=[
             '-testactivationheight=csv@5',
-            '-testactivationheight=segwit@6',
         ])
 
         gbci207 = self.nodes[0].getblockchaininfo()
         self.check_signalling_deploymentinfo_result(self.nodes[0].getdeploymentinfo(), gbci207["blocks"], gbci207["bestblockhash"], "started")
 
         # block just prior to lock in
-        self.generate(self.wallet, 287 - gbci207["blocks"])
-        gbci287 = self.nodes[0].getblockchaininfo()
-        self.check_signalling_deploymentinfo_result(self.nodes[0].getdeploymentinfo(), gbci287["blocks"], gbci287["bestblockhash"], "locked_in")
+        self.generate(self.wallet, 299 - gbci207["blocks"])
+        gbci299 = self.nodes[0].getblockchaininfo()
+        self.check_signalling_deploymentinfo_result(self.nodes[0].getdeploymentinfo(), gbci299["blocks"], gbci299["bestblockhash"], "locked_in")
 
         # calling with an explicit hash works
         self.check_signalling_deploymentinfo_result(self.nodes[0].getdeploymentinfo(gbci207["bestblockhash"]), gbci207["blocks"], gbci207["bestblockhash"], "started")
@@ -261,7 +292,15 @@ class BlockchainTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 8)[-1]
         time_2106 = 2**32 - 1
         self.nodes[0].setmocktime(time_2106)
-        last = self.generate(self.nodes[0], 6)[-1]
+        # FirstIslamicCoin: upstream mines 6 blocks here, relying on its true
+        # 11-block running median to lag behind the tip for the first few of
+        # them. On this fork, GetMedianTimePast() (src/chain.h) short-circuits
+        # to the block's own time once ProtocolV2 is active (see the
+        # TIME_RANGE_MTP comment above) -- so as soon as one block sits at
+        # time_2106, MTP is already time_2106 too, and the next block would
+        # need nTime > 2**32-1, which doesn't fit in the 32-bit field. One
+        # block is enough to verify this fork's own year-2106 handling.
+        last = self.generate(self.nodes[0], 1)[-1]
         assert_equal(self.nodes[0].getblockheader(last)["mediantime"], time_2106)
 
     def _test_getchaintxstats(self):
@@ -322,15 +361,24 @@ class BlockchainTest(BitcoinTestFramework):
         node = self.nodes[0]
         res = node.gettxoutsetinfo()
 
-        assert_equal(res['total_amount'], Decimal('2000000.00000000'))
-        assert_equal(res['transactions'], HEIGHT)
+        # FirstIslamicCoin: upstream's 2000000 assumed Bitcoin's regtest subsidy
+        # (50, halving at height 150) with no premine. This fork's genesis
+        # carries a spendable premine (PREMINE coins, added to the UTXO set by
+        # ConnectBlock()) plus a flat, non-halving PoW subsidy (POW_SUBSIDY)
+        # per block up to nLastPOWBlock.
+        assert_equal(res['total_amount'], PREMINE + HEIGHT * POW_SUBSIDY)
+        # FirstIslamicCoin: the genesis block's coinbase carries the premine
+        # as GENESIS_OUTPUTS (1000) separate outputs in a single transaction,
+        # so it adds 1 to 'transactions' and 1000 to 'txouts'/'bogosize'/
+        # 'disk_size' on top of upstream's per-block-coinbase-only counts.
+        assert_equal(res['transactions'], HEIGHT + 1)
         assert_equal(res['height'], HEIGHT)
-        assert_equal(res['txouts'], HEIGHT)
-        assert_equal(res['bogosize'], 16800),
+        assert_equal(res['txouts'], HEIGHT + 1000)
+        assert_equal(res['bogosize'], 91800),
         assert_equal(res['bestblock'], node.getblockhash(HEIGHT))
         size = res['disk_size']
         assert size > 6400
-        assert size < 64000
+        assert size < 100000
         assert_equal(len(res['bestblock']), 64)
         assert_equal(len(res['hash_serialized_3']), 64)
 
@@ -339,11 +387,14 @@ class BlockchainTest(BitcoinTestFramework):
         node.invalidateblock(b1hash)
 
         res2 = node.gettxoutsetinfo()
-        assert_equal(res2['transactions'], 0)
-        assert_equal(res2['total_amount'], Decimal('0'))
+        # FirstIslamicCoin: unlike upstream, height 0 (genesis only) is not an
+        # empty chainstate here -- the genesis coinbase's premine outputs are
+        # themselves part of the UTXO set (see the 'res' assertions above).
+        assert_equal(res2['transactions'], 1)
+        assert_equal(res2['total_amount'], PREMINE)
         assert_equal(res2['height'], 0)
-        assert_equal(res2['txouts'], 0)
-        assert_equal(res2['bogosize'], 0),
+        assert_equal(res2['txouts'], 1000)
+        assert_equal(res2['bogosize'], 75000),
         assert_equal(res2['bestblock'], node.getblockhash(0))
         assert_equal(len(res2['hash_serialized_3']), 64)
 
@@ -421,7 +472,11 @@ class BlockchainTest(BitcoinTestFramework):
 
     def _test_getdifficulty(self):
         self.log.info("Test getdifficulty")
-        difficulty = self.nodes[0].getdifficulty()
+        # FirstIslamicCoin: this fork's getdifficulty returns an object with
+        # separate proof-of-work/proof-of-stake difficulties (dual-algo
+        # chain), not a single number as upstream does. All blocks mined so
+        # far are PoW (below nLastPOWBlock), so check that side.
+        difficulty = self.nodes[0].getdifficulty()['proof-of-work']
         # 1 hash in 2 should be valid, so difficulty should be 1/2**31
         # binary => decimal => binary math is why we do this check
         assert abs(difficulty * 2**31 - 1) < 0.0001
@@ -498,7 +553,13 @@ class BlockchainTest(BitcoinTestFramework):
         # (Previously this was broken based on setting
         # `rpc/blockchain.cpp:latestblock` incorrectly.)
         #
-        fork_height = current_height - 100 # choose something vaguely near our tip
+        # FirstIslamicCoin: unlike upstream, AcceptBlockHeader() enforces a
+        # Qtum/PPCoin-style "sync checkpoint" anti-DoS rule (src/validation.cpp)
+        # -- a header that doesn't extend the current tip is rejected as
+        # "older-than-checkpoint" if its timestamp predates the auto-selected
+        # checkpoint (nCoinbaseMaturity blocks behind the tip). Upstream's
+        # 100-block-back fork is far outside that window; stay within it.
+        fork_height = current_height - (COINBASE_MATURITY - 2) # choose something vaguely near our tip
         fork_hash = node.getblockhash(fork_height)
         fork_block = node.getblock(fork_hash)
 
@@ -525,7 +586,9 @@ class BlockchainTest(BitcoinTestFramework):
 
     def _test_getblock(self):
         node = self.nodes[0]
-        fee_per_byte = Decimal('0.00000010')
+        # FirstIslamicCoin: upstream's 10 sat/vB is below this fork's fixed
+        # 100 sat/vB fee floor (GetMinFee); bad-txns-fee-not-enough otherwise.
+        fee_per_byte = Decimal('0.00000150')
         fee_per_kb = 1000 * fee_per_byte
 
         self.wallet.send_self_transfer(fee_rate=fee_per_kb, from_node=node)
