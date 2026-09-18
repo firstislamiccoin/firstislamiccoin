@@ -2428,6 +2428,46 @@ the same mnemonic. Fixed; full evidence trail in `docs/security-review.md`'s sec
 `flutter test` now passes in full (44 passed, 6 skipped integration tests needing a live gateway,
 0 failures).
 
+### The first Android artifact this project has ever built -- a real toolchain gap found and fixed, a debug APK published
+
+With both crypto bugs fixed, attempted the next natural check: does `flutter build apk` actually
+work? It never had before -- this project's `android/` directory carried whatever Gradle/AGP/Kotlin
+versions it was originally scaffolded with, and nothing had ever tried building an installable
+artifact from it.
+
+**It didn't work, for a real reason.** Gradle 7.6.3 (the pinned wrapper version) predates support
+for the Java 21 bytecode the current Flutter stable SDK's bundled JDK produces --
+`flutter build apk --debug` failed immediately with `Unsupported class file major version 65`. Not
+a flaky failure or an environment quirk: no Android artifact could ever have been built with this
+configuration, independent of signing/publishing readiness. Fixed in three rounds, each driven by
+the next concrete version-minimum the toolchain itself reported (not guessed at up front): Gradle
+7.6.3 → 8.14 (Java 21 support), AGP 7.3.0 → 8.6.0 → 8.9.1 (Flutter's own `flutter-gradle-plugin`
+requires ≥8.6.0; several transitive AndroidX dependencies pulled in by Flutter plugins --
+`androidx.browser:1.9.0`, `androidx.core:1.17.0` -- separately required ≥8.9.1), Kotlin 1.7.10 →
+1.9.24 (compatible with AGP 8.9.x). `compileSdk`/`targetSdk`/`minSdk` already tracked `flutter.*`'s
+own defaults and needed no change; `sourceCompatibility`/`jvmTarget` (Java 8) remain valid with
+AGP 8.9.x as-is.
+
+**Verified for real:** `flutter build apk --debug` completed clean (zero errors in the build log,
+via Docker `ghcr.io/cirruslabs/flutter:stable` on the project VPS) and produced a genuine 174MB
+`app-debug.apk` -- the first Android artifact this project has ever actually built. This closes the
+"toolchain even works" half of `TODO-HUMAN` row 24 (the *other* half -- the Radio/RadioGroup
+migration, `value`/`initialValue`, and the major-version dependency bumps -- still genuinely needs a
+physical device/emulator this environment doesn't have, and remains deliberately untouched).
+
+**Published it, carefully worded.** This is a debug build, not a release: Android's own debug
+keystore signs it (not a real signing key, which doesn't exist -- see `TODO-HUMAN` row 11), it's
+never been through app-store review, and it's never run on a physical device or emulator. Uploaded
+to `firstislamiccoin.com/downloads/` with its SHA256 checksum published alongside, and a new
+`wallets.html` card labeled "Debug build available" (not "Live" or "Released") explaining exactly
+what it is and isn't -- unsigned, untested-on-device, testnet-only, built from a named source commit
+for traceability, with an explicit "don't hold real value in this" caveat. Matches this site's
+existing standard of not overclaiming (the same standard that kept `wallets.html` link-free until
+now: "no download links to binaries that don't exist"). Also fixed two other claims on the same page
+found stale while there: the Web wallet card still said "Not deployed" (live at
+`wallet.firstislamiccoin.com` since earlier this same day) and the Mobile card still said "Not
+built." `roadmap.html`'s Phase 5 entry updated to match all of the above.
+
 ### cppcheck: zero findings in FIC's own code
 
 Scoped to the 37 non-test files this project has actually changed (found via the `// 
@@ -2499,7 +2539,7 @@ those are removed.
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
 | 23 | ~~Root-cause two real, currently-failing mobile wallet crypto tests~~ — done, both: `address_test.dart`'s bech32 fixture had a typo'd hex literal (implementation was correct); `keys_test.dart`'s failure was a real bug, testnet's BIP44 coin type wrongly set to mainnet's 9770 instead of the standard testnet index 1 the node itself derives at (`scriptpubkeyman.cpp`). Fixed in `lib/config/network_config.dart`; full `flutter test` suite passes — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
-| 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
+| 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available. (The Android build *toolchain* itself is now confirmed working -- Gradle/AGP/Kotlin were years out of date and `flutter build apk` had never once succeeded before this was fixed, see the Phase 5/10 section above -- this row is specifically about the two deferred code-level migrations and dependency bumps, which is unrelated and still blocked on device access) | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
 | 26 | ~~Finish triaging the still-untriaged functional test failures~~ — done, fully: every file originally listed here (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_package_limits`, `rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_signrawtransactionwithwallet`) plus several found along the way (`p2p_eviction`, `p2p_ibd_stalling`, `p2p_headers_sync_with_minchainwork`, `p2p_orphan_handling`, `wallet_basic`, `tool_wallet`, `wallet_abandonconflict`, `wallet_spend_unconfirmed`) are fully triaged and green — see the fifth/sixth/seventh-pass Phase 2 sections above. `feature_pos_reorg` (FIC-native, no CodexaCoin equivalent, never previously run) was the last untriaged file: needed no fixes at all, confirmed passing on two independent runs (real PoW→PoS reorg, exact post-reorg supply accounting on both nodes) | Phase 2 |
 | 27 | ~~Root-cause `wallet_spend_unconfirmed`'s extra-input coin selection, `wallet_basic`'s zero-value-tx max-fee trip, `tool_wallet`'s double-spend-acceptance scenario, and `wallet_abandonconflict`'s `-minrelaytxfee` eviction test~~ — done, all four: the coin-selection issue was fixed by the `coinselection.cpp` tie-break fix (fifth pass); `wallet_basic`'s trip was a too-broad `listunspent` filter grabbing an oversized coinbase (seventh pass); `tool_wallet`'s scenario genuinely depended on RBF and was reworked to use `generateblock` instead (seventh pass); `wallet_abandonconflict`'s eviction mechanism was never actually a no-op, just under-scaled for this fork's real fee rates (seventh pass) — no test needed to be skipped. See the seventh-pass Phase 2 section above for all four | Phase 2 |
