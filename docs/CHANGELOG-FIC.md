@@ -1934,6 +1934,69 @@ A FirstIslamicCoin GitHub org/repository for this workflow to actually run in, a
 a real public release) Windows Authenticode + macOS Developer ID certificates — tracked in the
 table below.
 
+### P2CS (cold-staking delegation): scoped, decision still open
+
+`TODO-HUMAN` row 2 asks whether to build P2CS (delegated/cold staking — a script pattern letting a
+user delegate stake-signing to an always-online key while an offline owner key retains sole
+spending authority) or ship this fork's already-built custodial staking pool only and defer it.
+The prompt assumes P2CS is "reused from CAC," but it isn't — CodexaCoin never built it either
+(`docs/cac-audit.md` §7 and `docs/upstream/cac-PARAMETERS.md` §14 independently confirm zero P2CS
+scaffolding anywhere in CAC's source, via `grep -rlI "P2CS\|ColdStake\|coldstake"` returning
+nothing), so this investigation scoped what building it would actually require rather than
+assuming it's a smaller lift than it is.
+
+**Confirmed in the current source, not just CAC's:** `firstislamiccoin-core/src/script/script.h`'s
+opcode table still has `OP_NOP4`–`OP_NOP10` unused — a plausible soft-fork slot for a new
+`OP_CHECKCOLDSTAKEVERIFY`, the same way PIVX/Blackcoin-family P2CS and Bitcoin's own CSV/CLTV were
+each added. But the opcode slot being free is the easy part. A real implementation needs, at
+minimum: the new opcode's interpreter semantics (`script/interpreter.cpp`) enforcing that a
+coinstake spending a P2CS input pays the identical P2CS script back out (so the staking key can
+never redirect principal); a new script template/solver (`script/standard.cpp`); consensus
+validation recognizing P2CS-staking-key eligibility; a deployment/activation mechanism of its own
+(flagged as hard-fork-shaped unless deliberately soft-fork-designed — a separate design problem);
+and a rewrite of `wallet/staking.cpp`'s `CreateCoinStake` output construction, which today
+(confirmed by reading it directly, ~lines 360–493) already discards a P2PKH kernel input's
+scriptPubKey and rebuilds a bare P2PK output — the same code path `TODO-HUMAN` row 17 already
+flagged as producing descriptor-wallet-incompatible (`"solvable": false`) outputs. A P2CS
+implementation extends exactly this already-somewhat-fragile code path, not a clean one.
+
+**All five phases the prompt marks as depending on it (3.4 Qt dialog, 5.3 mobile delegation screen,
+6.2 the staking service's non-custodial mode, 7.2 web-wallet delegation UI, 8.2 explorer stats)
+share the same underlying dependency** — none has a meaningfully cheaper partial version reachable
+without the opcode/template/validation/activation work above landing first. Once that exists, the
+three client-side delegation UIs are comparatively cheap; the staking service's actual delegated
+staking + reward-split accounting (6.2) and the explorer's on-chain stats (8.2) need real
+additional work on top even then.
+
+**Relative size**, calibrated against the two consensus bugs already fixed and documented earlier
+in this changelog (the weighted-kernel-target overflow — one saturation branch in
+`CheckStakeKernelHash` plus a regression test — and the SegWit/Taproot activation fix — a
+`chainparams.cpp` config flip plus removing a stale wallet refusal string): P2CS is categorically
+larger than either. Those were surgical fixes to code that already existed and mostly worked; P2CS
+means inventing new consensus code from nothing, designing its own activation path, and then
+re-implementing the owner-side transaction construction in three independent client codebases
+(Qt/C++, Flutter/Dart, vanilla JS) plus new staking-service RPC/API surface. `docs/cac-audit.md`
+itself calls it "plausibly larger than the rest of the FIC prompt combined"; nothing found here
+contradicts that.
+
+**What deferring concretely costs:** not "no way to earn staking rewards without running a node" —
+the custodial pool (CAC's "6A" design) is already built and verified end-to-end on regtest (deposit
+→ stake → reward → referral payout, reward math confirmed exact, per the Phase 6 section above).
+What's lost is the *trust-minimized* option: today, earning staking rewards without self-hosting
+means trusting a custodian with actual coin custody, not just delegating stake-signing authority.
+Every downstream client already represents this honestly rather than papering over it — the
+explorer reports a `null` P2CS stats field rather than a fabricated one, the website's
+`staking.html` states outright that delegated staking "needs a consensus feature — P2CS — that
+doesn't exist yet," and the mobile/web wallets expose only the working custodial flow. Worth
+flagging explicitly: this project's Shariah-compliance framing leans on users never surrendering
+custody of their coins, and a custodial-only staking story is a materially different trust model
+than that — this is a values question bound up in the decision, not just a technical one.
+
+**No implementation work, prototype, or partial build was done — this was scoping only, per
+instruction.** The decision (build P2CS, or ship custodial-only and defer it past initial mainnet
+launch) is left open; `TODO-HUMAN` row 2 below is updated to point here for context but not marked
+resolved.
+
 ## Phase 4 — ElectrumX (light-client backend)
 
 Forked CAC's own `electrumx-cac` (itself a fork of `CoinBlack/electrumx-blk`, Blackcoin's ElectrumX)
@@ -2208,7 +2271,7 @@ those are removed.
 | # | Item | Blocks |
 |---|---|---|
 | 1 | **Genesis key ceremony.** Choose the mainnet premine outputs — enough single-key outputs to bootstrap staking — then re-mine mainnet genesis and clear the placeholder flag | Mainnet |
-| 2 | **P2CS does not exist in CAC.** The prompt assumes it is reusable in Phases 3.4, 5.3, 6.2, 7.2 and 8.2; it is an unbuilt consensus feature. Build it, or ship custodial-only and defer? | Phase 3 |
+| 2 | **P2CS does not exist in CAC.** The prompt assumes it is reusable in Phases 3.4, 5.3, 6.2, 7.2 and 8.2; it is an unbuilt consensus feature. Build it, or ship custodial-only and defer? Scoped (not built, decision still open) — see "P2CS (cold-staking delegation): scoped, decision still open" in the Phase 3 section above for what it would require, relative size, and what deferring costs | Phase 3 |
 | 3 | The first staker at testnet and mainnet launch must run with `-maxtipage` longer than the genesis block's age, or it will not leave initial block download | Phase 2 |
 | 4 | Register BIP44 coin type 9770 via SLIP-0044 | Phase 10 |
 | 5 | Shariah advisory board review. No endorsement, scholar name or certification to be written anywhere until real | Phase 9 |
