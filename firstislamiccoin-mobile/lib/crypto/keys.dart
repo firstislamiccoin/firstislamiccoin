@@ -1,9 +1,14 @@
 /// BIP39 mnemonic + BIP32 HD key derivation for FirstIslamicCoin.
 ///
 /// Derivation path: m/44'/coinType'/0'/0/index (BIP44 external chain),
-/// where coinType comes from NetworkConfig (see PARAMETERS.md section 2 --
-/// mainnet's 3377 is an unregistered SLIP-44 placeholder, testnet uses the
-/// standard shared testnet index 1).
+/// where coinType comes from NetworkConfig -- see its `bip44CoinType` field
+/// doc for the mainnet/testnet split (mainnet's 9770 is an unregistered
+/// SLIP-44 placeholder; testnet uses the standard shared testnet index 1).
+/// (This comment used to cite a `PARAMETERS.md` and CAC's coin type 3377 --
+/// both leftover from the CAC fork this file came from and never updated
+/// for FIC: this repo has no PARAMETERS.md, and FIC's own coin type is
+/// 9770, not 3377. See firstislamiccoin-core/src/wallet/scriptpubkeyman.cpp
+/// for the ground truth this wallet's coin types must match.)
 library;
 
 import 'dart:typed_data';

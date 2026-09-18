@@ -254,6 +254,40 @@ not a rushed guess. Tracked as TODO-HUMAN below; this is the first time
 these tests have been run against a real Flutter SDK, since none was
 available in this project's environment before this phase.
 
+**Update, later pass, both root-caused and fixed — the test's expectation
+was wrong in one case, the implementation was wrong in the other:**
+
+- `address_test.dart`'s bech32 case: the fixture's `expectedHash` hex
+  literal was missing its trailing nibble (`...683f23`, 39 hex chars, one
+  short of the real 40). Decoding the address by hand with a standalone
+  BIP173 bech32 implementation confirms the real witness program is 20
+  bytes ending `...683f23d` — `decodeAddress` was already correct (20
+  bytes is also the only length BIP141 allows for a P2WPKH program); the
+  test fixture had the typo. Fixed the fixture, and made the test file's
+  `_hexToBytes` helper throw on odd-length input instead of silently
+  floor-dividing it away, since that silent truncation is what let a
+  1-character typo turn into a confusing byte-count failure instead of an
+  immediate parse error. (The P2PKH fixture two tests above it had the same
+  class of typo — one stray extra hex character — which `_hexToBytes`'s old
+  silent-truncation behavior happened to swallow harmlessly since the extra
+  character was the very last one; fixed that fixture too while here.)
+- `keys_test.dart`'s coin-type case: `lib/config/network_config.dart` set
+  `bip44CoinType: 9770` for **both** mainnet and testnet, so the two
+  networks' derivation paths — and therefore keys — were identical for
+  the same mnemonic. This matched what this document and
+  `docs/CHANGELOG-FIC.md`'s Phase 5 section both claimed ("FIC uses 9770
+  uniformly"), but that claim doesn't match the actual node behavior in
+  `firstislamiccoin-core/src/wallet/scriptpubkeyman.cpp`, which only uses
+  9770 for mainnet and keeps the standard SLIP-44 shared testnet index `1`
+  for testnet/regtest (`if (Params().IsTestChain()) desc_prefix += "/1h";
+  else desc_prefix += "/9770h";`) — the same mainnet-differs/
+  testnet-and-regtest-share pattern every other chain parameter in this
+  wallet follows. The mobile wallet's testnet coin type was the actual bug:
+  fixed to `1`, which also matches `keys.dart`'s own (until now stale,
+  CAC-era) derivation-path comment. See `lib/config/network_config.dart`'s
+  `bip44CoinType` field doc for the full trail. Re-ran the full `flutter
+  test` suite after both fixes: all tests pass, no regressions.
+
 **`flutter pub outdated`**: 25 direct/transitive dependencies are pinned
 below their latest resolvable version — none are security advisories (pub.dev
 has no CVE feed equivalent to `pip-audit`/`npm audit` consulted here), several
@@ -266,11 +300,14 @@ than bumped blind, for the same reason as the deprecation notices above.
 
 ## Open `TODO-HUMAN` from this review
 
-- Investigate the two failing mobile crypto tests
-  (`address_test.dart`'s bech32 P2WPKH testnet round-trip,
-  `keys_test.dart`'s mainnet/testnet coin-type key-derivation inequality) —
-  real, reproducible failures against a real Flutter SDK, not yet
-  root-caused.
+- ~~Investigate the two failing mobile crypto tests~~ — done, both
+  root-caused and fixed: `address_test.dart`'s bech32 fixture had a
+  transcription typo (missing hex nibble), the implementation was correct;
+  `keys_test.dart`'s failure was a real bug — testnet's `bip44CoinType` in
+  `lib/config/network_config.dart` was wrongly set to mainnet's value
+  (9770) instead of the standard testnet index (1) the node itself
+  actually uses. See "6. `flutter pub outdated`/`flutter analyze`/`flutter
+  test`" above for the full evidence trail.
 - Decide on and test the `Radio`/`RadioGroup` and `value`/`initialValue`
   Flutter API migrations once a device/emulator is available (same gap as
   existing TODO-HUMAN row 15).

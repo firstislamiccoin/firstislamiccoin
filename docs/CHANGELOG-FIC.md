@@ -1730,10 +1730,15 @@ keep a CAC feature), or new work (localization, iOS permission fix) this phase a
 
 `lib/config/network_config.dart` now carries FIC's real values from `firstislamiccoin-core/src/kernel/chainparams.cpp`,
 not CAC's: mainnet P2PKH `36`/P2SH `28`/WIF `164`, bech32 HRP `fic`; testnet P2PKH `111`/P2SH
-`196`/WIF `239`, bech32 HRP `tfic`. BIP44 coin type is `9770` on **both** networks — unlike CAC
-(and unlike SLIP-44 convention generally), `docs/CHANGELOG-FIC.md`'s own earlier chainparams work
-established FIC uses 9770 uniformly rather than the standard testnet index `1`. The message-signing
-magic string changed to match `firstislamiccoin-core/src/util/message.cpp` exactly:
+`196`/WIF `239`, bech32 HRP `tfic`. BIP44 coin type set to `9770` on **both** networks here —
+unlike CAC (and unlike SLIP-44 convention generally), this document's own earlier chainparams
+table (this Phase's "Chain parameters" section, `BIP44 coin type 9770`) was read as establishing
+FIC uses 9770 uniformly rather than the standard testnet index `1`. **That reading was wrong** —
+see the Phase 10 security-review update below, which found `firstislamiccoin-core/src/wallet/
+scriptpubkeyman.cpp` only uses 9770 for mainnet and keeps `1` for testnet/regtest, the same
+mainnet-differs pattern as every other value in that table. Fixed in the later pass; left as an
+accurate record of the mistake here rather than silently rewritten. The message-signing magic
+string changed to match `firstislamiccoin-core/src/util/message.cpp` exactly:
 `"FirstIslamicCoin Signed Message:\n"`.
 
 ### Decision 3 removed the wrapped-token/DEX surface entirely
@@ -2413,6 +2418,16 @@ fund-loss risk of a wrong fix to address/key-derivation code. Full detail, inclu
 other `flutter analyze`/`pub outdated` findings were left alone rather than bumped blind, is in
 `docs/security-review.md`.
 
+**Update, later pass:** both root-caused and fixed. `address_test.dart`'s bech32 fixture had a
+transcription typo (a hex literal one nibble short of the real 20-byte witness program) — the
+address-decoding implementation was already correct. `keys_test.dart`'s failure was a genuine bug:
+`network_config.dart` set testnet's BIP44 coin type to mainnet's `9770` instead of the standard
+testnet index `1` that `firstislamiccoin-core/src/wallet/scriptpubkeyman.cpp` actually derives at,
+making the mobile wallet's testnet keys not match what a real FIC testnet node would derive from
+the same mnemonic. Fixed; full evidence trail in `docs/security-review.md`'s section 6 update.
+`flutter test` now passes in full (44 passed, 6 skipped integration tests needing a live gateway,
+0 failures).
+
 ### cppcheck: zero findings in FIC's own code
 
 Scoped to the 37 non-test files this project has actually changed (found via the `// 
@@ -2483,7 +2498,7 @@ those are removed.
 | 20 | Create a FirstIslamicCoin GitHub org/repository so `.github/workflows/release.yml` has somewhere to actually run, and obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts | Phase 3 |
 | 21 | ElectrumX: provision two real servers and the `electrum{1,2}`/`testnet-electrum{1,2}.firstislamiccoin.com` DNS records, run `firstislamiccoin-infra/provisioning/electrumx/provision.sh` against them once a public `firstislamiccoin-electrumx` repository URL exists | Phase 4 |
 | 22 | ElectrumX: `tests/test_blocks.py::test_all_coins_are_covered` has no mainnet block fixture for `FirstIslamicCoin` (CAC's own `CodexaCoin` never had one either) — add `tests/blocks/firstislamiccoin_mainnet_0.json` once the real mainnet genesis block bytes exist post-key-ceremony | Phase 4 / Mainnet |
-| 23 | Root-cause two real, currently-failing mobile wallet crypto tests (`address_test.dart`'s bech32 P2WPKH testnet round-trip, `keys_test.dart`'s mainnet/testnet coin-type key derivation) before shipping the wallet — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
+| 23 | ~~Root-cause two real, currently-failing mobile wallet crypto tests~~ — done, both: `address_test.dart`'s bech32 fixture had a typo'd hex literal (implementation was correct); `keys_test.dart`'s failure was a real bug, testnet's BIP44 coin type wrongly set to mainnet's 9770 instead of the standard testnet index 1 the node itself derives at (`scriptpubkeyman.cpp`). Fixed in `lib/config/network_config.dart`; full `flutter test` suite passes — see `docs/security-review.md` §6 | Phase 10 / Phase 5 |
 | 24 | Mobile: decide on and test the `Radio`→`RadioGroup` and `value`→`initialValue` Flutter API migrations, and review major-version-behind dependencies (`firebase_core`, `local_auth`, `mobile_scanner`, `share_plus`), once a real device/emulator is available | Phase 10 / Phase 5 |
 | 25 | Genesis key ceremony execution itself (see `docs/LAUNCH-RUNBOOK.md`) — choosing and moving to the real 3-of-5 multisig cold wallet and single-key bootstrap outputs, re-mining mainnet genesis, clearing `m_genesis_premine_placeholder`, tagging the real `v1.0.0` once mainnet actually exists | Mainnet |
 | 26 | ~~Finish triaging the still-untriaged functional test failures~~ — done, fully: every file originally listed here (P2P/IBD timeout scaling, `feature_signet`/`feature_taproot`/`feature_csv_activation`/`feature_block`/`feature_assumevalid`, `mining_basic`, `tool_signet_miner`, `mempool_package_limits`, `rpc_psbt`/`rpc_rawtransaction`, `wallet_avoidreuse`/`wallet_groups`/`wallet_orphanedreward`/`wallet_signrawtransactionwithwallet`) plus several found along the way (`p2p_eviction`, `p2p_ibd_stalling`, `p2p_headers_sync_with_minchainwork`, `p2p_orphan_handling`, `wallet_basic`, `tool_wallet`, `wallet_abandonconflict`, `wallet_spend_unconfirmed`) are fully triaged and green — see the fifth/sixth/seventh-pass Phase 2 sections above. `feature_pos_reorg` (FIC-native, no CodexaCoin equivalent, never previously run) was the last untriaged file: needed no fixes at all, confirmed passing on two independent runs (real PoW→PoS reorg, exact post-reorg supply accounting on both nodes) | Phase 2 |

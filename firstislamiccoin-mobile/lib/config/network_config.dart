@@ -23,13 +23,35 @@ class NetworkConfig {
   /// bech32 human-readable part for P2WPKH/P2WSH/P2TR addresses.
   final String bech32Hrp;
 
-  /// BIP44 coin type for HD derivation (m/44'/coinType'/...). FIC uses
-  /// 9770 on every network, mainnet included -- unlike most coins, which
-  /// follow SLIP-44 convention and use testnet index 1, FIC's own testnet
-  /// chainparams.cpp derivation comments use 9770 uniformly (see
-  /// docs/CHANGELOG-FIC.md). Unregistered with SLIP-44 pre-launch, same
-  /// status CAC's 3377 had -- see docs/cac-audit.md section 5 and
-  /// docs/CHANGELOG-FIC.md's TODO-HUMAN table.
+  /// BIP44 coin type for HD derivation (m/44'/coinType'/...).
+  ///
+  /// This does NOT match on mainnet vs. testnet, despite what an earlier
+  /// version of this comment (and docs/CHANGELOG-FIC.md's Phase 5 section)
+  /// claimed. The actual, single-source-of-truth behaviour is in
+  /// firstislamiccoin-core/src/wallet/scriptpubkeyman.cpp:
+  ///
+  ///   // Mainnet derives at 0', testnet and regtest derive at 1'
+  ///   if (Params().IsTestChain()) {
+  ///       desc_prefix += "/1h";
+  ///   } else {
+  ///       // FirstIslamicCoin: BIP44 coin type 9770. Not yet registered...
+  ///       desc_prefix += "/9770h";
+  ///   }
+  ///
+  /// i.e. only mainnet uses the FIC-specific, unregistered 9770 value;
+  /// testnet (and regtest) keep the standard, SLIP-44-shared testnet index
+  /// `1` -- exactly the same mainnet-differs/testnet-and-regtest-share
+  /// pattern as every other chain parameter in this file (P2PKH/P2SH/WIF
+  /// version bytes, bech32 HRP). Using 9770 for testnet here as well (the
+  /// bug this comment used to describe as intentional) made this wallet
+  /// derive testnet keys/addresses that don't match what a real FIC
+  /// testnet node wallet restoring the same mnemonic would derive --
+  /// confirmed by test/crypto/keys_test.dart's "mainnet and testnet coin
+  /// types derive different keys" failing an inequality assertion (they
+  /// came out equal) until this was fixed. Mainnet's 9770 is unregistered
+  /// with SLIP-44 pre-launch, same status CAC's 3377 had -- see
+  /// docs/cac-audit.md section 5 and docs/CHANGELOG-FIC.md's TODO-HUMAN
+  /// table.
   final int bip44CoinType;
 
   /// Staking-service gateway API base URL (Phase 6 -- not built for FIC
@@ -70,7 +92,8 @@ class NetworkConfig {
     p2shVersion: 196, // 0xc4
     wifVersion: 239, // 0xef
     bech32Hrp: 'tfic',
-    bip44CoinType: 9770,
+    bip44CoinType: 1, // standard SLIP-44 shared testnet index, matching
+    // scriptpubkeyman.cpp's IsTestChain() branch -- see the field doc above.
     gatewayBaseUrl: 'https://staking-api.testnet.firstislamiccoin.com/v1',
   );
 

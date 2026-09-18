@@ -34,8 +34,17 @@ void main() {
     test('testnet: decodes and re-encodes a real address from the live testnet node', () {
       // firstislamiccoin-cli -testnet getnewaddress "" legacy
       const sample = 'mhEHcfXxicGKESzqN2DwdwevFzDJE8fXo5';
+      // Base58Check-decoding `sample` by hand confirms the real 20-byte hash
+      // ends in "...00d5e" -- the previous fixture here had a stray trailing
+      // "8" (41 hex chars, not 40) from a transcription slip. It happened to
+      // not fail this test because `_hexToBytes` silently truncates
+      // odd-length hex to floor(length/2) bytes, which -- purely by luck,
+      // since the extra character was the very last one -- dropped exactly
+      // the stray digit and left the other 20 bytes intact. See the bech32
+      // P2WPKH testnet case below for the same class of typo where the
+      // dropped character wasn't at the end, and did change the result.
       final expectedHash = Uint8List.fromList(
-          _hexToBytes('12c94ef860ac24bf144ffa48f97950362db00d5e8')); // from getaddressinfo's scriptPubKey
+          _hexToBytes('12c94ef860ac24bf144ffa48f97950362db00d5e')); // from getaddressinfo's scriptPubKey
       final decoded = decodeAddress(sample, NetworkConfig.testnet);
       expect(decoded.type, AddressType.p2pkh);
       expect(decoded.hash, expectedHash);
@@ -76,8 +85,21 @@ void main() {
     test('testnet: decodes and re-encodes a real address from the live testnet node', () {
       // firstislamiccoin-cli -testnet getnewaddress "" bech32
       const sample = 'tfic1qajsvccmkxck7tvf0suz55v0dlqmg8u3ay6ln39';
+      // Root cause of this test's prior failure: this fixture was missing
+      // its trailing hex nibble ("...683f23" instead of the real
+      // "...683f23d", 39 hex chars instead of 40). Independently decoding
+      // `sample` by hand with a standalone BIP173 bech32 implementation
+      // confirms the witness program is genuinely 20 bytes ending in
+      // "...683f23d" -- 20 bytes is also the only length BIP141 allows for
+      // a P2WPKH (witness version 0) program, since it's HASH160 of the
+      // pubkey. So `decodeAddress` producing 20 bytes was always correct;
+      // it was this fixture's expected value that was wrong (and, on top of
+      // that, `_hexToBytes` silently truncated the odd-length typo'd hex to
+      // 19 bytes instead of throwing, which is how a 1-character transcription
+      // slip turned into a byte-count assertion failure instead of a loud
+      // parse error).
       final expectedHash =
-          Uint8List.fromList(_hexToBytes('eca0cc6376362de5b12f87054a31edf83683f23')); // getaddressinfo's witness_program
+          Uint8List.fromList(_hexToBytes('eca0cc6376362de5b12f87054a31edf83683f23d')); // getaddressinfo's witness_program
       final decoded = decodeAddress(sample, NetworkConfig.testnet);
       expect(decoded.type, AddressType.p2wpkh);
       expect(decoded.hash, expectedHash);
@@ -105,6 +127,15 @@ void main() {
 }
 
 List<int> _hexToBytes(String hex) {
+  // An odd-length hex string can only mean a transcription typo in a test
+  // fixture (bytes are always whole hex-digit pairs) -- fail loudly instead
+  // of floor-dividing and silently dropping the dangling nibble, which is
+  // exactly how a missing/extra character in a fixture above turned into a
+  // confusing byte-count assertion failure instead of an immediate, obvious
+  // parse error.
+  if (hex.length.isOdd) {
+    throw FormatException('Odd-length hex string (typo?): $hex');
+  }
   final out = List<int>.filled(hex.length ~/ 2, 0);
   for (var i = 0; i < out.length; i++) {
     out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
