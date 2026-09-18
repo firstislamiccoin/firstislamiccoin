@@ -232,7 +232,13 @@ class SignRawTransactionWithWalletTest(BitcoinTestFramework):
         # is active on regtest. The spend below exercises it.
 
         # Create a P2WSH script with CLTV
-        script = CScript([100, OP_CHECKLOCKTIMEVERIFY, OP_DROP])
+        # FirstIslamicCoin: upstream's 100 coincidentally matched its own
+        # COINBASE_MATURITY (100), which is what the initial
+        # "self.generate(self.nodes[0], COINBASE_MATURITY + 1)" mines up to.
+        # This fork's COINBASE_MATURITY is 10, so that same call only reaches
+        # height ~11 -- nowhere near a hardcoded 100. Lowered to a value well
+        # below the height actually reached at this point in the test.
+        script = CScript([5, OP_CHECKLOCKTIMEVERIFY, OP_DROP])
         address = script_to_p2wsh(script)
 
         # Fund that address and make the spend
@@ -260,7 +266,10 @@ class SignRawTransactionWithWalletTest(BitcoinTestFramework):
 
     def test_signing_with_missing_prevtx_info(self):
         txid = "1d1d4e24ed99057e84c3f80fd8fbec79ed9e1acee37da269356ecea000000000"
-        for type in ["bech32", "p2sh-segwit", "legacy"]:
+        # FirstIslamicCoin: getnewaddress() rejects P2SH_SEGWIT outright
+        # ("P2SH_SEGWIT addresses are not welcome", src/wallet/rpc/addresses.cpp)
+        # -- see the same skip already made in rpc_psbt.py.
+        for type in ["bech32", "legacy"]:
             self.log.info(f"Test signing with missing prevtx info ({type})")
             addr = self.nodes[0].getnewaddress("", type)
             addrinfo = self.nodes[0].getaddressinfo(addr)

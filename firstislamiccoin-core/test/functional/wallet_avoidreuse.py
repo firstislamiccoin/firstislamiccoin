@@ -319,8 +319,13 @@ class AvoidReuseTest(BitcoinTestFramework):
 
         # getbalances and listunspent should show the remaining outputs
         # in the reused address as used/reused
-        assert_unspent(self.nodes[1], total_count=2, total_sum=96, reused_count=1, reused_sum=1, margin=0.01)
-        assert_balances(self.nodes[1], mine={"used": 1, "trusted": 95}, margin=0.01)
+        # FirstIslamicCoin: upstream's 0.01 margin assumed Bitcoin's low
+        # default relay fee; this fork's 100 sat/vB floor makes node1's
+        # sendtoaddress(ret_addr, 5) fee (paid from its own balance) larger,
+        # so the remaining total falls further below 96 -- widened margin,
+        # confirmed empirically against the real shortfall.
+        assert_unspent(self.nodes[1], total_count=2, total_sum=96, reused_count=1, reused_sum=1, margin=0.02)
+        assert_balances(self.nodes[1], mine={"used": 1, "trusted": 95}, margin=0.02)
 
     def test_full_destination_group_is_preferred(self):
         '''
