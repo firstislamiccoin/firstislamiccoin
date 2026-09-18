@@ -97,6 +97,7 @@ from test_framework.util import (
     assert_equal,
     random_bytes,
 )
+from test_framework.fic import get_min_fee_sat
 from test_framework.wallet_util import generate_keypair
 from test_framework.key import (
     generate_privkey,
@@ -639,8 +640,19 @@ SIG_POP_BYTE = {"failure": {"sign": byte_popper(default_sign)}}
 SINGLE_SIG = {"inputs": [getter("sign")]}
 SIG_ADD_ZERO = {"failure": {"sign": zero_appender(default_sign)}}
 
-DUST_LIMIT = 600
-MIN_FEE = 50000
+# FirstIslamicCoin: upstream's flat 600 sat DUST_LIMIT is well below this fork's real
+# dust-relay threshold, since DUST_RELAY_TX_FEE (src/policy/policy.h) is 100000 sat/kvB here
+# (matching the 100 sat/vbyte consensus fee floor) rather than upstream's 3000 sat/kvB.
+# GetDustThreshold() works out to 18200 sat for a legacy/P2PKH output (182 vbytes to spend
+# it) and 9800 sat for a P2WPKH one (98 vbytes) -- see test/functional/wallet_keypool.py and
+# mempool_dust.py for the same figures. host_spks below is a mix of both types, so use the
+# larger (P2PKH) threshold with a safety margin as the floor for every output built here.
+DUST_LIMIT = 20000
+# FirstIslamicCoin: the flat MIN_FEE constant upstream used here has been replaced by a
+# per-transaction, vsize-based fee computed via get_min_fee_sat() at its two call sites, since
+# this fork's consensus-level 100 sat/vbyte fee floor makes a single flat number wrong for the
+# wide range of transaction sizes (from a two-output legacy tx up to a huge taproot
+# script-path spend) this file constructs.
 
 # === Actual test cases ===
 
@@ -1286,7 +1298,10 @@ class TaprootTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-par=1"]]
+        # FIC: regtest rejects proof-of-work blocks above height 500 (reject-pow) unless
+        # -lastpowblock is raised. This file mines a great many blocks via raw submitblock()
+        # (one funding block plus one accepted block per spender combination tested).
+        self.extra_args = [["-par=1", "-lastpowblock=2147483646"]]
 
     def block_submit(self, node, txs, msg, err_msg, cb_pubkey=None, fees=0, sigops_weight=0, witness=False, accept=False):
 
@@ -1340,7 +1355,12 @@ class TaprootTest(BitcoinTestFramework):
         host_spks = []
         host_pubkeys = []
         for i in range(16):
-            addr = node.getnewaddress(address_type=random.choice(["legacy", "p2sh-segwit", "bech32"]))
+            # FirstIslamicCoin: getnewaddress() rejects address_type="p2sh-segwit" outright
+            # ("P2SH_SEGWIT addresses are not welcome", src/wallet/rpc/addresses.cpp) -- this is
+            # an intentional restriction inherited verbatim from the CodexaCoin import, not
+            # something this fork changed, so it's not something a test should work around by
+            # constructing such an address any other way; just don't ask for one here.
+            addr = node.getnewaddress(address_type=random.choice(["legacy", "bech32"]))
             info = node.getaddressinfo(addr)
             spk = bytes.fromhex(info['scriptPubKey'])
             host_spks.append(spk)
@@ -1389,6 +1409,16 @@ class TaprootTest(BitcoinTestFramework):
             fund_tx.vout.append(CTxOut(balance - 10000, random.choice(host_spks)))
             # Ask the wallet to sign
             fund_tx = tx_from_hex(node.signrawtransactionwithwallet(fund_tx.serialize().hex())["hex"])
+            # FirstIslamicCoin: this fork enforces a consensus-level minimum fee of 100
+            # sat/vbyte (get_min_fee_sat() in test_framework/fic.py). These funding
+            # transactions can have up to 50 inputs and up to 10000 outputs, so the flat
+            # 10000 sat fee above (sized for upstream, where it's merely a relay-fee nicety)
+            # is nowhere near enough here. Use the just-signed transaction's real vsize to
+            # size the fee properly, then adjust the change output and re-sign (a changed
+            # output value invalidates the existing SIGHASH_ALL signatures).
+            fund_fee = get_min_fee_sat(fund_tx.get_vsize()) + 1000
+            fund_tx.vout[-1].nValue = balance - fund_fee
+            fund_tx = tx_from_hex(node.signrawtransactionwithwallet(fund_tx.serialize().hex())["hex"])
             # Construct UTXOData entries
             fund_tx.rehash()
             for i in range(count_this_tx):
@@ -1399,7 +1429,7 @@ class TaprootTest(BitcoinTestFramework):
                     normal_utxos.append(utxodata)
                 done += 1
             # Mine into a block
-            self.block_submit(node, [fund_tx], "Funding tx", None, random.choice(host_pubkeys), 10000, MAX_BLOCK_SIGOPS_WEIGHT, True, True)
+            self.block_submit(node, [fund_tx], "Funding tx", None, random.choice(host_pubkeys), fund_fee, MAX_BLOCK_SIGOPS_WEIGHT, True, True)
 
         # Consume groups of choice(input_coins) from utxos in a tx, testing the spenders.
         self.log.info("- Running %i spending tests" % done)
@@ -1448,27 +1478,92 @@ class TaprootTest(BitcoinTestFramework):
 
             # Decide fee, and add CTxIns to tx.
             amount = sum(utxo.output.nValue for utxo in input_utxos)
-            fee = min(random.randrange(MIN_FEE * 2, MIN_FEE * 4), amount - DUST_LIMIT)  # 10000-20000 sat fee
-            in_value = amount - fee
             tx.vin = [CTxIn(outpoint=utxo.outpoint, nSequence=random.randint(min_sequence, 0xffffffff)) for utxo in input_utxos]
             tx.wit.vtxinwit = [CTxInWitness() for _ in range(len(input_utxos))]
-            sigops_weight = sum(utxo.spender.sigops_weight for utxo in input_utxos)
+            sigops_weight_base = sum(utxo.spender.sigops_weight for utxo in input_utxos)
             self.log.debug("Test: %s" % (", ".join(utxo.spender.comment for utxo in input_utxos)))
 
             # Add 1 to 4 random outputs (but constrained by inputs that require mismatching outputs)
             num_outputs = random.choice(range(1, 1 + min(4, 4 if first_mismatch_input is None else first_mismatch_input)))
-            assert in_value >= 0 and fee - num_outputs * DUST_LIMIT >= MIN_FEE
-            for i in range(num_outputs):
-                tx.vout.append(CTxOut())
-                if in_value <= DUST_LIMIT:
-                    tx.vout[-1].nValue = DUST_LIMIT
-                elif i < num_outputs - 1:
-                    tx.vout[-1].nValue = in_value
-                else:
-                    tx.vout[-1].nValue = random.randint(DUST_LIMIT, in_value)
-                in_value -= tx.vout[-1].nValue
-                tx.vout[-1].scriptPubKey = random.choice(host_spks)
-                sigops_weight += CScript(tx.vout[-1].scriptPubKey).GetSigOpCount(False) * WITNESS_SCALE_FACTOR
+            # FirstIslamicCoin: decide the output scriptPubKeys once, up front, rather than letting
+            # build_outputs() below draw them fresh via random.choice() on every call. build_outputs()
+            # is called twice (see the two-pass fee sizing below) and different-typed host_spks entries
+            # (legacy/P2PKH vs bech32/P2WPKH) differ in serialized size by a few bytes each; drawing
+            # them independently each call could make the final, real build a bit larger than the dry
+            # run measured, silently eating into the fee margin.
+            output_spks = [random.choice(host_spks) for _ in range(num_outputs)]
+
+            def build_outputs(fee):
+                """(Re)build tx.vout for a candidate fee. Returns (leftover in_value, sigops_weight)."""
+                tx.vout = []
+                in_value = amount - fee
+                assert in_value >= num_outputs * DUST_LIMIT
+                sigops_weight = sigops_weight_base
+                for i in range(num_outputs):
+                    tx.vout.append(CTxOut())
+                    if in_value <= DUST_LIMIT:
+                        tx.vout[-1].nValue = DUST_LIMIT
+                    elif i < num_outputs - 1:
+                        tx.vout[-1].nValue = in_value
+                    else:
+                        tx.vout[-1].nValue = random.randint(DUST_LIMIT, in_value)
+                    in_value -= tx.vout[-1].nValue
+                    tx.vout[-1].scriptPubKey = output_spks[i]
+                    sigops_weight += CScript(tx.vout[-1].scriptPubKey).GetSigOpCount(False) * WITNESS_SCALE_FACTOR
+                return in_value, sigops_weight
+
+            def compute_input_data(dump=False):
+                """Precompute one satisfying and one failing scriptSig/witness for each input (needs tx.vout final)."""
+                result = []
+                for i in range(len(input_utxos)):
+                    fn = input_utxos[i].spender.sat_function
+                    fail = None
+                    success = fn(tx, i, [utxo.output for utxo in input_utxos], True)
+                    if not input_utxos[i].spender.no_fail:
+                        fail = fn(tx, i, [utxo.output for utxo in input_utxos], False)
+                    result.append((fail, success))
+                    if dump and self.options.dump_tests:
+                        dump_json_test(tx, input_utxos, i, success, fail)
+                return result
+
+            # FirstIslamicCoin: this fork enforces a consensus-level minimum fee of 100 sat/vbyte
+            # (get_min_fee_sat() in test_framework/fic.py), unlike upstream Bitcoin where a
+            # 0-fee (or trivially low fee) transaction is still consensus-valid. Taproot
+            # script-path spends generated here can carry enormous witnesses (huge scripts,
+            # deep control blocks, hundreds of signatures), so no single flat fee is right for
+            # all the spenders under test. Build the transaction once with a zero fee purely to
+            # measure its real worst-case vsize -- using, for each input, whichever of its
+            # success/failure witness is larger, since either may end up being the one actually
+            # used below -- then rebuild it (which requires re-signing, since a different fee
+            # changes the output values most sighashes commit to) with a fee that actually
+            # clears the floor for that size, plus a margin for the small width differences
+            # (e.g. variable-length DER signatures, or the randomly-chosen output scripts)
+            # between the two builds.
+            build_outputs(0)
+            dry_input_data = compute_input_data()
+            for i in range(len(input_utxos)):
+                fail, success = dry_input_data[i]
+                choice = success
+                if fail is not None:
+                    fail_size = len(fail[0]) + sum(len(x) for x in fail[1])
+                    success_size = len(success[0]) + sum(len(x) for x in success[1])
+                    if fail_size > success_size:
+                        choice = fail
+                tx.vin[i].scriptSig, tx.wit.vtxinwit[i].scriptWitness.stack = choice
+            # FirstIslamicCoin: margin is bigger than the +1000 used elsewhere in this file/project,
+            # for two reasons. First, signing here can involve multiple legacy/witv0 (DER-encoded,
+            # so variable-length by a byte or two) signatures per transaction rather than just one.
+            # Second, and bigger: the output-value loop above (inherited unmodified from upstream)
+            # gives its *entire* budget to the first non-last output once num_outputs > 1 (the
+            # `elif i < num_outputs - 1: tx.vout[-1].nValue = in_value` branch), leaving every
+            # following output to fall into the `in_value <= DUST_LIMIT` branch and get pinned to
+            # exactly DUST_LIMIT regardless of how negative in_value has gone -- so the transaction
+            # actually spends up to (num_outputs - 1) * DUST_LIMIT more than the fee budget handed to
+            # build_outputs() here, silently eating into (and, before this margin accounted for it,
+            # exceeding) whatever fee we computed. Upstream's tiny 600 sat DUST_LIMIT made this
+            # negligible; this fork's real ~20000 sat dust threshold (see DUST_LIMIT above) does not.
+            fee = get_min_fee_sat(tx.get_vsize()) + 3000 + DUST_LIMIT * num_outputs
+            in_value, sigops_weight = build_outputs(fee)
             fee += in_value
             assert fee >= 0
 
@@ -1476,17 +1571,8 @@ class TaprootTest(BitcoinTestFramework):
             cb_pubkey = random.choice(host_pubkeys)
             sigops_weight += 1 * WITNESS_SCALE_FACTOR
 
-            # Precompute one satisfying and one failing scriptSig/witness for each input.
-            input_data = []
-            for i in range(len(input_utxos)):
-                fn = input_utxos[i].spender.sat_function
-                fail = None
-                success = fn(tx, i, [utxo.output for utxo in input_utxos], True)
-                if not input_utxos[i].spender.no_fail:
-                    fail = fn(tx, i, [utxo.output for utxo in input_utxos], False)
-                input_data.append((fail, success))
-                if self.options.dump_tests:
-                    dump_json_test(tx, input_utxos, i, success, fail)
+            # Precompute one satisfying and one failing scriptSig/witness for each input, for real this time.
+            input_data = compute_input_data(dump=True)
 
             # Sign each input incorrectly once on each complete signing pass, except the very last.
             for fail_input in list(range(len(input_utxos))) + [None]:
@@ -1511,6 +1597,7 @@ class TaprootTest(BitcoinTestFramework):
                     node.sendrawtransaction(tx.serialize().hex(), 0)
                     assert node.getmempoolentry(tx.hash) is not None, "Failed to accept into mempool: " + msg
                 else:
+                    self.log.debug("Expect nonstandard rejection: %s" % msg)
                     assert_raises_rpc_error(-26, None, node.sendrawtransaction, tx.serialize().hex(), 0)
                 # Submit in a block
                 self.block_submit(node, [tx], msg, witness=True, accept=fail_input is None, cb_pubkey=cb_pubkey, fees=fee, sigops_weight=sigops_weight, err_msg=expected_fail_msg)
@@ -1636,8 +1723,25 @@ class TaprootTest(BitcoinTestFramework):
             if i & 1:
                 tx.vout = list(reversed(tx.vout))
             tx.nLockTime = 0
+            # FirstIslamicCoin: as with the synthetic coinbase above, pin nTime so this
+            # (version-1) transaction's txid is deterministic instead of following the
+            # wall-clock second CTransaction() defaults it to.
+            tx.nTime = 0
+            # FirstIslamicCoin: this fork enforces a consensus-level minimum fee of 100
+            # sat/vbyte (get_min_fee_sat() in test_framework/fic.py), unlike upstream Bitcoin
+            # where these 0-fee crediting transactions are consensus-valid. Deduct the fee from
+            # the anyone-can-spend "change" output that chains into the next crediting
+            # transaction, not from `val` -- `val` is recorded below as the actual amount of the
+            # UTXO being tested, and the "Spending txn" self-check further down commits (via its
+            # BIP341 sighashes) to these exact input amounts, so `val` must stay untouched. Note
+            # this still shifts every crediting txid (nTime and the reduced change value both
+            # change the serialized bytes), which is why the "Spending txn" self-check's expected
+            # hash below had to be updated too.
+            fee = get_min_fee_sat(tx.get_vsize()) + 1000
+            change_idx = 1 - (i & 1)
+            tx.vout[change_idx].nValue -= fee
             tx.rehash()
-            amount -= val
+            amount -= val + fee
             lasttxid = tx.sha256
             txn.append(tx)
             spend_info[spk]['prevout'] = COutPoint(tx.sha256, i & 1)
@@ -1754,7 +1858,16 @@ class TaprootTest(BitcoinTestFramework):
         aux = tx_test.setdefault("auxiliary", {})
         aux['fullySignedTx'] = tx.serialize().hex()
         keypath_tests.append(tx_test)
-        assert_equal(hashlib.sha256(tx.serialize()).hexdigest(), "24bab662cb55a7f3bae29b559f651674c62bcc1cd442d44715c0133939107b38")
+        # FirstIslamicCoin: this self-check's expected hash is a regression pin on the exact
+        # bytes of the deterministically-constructed transaction above, not a BIP341-mandated
+        # value, so it necessarily moves whenever those bytes do. It already had to move once
+        # for the version-1 crediting transactions' extra nTime field (see the coinbase and
+        # crediting-txn comments above); it moves again here because those same crediting
+        # transactions now also pay this fork's mandatory minimum fee, which changes their
+        # serialized bytes and therefore their txids -- which this spending transaction's
+        # inputs directly reference. Recomputed by running this (fully deterministic, no RNG
+        # involved) scenario and confirming the resulting hash reproduces across repeated runs.
+        assert_equal(hashlib.sha256(tx.serialize()).hexdigest(), "029a1e5ebc0ba677e3d8cb350ffa2cc65b2c663cda3f3468274cf42508553a80")
         # Mine the spending transaction
         self.block_submit(self.nodes[0], [tx], "Spending txn", None, sigops_weight=10000, accept=True, witness=True)
 

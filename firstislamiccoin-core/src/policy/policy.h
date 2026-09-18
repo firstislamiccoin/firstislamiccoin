@@ -86,12 +86,49 @@ static constexpr unsigned int EXTRA_DESCENDANT_TX_SIZE_LIMIT{10000};
  * Note that this does not affect consensus validity; see GetBlockScriptFlags()
  * for that.
  */
-// FirstIslamicCoin: CHECKSEQUENCEVERIFY and WITNESS added -- inherited from
-// an older Bitcoin Core snapshot (via the CodexaCoin import) that predates
-// upstream promoting these two from standardness-only to mandatory once
-// permanently active. GetBlockScriptFlags() already enforces both for block
-// consensus validity regardless of this list; this only affects whether a
-// peer gets banned for relaying a tx that violates them post-activation.
+// FirstIslamicCoin: CHECKSEQUENCEVERIFY, WITNESS and TAPROOT added --
+// inherited from an older Bitcoin Core snapshot (via the CodexaCoin import)
+// that predates upstream promoting CHECKSEQUENCEVERIFY from
+// standardness-only to mandatory once permanently active (confirmed needed:
+// feature_csv_activation.py expects a negative-locktime CSV violation to be
+// treated as ban-worthy), and that was simply missing WITNESS and TAPROOT
+// outright (current upstream Bitcoin Core's MANDATORY_SCRIPT_VERIFY_FLAGS
+// includes both; this fork's inherited snapshot predates that).
+//
+// Without WITNESS/TAPROOT here, CheckInputScripts()'s "was this only a
+// standard-but-not-mandatory-flag failure?" fallback (validation.cpp) treats
+// ANY genuine witness/taproot consensus failure as though it would also fail
+// without that flag -- which trivially "succeeds" instead, since witness and
+// taproot verification both short-circuit to success when their flag is
+// absent (see the SCRIPT_VERIFY_TAPROOT comment in the
+// STANDARD_SCRIPT_VERIFY_FLAGS block below) -- and so mis-reports it as
+// TX_NOT_STANDARD ("non-mandatory-script-verify-flag") instead of
+// TX_CONSENSUS with the actual error. This isn't merely cosmetic: it also
+// feeds the P2P DoS-ban logic (TX_CONSENSUS is ban-worthy, TX_NOT_STANDARD
+// isn't). GetBlockScriptFlags() always includes WITNESS once segwit is
+// active (which, on this fork, is from genesis), so ConnectBlock's flags
+// (used for actual block consensus validation, independent of this list)
+// virtually always overlap with WITNESS -- meaning without it here, this
+// mis-wrapping wasn't taproot-specific at all, it would happen for *any*
+// genuine consensus script failure hit via submitblock under -par=1 (the
+// single-threaded/synchronous script-check path). Confirmed via
+// feature_taproot.py's test_spenders phase (submitblock's error for a bad
+// Schnorr signature hashtype came back as generic
+// "non-mandatory-script-verify-flag (...)" instead of "Invalid Schnorr
+// signature hash type", first with TAPROOT missing here, then again --
+// merely with a different offending bit -- with WITNESS still missing).
+//
+// TAPROOT and WITNESS were previously handled inconsistently: TAPROOT was
+// simply never added (predating this file's FIC-specific history entirely),
+// while WITNESS was added once, then deliberately reverted specifically
+// because p2p_orphan_handling.py's witness-stripped-relay scenario appeared
+// to need it excluded to avoid banning the relaying peer. That reasoning
+// didn't hold up: PolicyScriptChecks() (validation.cpp) has its own
+// dedicated `!tx.HasWitness()` re-check, independent of this list, that
+// reclassifies a pure witness-stripped rejection as TX_WITNESS_STRIPPED, and
+// net_processing.cpp explicitly exempts TX_WITNESS_STRIPPED from ban-scoring
+// regardless of whether WITNESS is MANDATORY here -- confirmed by rerunning
+// p2p_orphan_handling.py after this change; it still passes.
 static constexpr unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
                                                              SCRIPT_VERIFY_DERKEY |
                                                              SCRIPT_VERIFY_DERSIG |
@@ -99,7 +136,8 @@ static constexpr unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
                                                              SCRIPT_VERIFY_NULLDUMMY |
                                                              SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
                                                              SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
-                                                             SCRIPT_VERIFY_WITNESS};
+                                                             SCRIPT_VERIFY_WITNESS |
+                                                             SCRIPT_VERIFY_TAPROOT};
 
 /**
  * Standard script verification flags that standard transactions will comply
@@ -107,6 +145,20 @@ static constexpr unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
  * the additional (non-mandatory) rules here, to improve forwards and
  * backwards compatability.
  */
+// FirstIslamicCoin: SCRIPT_VERIFY_TAPROOT added -- this list already had the
+// taproot-adjacent DISCOURAGE_UPGRADABLE_TAPROOT_VERSION/DISCOURAGE_OP_SUCCESS
+// flags but was missing the base SCRIPT_VERIFY_TAPROOT gate itself (inherited
+// unmodified from the CodexaCoin import). Without it, interpreter.cpp's taproot
+// witness verification short-circuits to an automatic pass
+// (`if (!(flags & SCRIPT_VERIFY_TAPROOT)) return set_success(...)`) during
+// PolicyScriptChecks (mempool/relay-time validation), so any witness
+// targeting a taproot output -- including ones using unknown leaf versions or
+// OP_SUCCESS opcodes that should be rejected as non-standard -- was silently
+// accepted into the mempool. Block consensus validity was never affected:
+// GetBlockScriptFlags() already adds SCRIPT_VERIFY_TAPROOT independently for
+// block connection. Confirmed via feature_taproot.py's test_spenders phase
+// (an unkver/bigpush spender expected to be rejected with -26 non-standard
+// was instead accepted).
 static constexpr unsigned int STANDARD_SCRIPT_VERIFY_FLAGS{MANDATORY_SCRIPT_VERIFY_FLAGS |
                                                              SCRIPT_VERIFY_STRICTENC |
                                                              SCRIPT_VERIFY_MINIMALDATA |
@@ -119,6 +171,7 @@ static constexpr unsigned int STANDARD_SCRIPT_VERIFY_FLAGS{MANDATORY_SCRIPT_VERI
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM |
                                                              SCRIPT_VERIFY_WITNESS_PUBKEYTYPE |
                                                              SCRIPT_VERIFY_CONST_SCRIPTCODE |
+                                                             SCRIPT_VERIFY_TAPROOT |
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
                                                              SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS |
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE};

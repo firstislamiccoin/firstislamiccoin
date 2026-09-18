@@ -741,6 +741,15 @@ def SegwitV0SignatureMsg(script, txTo, inIdx, hashtype, amount):
 
     ss = bytes()
     ss += struct.pack("<i", txTo.nVersion)
+    # FirstIslamicCoin: version-1 (and, per this fork's serialization rules, any nVersion<2)
+    # transactions carry an extra nTime field, and SignatureHash()'s WITNESS_V0 branch
+    # (src/script/interpreter.cpp) includes it in the sighash right after nVersion for such
+    # transactions. LegacySignatureMsg() above already gets this for free by delegating to
+    # serialize_without_witness(), but this function builds its preimage by hand and was
+    # missing it, silently producing a wrong (mismatching-node) sighash -- and hence an
+    # invalid signature -- for every segwit v0 (P2WPKH/P2WSH) input whenever nVersion<2.
+    if txTo.nVersion < 2:
+        ss += struct.pack("<I", txTo.nTime)
     ss += ser_uint256(hashPrevouts)
     ss += ser_uint256(hashSequence)
     ss += txTo.vin[inIdx].prevout.serialize()
