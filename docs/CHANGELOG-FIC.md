@@ -1350,6 +1350,38 @@ deploy access to more than this one VPS, tracked as `TODO-HUMAN` (see row 6, whi
 the closely related mainnet seed-node gap, and the DNS-seed line in the parameters table near the
 top of this document).
 
+### A second local testnet node stood up, peer connectivity confirmed -- the zero-peers symptom fixed, the underlying infra gap isn't
+
+Within this same environment/VPS, stood up `fic-testnet-node-2`: same `fic-node:latest` image,
+its own independent data volume (`fic-testnet2-data`, so its chain state can't collide with
+`fic-testnet-node`'s), and distinct ports since both containers use `--network host` on the same
+box (P2P `39780`, RPC `39781`, vs. node1's `29770`/`29771`) to avoid a bind conflict. Started with
+`-addnode=127.0.0.1:29770` pointing it at node1.
+
+**Peer connectivity confirmed bidirectionally**, not just assumed from a clean startup log: node1's
+`getpeerinfo` shows an inbound connection from node2 (`127.0.0.1:40276`, node2's ephemeral outbound
+port), node2's `getpeerinfo` shows its outbound connection to node1 (`127.0.0.1:29770`), and both
+report the matching `subver` (`/FirstIslamicCoin Core:26.2.0/`) and identical `bestblockhash` (still
+genesis -- neither node is mining/staking, so this confirms the connection works, not that a chain
+synced across it). `getconnectioncount` on node1 reads `1`, up from `0` before.
+
+**One non-fatal quirk hit and left as-is:** node2 logged `Unable to bind to 127.0.0.1:29773 on this
+computer` at startup -- both nodes' testnet params default to the same onion-service port
+regardless of the explicit `-port`/`-rpcport` overrides given to each, and node1 already held it
+first. Doesn't affect P2P or RPC (both fully verified working above); only Tor hidden-service
+binding specifically didn't come up for node2. Not investigated further since Tor/onion service
+binding isn't relevant to this node-to-node peer test, but worth knowing about if it matters later
+(e.g. an explicit `-onion`/`-bind` override per node would likely resolve it).
+
+**What this does and doesn't close, against row 30:** it directly fixes the symptom that row 30
+reported (a node sitting at zero peers with nothing to connect to) -- there is now a second node on
+this VPS, and real, verified bidirectional connectivity between them. It does **not** close the
+underlying gap row 30 also names: there is still no real DNS-seed infrastructure
+(`seed{1,2,3}.firstislamiccoin.com` remains "not yet live"), and two containers on the same single
+VPS is not the kind of independent, geographically/operationally distinct peer diversity a real
+testnet needs before other people's nodes can find it. Row 30 below is updated to reflect the
+narrower remaining scope rather than marked resolved.
+
 ### `bitcoin-util-test.py`'s Windows-only failures (row 28), root-caused and fixed
 
 Three real CI round-trips to nail down, since nothing about this reproduces outside the actual
@@ -2346,4 +2378,4 @@ those are removed.
 | 27 | ~~Root-cause `wallet_spend_unconfirmed`'s extra-input coin selection, `wallet_basic`'s zero-value-tx max-fee trip, `tool_wallet`'s double-spend-acceptance scenario, and `wallet_abandonconflict`'s `-minrelaytxfee` eviction test~~ — done, all four: the coin-selection issue was fixed by the `coinselection.cpp` tie-break fix (fifth pass); `wallet_basic`'s trip was a too-broad `listunspent` filter grabbing an oversized coinbase (seventh pass); `tool_wallet`'s scenario genuinely depended on RBF and was reworked to use `generateblock` instead (seventh pass); `wallet_abandonconflict`'s eviction mechanism was never actually a no-op, just under-scaled for this fork's real fee rates (seventh pass) — no test needed to be skipped. See the seventh-pass Phase 2 section above for all four | Phase 2 |
 | 28 | ~~Root-cause `bitcoin-util-test.py`'s Windows-only failures~~ — done: `build_msvc/bitcoin-util/bitcoin-util.vcxproj` and `bitcoin-tx/bitcoin-tx.vcxproj` were never renamed from upstream, so MSBuild's default `$(TargetName)` produced `bitcoin-util.exe`/`bitcoin-tx.exe` instead of the rebranded names the test fixture correctly expects; fixed with explicit `<TargetName>` overrides — see the Phase 2 section above. Verify the fix on the next real Windows CI run | Phase 10 |
 | 29 | ~~Fix the same rename gap for the other MSVC-built binaries~~ — done: confirmed by the very next Windows CI run, whose "Run functional tests" step failed with the identical `FileNotFoundError` (`test_node.py` couldn't find `firstislamiccoind.exe` to start any node at all, since `bitcoind.vcxproj` had the same missing `<TargetName>`). Added `<TargetName>` overrides to `bitcoind`/`bitcoin-cli`/`bitcoin-wallet`/`bitcoin-qt` too, and rebranded `bitcoind.vcxproj`'s hardcoded `test/config.ini` `PACKAGE_NAME`/`PACKAGE_BUGREPORT` while there. Verify the functional suite actually runs on the next real Windows CI run — first time it will have gotten past node startup at all | Phase 10 |
-| 30 | The live testnet node (`fic-testnet-node` on the VPS) has zero peer connections and sits at height 0 (genesis only) — root-caused, not a bug: testnet has no DNS seeds configured at all (`vSeeds.clear()` in `CTestNetParams`, `seed{1,2,3}.firstislamiccoin.com` confirmed "not yet live" per `docs/dns.md`), no `-addnode`/`-connect` peer was configured when the container was started, and no second `firstislamiccoind` process exists anywhere on this VPS to point it at by hand — this node is currently the only known testnet node anywhere. Needs either a second real testnet node stood up somewhere with its address documented for `-addnode`, or the real seed-node DNS infrastructure actually provisioned — see the "Live testnet node redeployed..." Phase 2 section above | Phase 2 |
+| 30 | ~~The live testnet node had zero peer connections~~ — the immediate symptom is fixed: a second node (`fic-testnet-node-2`, same VPS, own data volume and ports) is now running and bidirectionally peered with the first, confirmed via `getpeerinfo` on both sides. What's still open: real DNS-seed infrastructure (`seed{1,2,3}.firstislamiccoin.com` still "not yet live") and genuine peer diversity beyond two containers on one VPS, needed before other people's nodes can discover this testnet on their own — see the "A second local testnet node stood up..." Phase 2 section above | Phase 2 |
