@@ -59,6 +59,15 @@ def signet_txs(block, challenge):
 
     to_spend = CTransaction()
     to_spend.nVersion = 0
+    # FirstIslamicCoin: CTransaction() defaults nTime to the current wall-clock
+    # time, and this fork's tx format serializes nTime whenever nVersion<2
+    # (here nVersion=0, for PoS timestamping elsewhere). The node reconstructs
+    # this exact synthetic to_spend transaction from the block itself when it
+    # later verifies the signet solution (see SignetTxs::Create in
+    # src/signet.cpp), so nTime must be a fixed, reproducible value -- not
+    # "now" -- or the reconstructed transaction (and its hash) will never
+    # match what was actually signed here.
+    to_spend.nTime = 0
     to_spend.nLockTime = 0
     to_spend.vin = [CTxIn(COutPoint(0, 0xFFFFFFFF), b"\x00" + CScriptOp.encode_op_pushdata(sd), 0)]
     to_spend.vout = [CTxOut(0, challenge)]
@@ -66,6 +75,10 @@ def signet_txs(block, challenge):
 
     spend = CTransaction()
     spend.nVersion = 0
+    # FirstIslamicCoin: see to_spend.nTime above -- same reasoning applies,
+    # since this tx's serialization (including nTime) is covered by the
+    # signature hash that the node must be able to reproduce byte-for-byte.
+    spend.nTime = 0
     spend.nLockTime = 0
     spend.vin = [CTxIn(COutPoint(to_spend.sha256, 0), b"", 0)]
     spend.vout = [CTxOut(0, b"\x6a")]

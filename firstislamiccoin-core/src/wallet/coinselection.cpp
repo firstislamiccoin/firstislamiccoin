@@ -591,7 +591,23 @@ bool SelectionResult::operator<(SelectionResult other) const
     Assert(m_waste.has_value());
     Assert(other.m_waste.has_value());
     // As this operator is only used in std::min_element, we want the result that has more inputs when waste are equal.
-    return *m_waste < *other.m_waste || (*m_waste == *other.m_waste && m_selected_inputs.size() > other.m_selected_inputs.size());
+    //
+    // FirstIslamicCoin: upstream's per-input waste term is `coin.GetFee() - coin.long_term_fee`, the
+    // saving of spending a coin now vs. deferring it to a cheaper future feerate. This fork has no fee
+    // estimation and a fixed-forever fee floor, so CreateTransactionInternal() sets m_long_term_feerate
+    // equal to m_effective_feerate (see spend.cpp) -- correctly, since there genuinely is no future
+    // discount to model. But that makes the per-input term exactly zero for every candidate, so whenever
+    // a selection leaves real change (the overwhelming majority of transactions), GetWaste() collapses to
+    // the same constant change_cost for every algorithm's result. What upstream treats as a rare tie
+    // (and resolves by consolidating: more inputs win) becomes this fork's near-universal case, and
+    // resolving it toward "more inputs" hands the outcome to whichever candidate happens to have pulled
+    // in more UTXOs -- including SRD's internally-randomized selection, which otherwise has no reason to
+    // beat a tighter/minimal BnB or Knapsack result. Net effect: transactions that could deterministically
+    // use a single, obvious input non-deterministically pull in extra unrelated UTXOs (e.g. a leftover
+    // change output) from run to run. Preferring fewer inputs on a tie restores deterministic, minimal
+    // selection (BnB/Knapsack's tighter results beat SRD's looser ones) without touching any case where
+    // the waste genuinely differs.
+    return *m_waste < *other.m_waste || (*m_waste == *other.m_waste && m_selected_inputs.size() < other.m_selected_inputs.size());
 }
 
 std::string COutput::ToString() const

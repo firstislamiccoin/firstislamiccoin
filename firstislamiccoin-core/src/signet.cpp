@@ -69,12 +69,25 @@ std::optional<SignetTxs> SignetTxs::Create(const CBlock& block, const CScript& c
 {
     CMutableTransaction tx_to_spend;
     tx_to_spend.nVersion = 0;
+    // FirstIslamicCoin: CMutableTransaction's default constructor seeds nTime
+    // from GetAdjustedTimeSeconds() (this fork's tx format serializes nTime
+    // for nVersion<2, for PoS timestamping). Since nVersion is 0 here, that
+    // wall-clock value would otherwise get serialized into this synthetic
+    // to_spend transaction, making its GetHash() non-deterministic between
+    // the moment a block is signed and the later moment it is verified here
+    // -- silently breaking every signet signature. Zero it so both sides
+    // agree, matching upstream Bitcoin (which has no nTime field to omit).
+    tx_to_spend.nTime = 0;
     tx_to_spend.nLockTime = 0;
     tx_to_spend.vin.emplace_back(COutPoint(), CScript(OP_0), 0);
     tx_to_spend.vout.emplace_back(0, challenge);
 
     CMutableTransaction tx_spending;
     tx_spending.nVersion = 0;
+    // FirstIslamicCoin: see tx_to_spend.nTime above -- same reasoning applies
+    // here, since this tx's serialization (including nTime) is covered by
+    // the signature hash that must match what the signer actually signed.
+    tx_spending.nTime = 0;
     tx_spending.nLockTime = 0;
     tx_spending.vin.emplace_back(COutPoint(), CScript(), 0);
     tx_spending.vout.emplace_back(0, CScript(OP_RETURN));

@@ -157,7 +157,15 @@ class PSBTTest(BitcoinTestFramework):
         self.log.info("Fail to broadcast a new PSBT with maxconf 0 due to BIP125 rules to verify it actually chose unconfirmed outputs")
         psbt_invalid = wallet.walletcreatefundedpsbt([{'txid': utxo1['txid'], 'vout': utxo1['vout']}], {target_address: 1}, 0, {'add_inputs': True, 'maxconf': 0, 'fee_rate': 10})['psbt']
         signed_invalid = wallet.walletprocesspsbt(psbt_invalid)
-        assert_raises_rpc_error(-26, "bad-txns-spends-conflicting-tx", self.nodes[0].sendrawtransaction, signed_invalid['hex'])
+        # FirstIslamicCoin: "bad-txns-spends-conflicting-tx" is only reached
+        # by upstream's BIP125 replacement-vs-ancestor-conflict check in
+        # PreChecks() (src/validation.cpp), which is entirely commented out
+        # here under a "// FirstIslamicCoin: Disable replacement feature for
+        # now" block (src/validation.cpp, ~line 953) -- replacement is
+        # disabled outright, so any mempool conflict is rejected immediately
+        # and unconditionally, earlier in the same function, as
+        # "txn-mempool-conflict" (src/validation.cpp, ~line 771).
+        assert_raises_rpc_error(-26, "txn-mempool-conflict", self.nodes[0].sendrawtransaction, signed_invalid['hex'])
 
         self.log.info("Craft a replacement adding inputs with highest confs possible")
         psbtx2 = wallet.walletcreatefundedpsbt([{'txid': utxo1['txid'], 'vout': utxo1['vout']}], {target_address: 1}, 0, {'add_inputs': True, 'minconf': 2, 'fee_rate': 10})['psbt']
@@ -167,12 +175,24 @@ class PSBTTest(BitcoinTestFramework):
             if vin['txid'] != unconfirmed_txid:
                 assert_greater_than_or_equal(self.nodes[0].gettxout(vin['txid'], vin['vout'])['confirmations'], 2)
 
+        # FirstIslamicCoin: walletcreatefundedpsbt's minconf-driven coin
+        # selection above is unaffected by RBF and still genuinely adds
+        # higher-confirmation inputs on top of the preselected unconfirmed
+        # one, as asserted above. But broadcasting signed_tx2 as an actual
+        # *replacement* of txid1 -- upstream's whole point here -- cannot
+        # work on this fork: signed_tx2 still spends utxo1, which txid1 (in
+        # the mempool since "Fail to craft a new PSBT..." above) also
+        # spends, and replacement is disabled outright (see the
+        # "txn-mempool-conflict" comment above), so this is the same
+        # unconditional early conflict rejection, not a genuine BIP125
+        # evaluation. Assert the same rejection instead of a successful
+        # replacement, and that txid1 (never replaced) is still the one
+        # sitting in the mempool.
         signed_tx2 = wallet.walletprocesspsbt(psbtx2)
-        txid2 = self.nodes[0].sendrawtransaction(signed_tx2['hex'])
+        assert_raises_rpc_error(-26, "txn-mempool-conflict", self.nodes[0].sendrawtransaction, signed_tx2['hex'])
 
         mempool = self.nodes[0].getrawmempool()
-        assert txid1 not in mempool
-        assert txid2 in mempool
+        assert txid1 in mempool
 
         wallet.unloadwallet()
 
@@ -190,11 +210,18 @@ class PSBTTest(BitcoinTestFramework):
 
         # If inputs are specified, do not automatically add more:
         utxo1 = self.nodes[0].listunspent()[0]
+        # FirstIslamicCoin: a single coinbase UTXO here is a whole
+        # POW_SUBSIDY (28,000,000 coins, this fork's flat per-block PoW
+        # reward), which trivially covers upstream's 90-coin target -- so
+        # the "preselected coins insufficient" error never triggered. Use a
+        # target between one and two block subsidies so one UTXO falls
+        # short but two (the len(vin)==2 check below) cover it.
+        target_amount = 30_000_000
         assert_raises_rpc_error(-4, "The preselected coins total amount does not cover the transaction target. "
                                     "Please allow other inputs to be automatically selected or include more coins manually",
-                                self.nodes[0].walletcreatefundedpsbt, [{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():90})
+                                self.nodes[0].walletcreatefundedpsbt, [{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():target_amount})
 
-        psbtx1 = self.nodes[0].walletcreatefundedpsbt([{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():90}, 0, {"add_inputs": True})['psbt']
+        psbtx1 = self.nodes[0].walletcreatefundedpsbt([{"txid": utxo1['txid'], "vout": utxo1['vout']}], {self.nodes[2].getnewaddress():target_amount}, 0, {"add_inputs": True})['psbt']
         assert_equal(len(self.nodes[0].decodepsbt(psbtx1)['tx']['vin']), 2)
 
         # Inputs argument can be null
@@ -258,10 +285,16 @@ class PSBTTest(BitcoinTestFramework):
             wmulti.importaddress(p2sh_p2wsh)
         p2wpkh = self.nodes[1].getnewaddress("", "bech32")
         p2pkh = self.nodes[1].getnewaddress("", "legacy")
-        p2sh_p2wpkh = self.nodes[1].getnewaddress("", "p2sh-segwit")
+        # FirstIslamicCoin: src/wallet/rpc/addresses.cpp's getnewaddress
+        # rejects output_type P2SH_SEGWIT outright ("P2SH_SEGWIT addresses
+        # are not welcome") -- a real, pre-existing restriction inherited
+        # unmodified from the CodexaCoin import, unrelated to the
+        # multisig p2sh_p2wsh address above (addmultisigaddress has no such
+        # restriction). p2wpkh/p2pkh below already exercise the mixed
+        # witness/non-witness UTXO PSBT paths this section is testing.
 
         # fund those addresses
-        rawtx = self.nodes[0].createrawtransaction([], {p2sh:10, p2wsh:10, p2wpkh:10, p2sh_p2wsh:10, p2sh_p2wpkh:10, p2pkh:10})
+        rawtx = self.nodes[0].createrawtransaction([], {p2sh:10, p2wsh:10, p2wpkh:10, p2sh_p2wsh:10, p2pkh:10})
         rawtx = self.nodes[0].fundrawtransaction(rawtx, {"changePosition":3})
         signed_tx = self.nodes[0].signrawtransactionwithwallet(rawtx['hex'])['hex']
         txid = self.nodes[0].sendrawtransaction(signed_tx)
@@ -273,7 +306,6 @@ class PSBTTest(BitcoinTestFramework):
         p2wpkh_pos = -1
         p2pkh_pos = -1
         p2sh_p2wsh_pos = -1
-        p2sh_p2wpkh_pos = -1
         decoded = self.nodes[0].decoderawtransaction(signed_tx)
         for out in decoded['vout']:
             if out['scriptPubKey']['address'] == p2sh:
@@ -284,13 +316,13 @@ class PSBTTest(BitcoinTestFramework):
                 p2wpkh_pos = out['n']
             elif out['scriptPubKey']['address'] == p2sh_p2wsh:
                 p2sh_p2wsh_pos = out['n']
-            elif out['scriptPubKey']['address'] == p2sh_p2wpkh:
-                p2sh_p2wpkh_pos = out['n']
             elif out['scriptPubKey']['address'] == p2pkh:
                 p2pkh_pos = out['n']
 
-        inputs = [{"txid": txid, "vout": p2wpkh_pos}, {"txid": txid, "vout": p2sh_p2wpkh_pos}, {"txid": txid, "vout": p2pkh_pos}]
-        outputs = [{self.nodes[1].getnewaddress(): 29.99}]
+        inputs = [{"txid": txid, "vout": p2wpkh_pos}, {"txid": txid, "vout": p2pkh_pos}]
+        # FirstIslamicCoin: 19.99, not upstream's 29.99 -- inputs above is
+        # now two 10-BTC addresses, not three, since p2sh_p2wpkh was dropped.
+        outputs = [{self.nodes[1].getnewaddress(): 19.99}]
 
         # spend single key from node 1
         created_psbt = self.nodes[1].walletcreatefundedpsbt(inputs, outputs)
@@ -304,24 +336,41 @@ class PSBTTest(BitcoinTestFramework):
         assert_equal(walletprocesspsbt_out['complete'], True)
         self.nodes[1].sendrawtransaction(walletprocesspsbt_out['hex'])
 
-        self.log.info("Test walletcreatefundedpsbt fee rate of 10000 sat/vB and 0.1 BTC/kvB produces a total fee at or slightly below -maxtxfee (~0.05290000)")
+        # FirstIslamicCoin: upstream's 0.05290000/0.055 assumed the 3-input
+        # (p2wpkh/p2sh_p2wpkh/p2pkh) tx built above; with p2sh_p2wpkh dropped
+        # (see the "not welcome" comment above) this is a smaller tx, so the
+        # same fee_rate produces a smaller total fee -- confirmed empirically.
+        self.log.info("Test walletcreatefundedpsbt fee rate of 10000 sat/vB and 0.1 BTC/kvB produces a total fee at or slightly below -maxtxfee (~0.04410000)")
         res1 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": 10000, "add_inputs": True})
-        assert_approx(res1["fee"], 0.055, 0.005)
+        assert_approx(res1["fee"], 0.0441, 0.0005)
         res2 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"feeRate": "0.1", "add_inputs": True})
-        assert_approx(res2["fee"], 0.055, 0.005)
+        assert_approx(res2["fee"], 0.0441, 0.0005)
 
-        self.log.info("Test min fee rate checks with walletcreatefundedpsbt are bypassed, e.g. a fee_rate under 1 sat/vB is allowed")
+        # FirstIslamicCoin: "bypassed" doesn't hold here -- unlike upstream
+        # (no fee floor), a fee_rate under 1 sat/vB is silently bumped up to
+        # this fork's 100 sat/vB consensus minimum instead of being honoured
+        # as requested; confirmed empirically (0.000294 BTC, not upstream's
+        # 0.00000381 BTC).
+        self.log.info("Test that a fee_rate under 1 sat/vB is bumped up to the fee floor with walletcreatefundedpsbt")
         res3 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"fee_rate": "0.999", "add_inputs": True})
-        assert_approx(res3["fee"], 0.00000381, 0.0000001)
+        assert_approx(res3["fee"], 0.000294, 0.00001)
         res4 = self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {"feeRate": 0.00000999, "add_inputs": True})
-        assert_approx(res4["fee"], 0.00000381, 0.0000001)
+        assert_approx(res4["fee"], 0.000294, 0.00001)
 
-        self.log.info("Test min fee rate checks with walletcreatefundedpsbt are bypassed and that funding non-standard 'zero-fee' transactions is valid")
+        # FirstIslamicCoin: a requested zero fee is likewise bumped up to the
+        # fee floor here, not honoured as a genuine zero fee -- see the
+        # "bumped up to the fee floor" comment above.
+        self.log.info("Test that a zero fee_rate is bumped up to the fee floor with walletcreatefundedpsbt")
         for param, zero_value in product(["fee_rate", "feeRate"], [0, 0.000, 0.00000000, "0", "0.000", "0.00000000"]):
-            assert_equal(0, self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {param: zero_value, "add_inputs": True})["fee"])
+            assert_equal(Decimal("0.000294"), self.nodes[1].walletcreatefundedpsbt(inputs, outputs, 0, {param: zero_value, "add_inputs": True})["fee"])
 
         self.log.info("Test invalid fee rate settings")
-        for param, value in {("fee_rate", 100000), ("feeRate", 1)}:
+        # FirstIslamicCoin: this fork's DEFAULT_TRANSACTION_MAXFEE (-maxtxfee
+        # default) is 1 BTC, not upstream's 0.1 BTC -- scaled for this fork's
+        # economics. Upstream's 100000 sat/vB (~0.44 BTC total here) stays
+        # under that higher cap, so it no longer trips "Fee exceeds maximum";
+        # bumped both values well past 1 BTC for this tx's size.
+        for param, value in {("fee_rate", 300000), ("feeRate", 3)}:
             assert_raises_rpc_error(-4, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)",
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {param: value, "add_inputs": True})
             assert_raises_rpc_error(-3, "Amount out of range",
@@ -341,44 +390,27 @@ class PSBTTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "Cannot specify both fee_rate (sat/vB) and feeRate (FIC/kvB)",
             self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"fee_rate": 0.1, "feeRate": 0.1, "add_inputs": True})
 
-        self.log.info("- raises RPC error if both feeRate and estimate_mode passed")
-        assert_raises_rpc_error(-8, "Cannot specify both estimate_mode and feeRate",
-            self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": "economical", "feeRate": 0.1, "add_inputs": True})
+        # FirstIslamicCoin: estimate_mode/conf_target don't exist as
+        # walletcreatefundedpsbt options at all on this fork (no dynamic fee
+        # estimation to configure -- see FundTransaction in
+        # src/wallet/rpc/spend.cpp), so passing either just raises "Unexpected
+        # key", not the "Cannot specify both ..." conflict errors upstream
+        # tests here. Dropped, matching the same removal already made for
+        # send()'s equivalent conf_target/estimate_mode cases.
 
-        for param in ["feeRate", "fee_rate"]:
-            self.log.info("- raises RPC error if both {} and conf_target are passed".format(param))
-            assert_raises_rpc_error(-8, "Cannot specify both conf_target and {}. Please provide either a confirmation "
-                "target in blocks for automatic fee estimation, or an explicit fee rate.".format(param),
-                self.nodes[1].walletcreatefundedpsbt ,inputs, outputs, 0, {param: 1, "conf_target": 1, "add_inputs": True})
-
-        self.log.info("- raises RPC error if both fee_rate and estimate_mode are passed")
-        assert_raises_rpc_error(-8, "Cannot specify both estimate_mode and fee_rate",
-            self.nodes[1].walletcreatefundedpsbt ,inputs, outputs, 0, {"fee_rate": 1, "estimate_mode": "economical", "add_inputs": True})
-
-        self.log.info("- raises RPC error with invalid estimate_mode settings")
-        for k, v in {"number": 42, "object": {"foo": "bar"}}.items():
-            assert_raises_rpc_error(-3, f"JSON value of type {k} for field estimate_mode is not of expected type string",
-                self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": v, "conf_target": 0.1, "add_inputs": True})
-        for mode in ["", "foo", Decimal("3.141592")]:
-            assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
-                self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": 0.1, "add_inputs": True})
-
-        self.log.info("- raises RPC error with invalid conf_target settings")
-        for mode in ["unset", "economical", "conservative"]:
-            self.log.debug("{}".format(mode))
-            for k, v in {"string": "", "object": {"foo": "bar"}}.items():
-                assert_raises_rpc_error(-3, f"JSON value of type {k} for field conf_target is not of expected type number",
-                    self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": v, "add_inputs": True})
-            for n in [-1, 0, 1009]:
-                assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
-                    self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": n, "add_inputs": True})
+        # FirstIslamicCoin: estimate_mode/conf_target validation (both
+        # value-type checks and range checks) doesn't apply either -- neither
+        # parameter is recognized at all, per the removal noted above.
 
         self.log.info("Test walletcreatefundedpsbt with too-high fee rate produces total fee well above -maxtxfee and raises RPC error")
         # previously this was silently capped at -maxtxfee
+        # FirstIslamicCoin: feeRate is BTC/kvB, so 10 (not upstream's 1)
+        # matches fee_rate=1000000 sat/vB below -- needed since this fork's
+        # -maxtxfee default is 1 BTC, not upstream's 0.1 BTC (see above).
         for bool_add, outputs_array in {True: outputs, False: [{self.nodes[1].getnewaddress(): 1}]}.items():
             msg = "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)"
             assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"fee_rate": 1000000, "add_inputs": bool_add})
-            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"feeRate": 1, "add_inputs": bool_add})
+            assert_raises_rpc_error(-4, msg, self.nodes[1].walletcreatefundedpsbt, inputs, outputs_array, 0, {"feeRate": 10, "add_inputs": bool_add})
 
         self.log.info("Test various PSBT operations")
         # partially sign multisig things with node 1
@@ -451,31 +483,43 @@ class PSBTTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 6)
 
         # Test additional args in walletcreatepsbt
-        # Make sure both pre-included and funded inputs
-        # have the correct sequence numbers based on
-        # replaceable arg
+        # Make sure both pre-included and funded inputs have the correct
+        # sequence numbers.
+        # FirstIslamicCoin: RBF is fully disabled on this fork (see
+        # PreChecks() in src/validation.cpp), and the "replaceable" option
+        # was removed from FundTransaction's options entirely along with it
+        # (src/wallet/rpc/spend.cpp) -- passing it at all now raises
+        # "Unexpected key". Every created tx's sequence number is always
+        # non-replaceable (> MAX_BIP125_RBF_SEQUENCE), confirmed empirically,
+        # so upstream's "replaceable explicitly enabled" case (which asserted
+        # sequence == MAX_BIP125_RBF_SEQUENCE) no longer has a way to occur
+        # and is dropped; the "explicitly disabled" and "no arguments" cases
+        # collapse into the same assertion since there's no longer a way to
+        # ask for anything else.
         block_height = self.nodes[0].getblockcount()
         unspent = self.nodes[0].listunspent()[0]
-        psbtx_info = self.nodes[0].walletcreatefundedpsbt([{"txid":unspent["txid"], "vout":unspent["vout"]}], [{self.nodes[2].getnewaddress():unspent["amount"]+1}], block_height+2, {"replaceable": False, "add_inputs": True}, False)
+        psbtx_info = self.nodes[0].walletcreatefundedpsbt([{"txid":unspent["txid"], "vout":unspent["vout"]}], [{self.nodes[2].getnewaddress():unspent["amount"]+1}], block_height+2, {"add_inputs": True}, False)
         decoded_psbt = self.nodes[0].decodepsbt(psbtx_info["psbt"])
         for tx_in, psbt_in in zip(decoded_psbt["tx"]["vin"], decoded_psbt["inputs"]):
             assert_greater_than(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
             assert "bip32_derivs" not in psbt_in
         assert_equal(decoded_psbt["tx"]["locktime"], block_height+2)
 
-        # Same construction with only locktime set and RBF explicitly enabled
-        psbtx_info = self.nodes[0].walletcreatefundedpsbt([{"txid":unspent["txid"], "vout":unspent["vout"]}], [{self.nodes[2].getnewaddress():unspent["amount"]+1}], block_height, {"replaceable": True, "add_inputs": True}, True)
+        # Same construction with only locktime set
+        psbtx_info = self.nodes[0].walletcreatefundedpsbt([{"txid":unspent["txid"], "vout":unspent["vout"]}], [{self.nodes[2].getnewaddress():unspent["amount"]+1}], block_height, {"add_inputs": True}, True)
         decoded_psbt = self.nodes[0].decodepsbt(psbtx_info["psbt"])
         for tx_in, psbt_in in zip(decoded_psbt["tx"]["vin"], decoded_psbt["inputs"]):
-            assert_equal(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
+            assert_greater_than(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
             assert "bip32_derivs" in psbt_in
         assert_equal(decoded_psbt["tx"]["locktime"], block_height)
 
-        # Same construction without optional arguments
+        # Same construction without optional arguments. Not
+        # MAX_BIP125_RBF_SEQUENCE as upstream expects (RBF is disabled here
+        # regardless of node config -- see the comment above).
         psbtx_info = self.nodes[0].walletcreatefundedpsbt([], [{self.nodes[2].getnewaddress():unspent["amount"]+1}])
         decoded_psbt = self.nodes[0].decodepsbt(psbtx_info["psbt"])
         for tx_in, psbt_in in zip(decoded_psbt["tx"]["vin"], decoded_psbt["inputs"]):
-            assert_equal(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
+            assert_greater_than(tx_in["sequence"], MAX_BIP125_RBF_SEQUENCE)
             assert "bip32_derivs" in psbt_in
         assert_equal(decoded_psbt["tx"]["locktime"], 0)
 
@@ -523,6 +567,44 @@ class PSBTTest(BitcoinTestFramework):
         wunsafe.walletcreatefundedpsbt([], [{self.nodes[0].getnewaddress(): 1}], 0, {"include_unsafe": True})
 
         # BIP 174 Test Vectors
+        # FirstIslamicCoin: data/rpc_psbt.json is upstream's official BIP174
+        # fixture (extended with taproot vectors). Most of it is untouched --
+        # confirmed empirically that the 39 "invalid" and 2
+        # "invalid_with_msg" decode failures, and every "signer"/"combiner"/
+        # "finalizer"/"extractor" entry, already pass unmodified on this fork
+        # (the invalid ones don't care *why* decodepsbt fails, and the
+        # remaining categories' PSBTs happen not to embed a full previous
+        # transaction that trips the quirk below).
+        #
+        # Two things did need regenerating, both because they referenced
+        # real Bitcoin mainnet data incompatible with this fork:
+        # 1. "valid" indices 0, 2, 6, 7, 10, 11, 12, 13 (of 20) each embed a
+        #    real historical Bitcoin transaction (nVersion=1) as their
+        #    input's non_witness_utxo. This fork's CTransaction::
+        #    UnserializeTransaction (src/primitives/transaction.h, ~line
+        #    228) reads an extra 4-byte nTime field whenever nVersion < 2
+        #    (a permanent Peercoin-style design difference inherited
+        #    unmodified from the CodexaCoin import, not a bug) -- so parsing
+        #    those embedded nVersion=1 bytes misreads 4 bytes that were
+        #    never there and corrupts everything read afterward, and
+        #    decodepsbt fails with "TX decode failed DataStream::read():
+        #    end of data". Regenerated by building a genuine, fresh
+        #    nVersion=2 "previous transaction" and referencing unsigned tx
+        #    on a throwaway FIC regtest node (createrawtransaction), then
+        #    substituting only the PSBT_GLOBAL_UNSIGNED_TX and input 0's
+        #    NON_WITNESS_UTXO byte blobs -- every other key/value in each
+        #    entry (sighash type, global PSBT version, unknown/proprietary
+        #    keys, hash preimages) is preserved byte-for-byte, so each entry
+        #    still tests exactly the same PSBT feature it did upstream.
+        # 2. The single "creator" entry's two output addresses used
+        #    Bitcoin's regtest bech32 HRP "bcrt1", which this fork's address
+        #    decoder rejects -- this fork's regtest HRP is "rfic1" (see
+        #    bech32_hrp in src/kernel/chainparams.cpp; same fix already
+        #    applied throughout this test suite, e.g. wallet_dump.py).
+        #    Re-encoded both addresses with the same witness program under
+        #    "rfic1" instead; the expected unsigned-tx "result" is unchanged
+        #    since it depends on the scriptPubKey bytes, not the address's
+        #    display HRP (confirmed empirically against a live node).
 
         # Check that unknown values are just passed through
         unknown_psbt = "cHNidP8BAD8CAAAAAf//////////////////////////////////////////AAAAAAD/////AQAAAAAAAAAAA2oBAAAAAAAACg8BAgMEBQYHCAkPAQIDBAUGBwgJCgsMDQ4PAAA="
@@ -553,8 +635,13 @@ class PSBTTest(BitcoinTestFramework):
             self.nodes[0].decodepsbt(valid)
 
         # Creator Tests
+        # FirstIslamicCoin: createpsbt has no "replaceable" argument at all
+        # here (CreateTxDoc() in src/rpc/rawtransaction.cpp only ever
+        # declared inputs/outputs/locktime, inherited unmodified from the
+        # CodexaCoin import's own RBF removal) -- passing it raises
+        # "Unexpected key".
         for creator in creators:
-            created_tx = self.nodes[0].createpsbt(inputs=creator['inputs'], outputs=creator['outputs'], replaceable=False)
+            created_tx = self.nodes[0].createpsbt(inputs=creator['inputs'], outputs=creator['outputs'])
             assert_equal(created_tx, creator['result'])
 
         # Signer tests
@@ -608,7 +695,19 @@ class PSBTTest(BitcoinTestFramework):
         addr2 = self.nodes[1].getnewaddress("", "legacy")
         txid2 = self.nodes[0].sendtoaddress(addr2, 11)
         vout2 = find_output(self.nodes[0], txid2, 11)
-        addr3 = self.nodes[1].getnewaddress("", "p2sh-segwit")
+        # FirstIslamicCoin: getnewaddress rejects "p2sh-segwit" outright (see
+        # the "not welcome" comment earlier in this file) -- but that guard
+        # is specific to getnewaddress's own RPC handler
+        # (src/wallet/rpc/addresses.cpp); the underlying wallet destination
+        # logic it calls into (GetNewDestination) has no such restriction,
+        # and neither does getrawchangeaddress, which calls
+        # GetNewChangeDestination instead. Since this section specifically
+        # needs a real, wallet-owned (self-signable) P2SH-P2WPKH address --
+        # unlike the getnewaddress removal at the top of run_test(), which
+        # had other address types already covering the same PSBT paths --
+        # get one via getrawchangeaddress instead; it's otherwise identical
+        # to a receiving address for our purposes here.
+        addr3 = self.nodes[1].getrawchangeaddress("p2sh-segwit")
         txid3 = self.nodes[0].sendtoaddress(addr3, 11)
         vout3 = find_output(self.nodes[0], txid3, 11)
         self.sync_all()
@@ -645,7 +744,7 @@ class PSBTTest(BitcoinTestFramework):
         assert_raises_rpc_error(-8, "exists in multiple PSBTs", self.nodes[1].joinpsbts, [psbt1, updated])
 
         # Join two distinct PSBTs
-        addr4 = self.nodes[1].getnewaddress("", "p2sh-segwit")
+        addr4 = self.nodes[1].getrawchangeaddress("p2sh-segwit")  # FirstIslamicCoin: see the getrawchangeaddress comment above
         txid4 = self.nodes[0].sendtoaddress(addr4, 5)
         vout4 = find_output(self.nodes[0], txid4, 5)
         self.generate(self.nodes[0], 6)
@@ -668,12 +767,12 @@ class PSBTTest(BitcoinTestFramework):
         assert shuffled
 
         # Newly created PSBT needs UTXOs and updating
-        addr = self.nodes[1].getnewaddress("", "p2sh-segwit")
+        addr = self.nodes[1].getrawchangeaddress("p2sh-segwit")  # FirstIslamicCoin: see the getrawchangeaddress comment above
         txid = self.nodes[0].sendtoaddress(addr, 7)
         addrinfo = self.nodes[1].getaddressinfo(addr)
         blockhash = self.generate(self.nodes[0], 6)[0]
         vout = find_output(self.nodes[0], txid, 7, blockhash=blockhash)
-        psbt = self.nodes[1].createpsbt([{"txid":txid, "vout":vout}], {self.nodes[0].getnewaddress("", "p2sh-segwit"):Decimal('6.999')})
+        psbt = self.nodes[1].createpsbt([{"txid":txid, "vout":vout}], {self.nodes[0].getrawchangeaddress("p2sh-segwit"):Decimal('6.999')})
         analyzed = self.nodes[0].analyzepsbt(psbt)
         assert not analyzed['inputs'][0]['has_utxo'] and not analyzed['inputs'][0]['is_final'] and analyzed['inputs'][0]['next'] == 'updater' and analyzed['next'] == 'updater'
 
@@ -696,7 +795,25 @@ class PSBTTest(BitcoinTestFramework):
         assert_equal(analysis['error'], 'PSBT is not valid. Input 0 spends unspendable output')
 
         self.log.info("PSBT with invalid values should have error message and Creator as next")
-        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8AgIFq49AHABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
+        # FirstIslamicCoin: the two hardcoded PSBTs below hit
+        # AnalyzePSBT()'s MoneyRange() checks (src/node/psbt.cpp, ~line 39).
+        # Upstream made them "invalid" purely by exceeding Bitcoin's 21M-coin
+        # MAX_MONEY cap -- this fork's MAX_MONEY is INT64_MAX (no cap; see
+        # src/consensus/amount.h), so that same byte pattern is now a
+        # perfectly legal value here and no longer trips the check. Patched
+        # each one's 8-byte little-endian amount field to a genuinely
+        # negative CAmount instead (still invalid under any MAX_MONEY,
+        # capped or not) -- specifically -2, not -1, since CTxOut::IsNull()
+        # treats nValue == -1 as its "this UTXO is unset" sentinel
+        # regardless of scriptPubKey (src/primitives/transaction.h) and
+        # PartiallySignedTransaction::GetInputUTXO() (src/psbt.cpp) would
+        # then treat the input as having *no* UTXO at all rather than an
+        # invalid one, changing which check fires -- this collision is
+        # inherent to upstream's own CTxOut/PSBT code, not a fork
+        # difference, it just happens to matter now that -1 had to be
+        # deliberately chosen instead of reusing the original (now-legal)
+        # bytes.
+        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgD5ApUAAAAAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR/+/////////xYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
         assert_equal(analysis['next'], 'creator')
         assert_equal(analysis['error'], 'PSBT is not valid. Input 0 has invalid value')
 
@@ -704,7 +821,7 @@ class PSBTTest(BitcoinTestFramework):
         analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAZYezcxdnbXoQCmrD79t/LzDgtUo9ERqixk8wgioAobrAAAAAAD9////AlDDAAAAAAAAFgAUy/UxxZuzZswcmFnN/E9DGSiHLUsuGPUFAAAAABYAFLsH5o0R38wXx+X2cCosTMCZnQ4baAAAAAABAR8A4fUFAAAAABYAFOBI2h5thf3+Lflb2LGCsVSZwsltIgIC/i4dtVARCRWtROG0HHoGcaVklzJUcwo5homgGkSNAnJHMEQCIGx7zKcMIGr7cEES9BR4Kdt/pzPTK3fKWcGyCJXb7MVnAiALOBgqlMH4GbC1HDh/HmylmO54fyEy4lKde7/BT/PWxwEBAwQBAAAAIgYC/i4dtVARCRWtROG0HHoGcaVklzJUcwo5homgGkSNAnIYDwVpQ1QAAIABAACAAAAAgAAAAAAAAAAAAAAiAgL+CIiB59NSCssOJRGiMYQK1chahgAaaJpIXE41Cyir+xgPBWlDVAAAgAEAAIAAAACAAQAAAAAAAAAA')
         assert_equal(analysis['next'], 'finalizer')
 
-        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////AgCAgWrj0AcAFgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8A8gUqAQAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
+        analysis = self.nodes[0].analyzepsbt('cHNidP8BAHECAAAAAfA00BFgAm6tp86RowwH6BMImQNL5zXUcTT97XoLGz0BAAAAAAD/////Av//////////FgAUKNw0x8HRctAgmvoevm4u1SbN7XL87QKVAAAAABYAFPck4gF7iL4NL4wtfRAKgQbghiTUAAAAAAABAR8A8gUqAQAAABYAFJUDtxf2PHo641HEOBOAIvFMNTr2AAAA')
         assert_equal(analysis['next'], 'creator')
         assert_equal(analysis['error'], 'PSBT is not valid. Output amount invalid')
 

@@ -343,18 +343,25 @@ class BIP68_112_113Test(BitcoinTestFramework):
         self.log.info("Post-Soft Fork Tests.")
 
         self.log.info("BIP 113 tests")
+        # FirstIslamicCoin: CBlockIndex::GetMedianTimePast() (src/chain.h)
+        # short-circuits to the block's own GetBlockTime() once ProtocolV2 is
+        # active (always true for realistic timestamps -- see the identical
+        # finding and comment in rpc_blockchain.py), instead of computing
+        # upstream's true running median of the last 11 blocks. So MTP of the
+        # prior block is exactly self.last_block_time here, not upstream's
+        # lagged self.last_block_time - 600*5.
         # BIP 113 tests should now fail regardless of version number if nLockTime isn't satisfied by new rules
-        bip113tx_v1.nLockTime = self.last_block_time - 600 * 5  # = MTP of prior block (not <) but < time put on current block
+        bip113tx_v1.nLockTime = self.last_block_time  # = MTP of prior block (not <) but < time put on current block
         self.miniwallet.sign_tx(bip113tx_v1)
-        bip113tx_v2.nLockTime = self.last_block_time - 600 * 5  # = MTP of prior block (not <) but < time put on current block
+        bip113tx_v2.nLockTime = self.last_block_time  # = MTP of prior block (not <) but < time put on current block
         self.miniwallet.sign_tx(bip113tx_v2)
         for bip113tx in [bip113tx_v1, bip113tx_v2]:
             self.send_blocks([self.create_test_block([bip113tx])], success=False, reject_reason='bad-txns-nonfinal')
 
         # BIP 113 tests should now pass if the locktime is < MTP
-        bip113tx_v1.nLockTime = self.last_block_time - 600 * 5 - 1  # < MTP of prior block
+        bip113tx_v1.nLockTime = self.last_block_time - 1  # < MTP of prior block
         self.miniwallet.sign_tx(bip113tx_v1)
-        bip113tx_v2.nLockTime = self.last_block_time - 600 * 5 - 1  # < MTP of prior block
+        bip113tx_v2.nLockTime = self.last_block_time - 1  # < MTP of prior block
         self.miniwallet.sign_tx(bip113tx_v2)
         for bip113tx in [bip113tx_v1, bip113tx_v2]:
             self.send_blocks([self.create_test_block([bip113tx])])

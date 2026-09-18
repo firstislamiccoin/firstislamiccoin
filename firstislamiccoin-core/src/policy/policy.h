@@ -86,12 +86,20 @@ static constexpr unsigned int EXTRA_DESCENDANT_TX_SIZE_LIMIT{10000};
  * Note that this does not affect consensus validity; see GetBlockScriptFlags()
  * for that.
  */
+// FirstIslamicCoin: CHECKSEQUENCEVERIFY and WITNESS added -- inherited from
+// an older Bitcoin Core snapshot (via the CodexaCoin import) that predates
+// upstream promoting these two from standardness-only to mandatory once
+// permanently active. GetBlockScriptFlags() already enforces both for block
+// consensus validity regardless of this list; this only affects whether a
+// peer gets banned for relaying a tx that violates them post-activation.
 static constexpr unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
                                                              SCRIPT_VERIFY_DERKEY |
                                                              SCRIPT_VERIFY_DERSIG |
                                                              SCRIPT_VERIFY_LOW_S |
                                                              SCRIPT_VERIFY_NULLDUMMY |
-                                                             SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY};
+                                                             SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY |
+                                                             SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
+                                                             SCRIPT_VERIFY_WITNESS};
 
 /**
  * Standard script verification flags that standard transactions will comply
