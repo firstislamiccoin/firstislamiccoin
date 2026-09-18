@@ -2721,6 +2721,44 @@ rule one out; left open rather than guessed at. One (`feature_bip68_sequence.py`
 confidence to real, consensus-adjacent C++ and deliberately left unfixed pending sign-off. None of this
 batch has been verified on a real CI run yet — that needs the next `win64-native` round-trip.
 
+### TODO row 17 (coinstake/descriptor-wallet solvability): root cause confirmed, fix attempted, fix found to break consensus, reverted
+
+Picked back up row 17 (a staked coin's resulting UTXO reporting `solvable: false`, unspendable via
+`sendtoaddress`, despite the wallet holding its key): `CreateCoinStake()` (`src/wallet/staking.cpp`)
+downgrades a `PUBKEYHASH`-kernel input to a bare pay-to-pubkey output on every stake, confirmed inherited
+unmodified from the CodexaCoin import via `git diff 3df79ad0`. `CheckProofOfStake()` (`src/pos.cpp`) was
+checked and confirmed not to constrain the coinstake output's script type, so a first fix (approved:
+"yes go ahead and fix it") paid the reward back to the original P2PKH script instead of downgrading it —
+built successfully on the VPS (after separately fixing a missing `--with-sqlite=yes` gap in that build's
+configure flags) and looked correct by code review.
+
+End-to-end regtest verification (descriptor wallet, `-debug=coinstake`) caught a real problem before this
+was ever committed: the wallet's PoS miner thread logged `kernel found` → `added kernel type=2` →
+**`failed to sign PoS block`**, repeating forever with zero blocks staked despite favorable weight/difficulty.
+Traced to `SignBlock()` (`src/node/miner.cpp:619`), the block-producer's PoS-signing routine: it only knows
+how to sign when the coinstake reward output (`vout[1]`) is `TxoutType::PUBKEY`, pulling the raw public key
+directly out of `Solver()`'s `vSolutions[0]`. A P2PKH output's script only contains a pubkey *hash*, so
+`SignBlock()` can't recover a usable key from it and fails immediately.
+
+Worse, this isn't just a miner-side gap: `CheckBlockSignature()` (`src/validation.cpp:3566`) — genuine
+consensus validation, called from `CheckBlock()` on every node for every block — has the identical
+`TxoutType::PUBKEY`-only requirement (with one fallback: an `OP_RETURN`-pushed pubkey for non-spendable
+multisig-staking outputs). A P2PKH script's hash can't be reversed back into a usable public key by a
+validating node with no wallet access, so even a hypothetical miner-side-only fix would produce blocks
+every other node on the network would reject as invalid. The original bare-P2PK coinstake output isn't
+arbitrary CodexaCoin cruft — it's load-bearing for how this fork's whole PoS block-signature scheme works:
+the output has to embed the actual public key bytes because that's the only way a pure validator (no wallet,
+no private key access) can verify `vchBlockSig` against it.
+
+Per the user's explicit direction, the `staking.cpp` fix was **reverted** back to the original bare-P2PK
+behavior (`git checkout`, confirmed clean against `HEAD`, resynced to the VPS to match). Row 17 stays open
+below — a real fix now needs `SignBlock()`/`CheckBlockSignature()` to recover the coinstake signing key some
+other way (e.g. from the *kernel input's* scriptSig, which does reveal the real pubkey when spending a P2PKH
+output, rather than requiring it embedded in the coinstake *output*), which is consensus-code work across
+`node/miner.cpp` and `validation.cpp` needing its own sign-off and careful testing given the blast radius of
+a mistake there (every node, every block). No harm done: this was caught entirely on a throwaway VPS regtest
+test directory, never committed and never deployed to the production testnet.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -2741,7 +2779,7 @@ batch has been verified on a real CI run yet — that needs the next `win64-nati
 | 14 | Mobile: real Android/iOS device or emulator build (`flutter build apk`/`flutter build ios`), plus a physical-device check of the Face ID/fingerprint app-lock flow and camera QR scanning now that `Info.plist` declares them | Phase 5 |
 | 15 | Staking service: provision a real server and the `staking-api.firstislamiccoin.com`/`staking-api.testnet.firstislamiccoin.com` DNS records, generate a real `GATEWAY_JWT_SECRET`/`GATEWAY_KYC_ENCRYPTION_KEY`, fund `GATEWAY_ADMIN_WALLET` for referral payouts | Phase 6 |
 | 16 | Staking service: obtain VAPID keys (Web Push) and a Firebase service account (mobile push) for real push delivery — both currently take their documented no-op path | Phase 6 |
-| 17 | Investigate whether `firstislamiccoin-core`'s coinstake construction reserves destinations outside descriptor-wallet bookkeeping — found during Phase 6 verification: a staked coin's resulting UTXO came back `solvable: false` (raw P2PK script), making it unspendable via `sendtoaddress` despite the wallet holding its keys. May affect any descriptor wallet that stakes, not just this gateway | Phase 6 / core |
+| 17 | **Real, consensus-adjacent bug found, fix attempted and reverted after breaking consensus.** A staked coin's resulting UTXO comes back `solvable: false` (bare P2PK output), unspendable via `sendtoaddress` in a descriptor wallet despite the wallet holding the key, because `CreateCoinStake()` (`src/wallet/staking.cpp`) downgrades `PUBKEYHASH`-kernel inputs to bare-P2PK outputs. Root cause: this isn't arbitrary — `SignBlock()` (`src/node/miner.cpp`) and `CheckBlockSignature()` (`src/validation.cpp`, real consensus validation) both require the coinstake output to be `TxoutType::PUBKEY` so a validator with no wallet access can recover the signing pubkey directly from the output script. A first fix (paying the reward back to the original P2PKH script) built and looked correct, but regtest verification caught it silently halting all staking (`SignBlock` fails on every attempt) before it was ever committed — reverted. A real fix needs `SignBlock()`/`CheckBlockSignature()` changed to recover the pubkey from the kernel input's scriptSig instead of the coinstake output, which is consensus code needing its own sign-off — see the "TODO row 17" section above for the full writeup | Phase 6 / core |
 | 18 | Web wallet: provision a real server and the `wallet.firstislamiccoin.com` DNS record, obtain VAPID keys for Web Push | Phase 7 |
 | 19 | Full click-through verification of multisig, watch-only/xpub, message sign/verify, and PIN-lock in the web wallet (read for correctness and lightly exercised this phase, not each driven through a complete real scenario) | Phase 7 |
 | 20 | ~~Create a FirstIslamicCoin GitHub org/repository~~ — done, `github.com/firstislamiccoin/firstislamiccoin` exists and every commit since has been pushed there for real (see the Phase 2 section on CI genuinely running). Still open: obtain a Windows Authenticode certificate + Apple Developer ID for signed/notarized release artifacts — this environment has no path to either | Phase 3 |
