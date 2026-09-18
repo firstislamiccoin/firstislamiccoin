@@ -2349,6 +2349,48 @@ real CI script end to end — clean container, full rebuild, the actual `06_scri
 completing a real `linux-native-clang-tidy` run; both the ASan/UBSan and clang-tidy CI jobs newly
 added this phase are now confirmed genuinely green.
 
+### The above, reconfirmed for real on GitHub's own runners now that a real repo exists -- plus a genuine macOS gap and the win64-native functional suite's real failure list
+
+Everything just above (ASan/UBSan, clang-tidy) was verified via an equivalent Docker image run
+directly on the VPS, since no `firstislamiccoin/firstislamiccoin` GitHub repository existed yet for
+the real `core-ci.yml` workflow to run in. It exists now (see the Phase 2 section on the website/
+GitHub-org discovery), and every commit pushed there since has genuinely triggered the real
+workflow. Checked a recent completed run job-by-job (`gh api .../actions/runs/<id>/jobs`) rather
+than trusting `gh run list`'s misleading top-level status (explained below):
+
+- **`linux-native-clang-tidy` and `linux-native-asan`: both genuinely ran and passed on GitHub's
+  own hosted runners** (`ubuntu-24.04`), not just the VPS Docker equivalent. Confirms the two
+  `TODO-HUMAN` items closed above hold on the real CI infrastructure too.
+- **`macos-13`: stuck `queued` on every run checked, as far back as the oldest one still available
+  (`2026-09-17T14:38`) -- never starts at all, hours later.** This wasn't previously flagged as
+  broken (the ASan/UBSan and clang-tidy verifications above didn't depend on it). Root cause not
+  yet investigated here -- plausibly a runner-minute/billing quota specific to macOS hosted runners
+  on this account, since Linux runners of the same age are unaffected. `gh run list`'s own
+  top-level `status` for a run reads "queued" for as long as *any* one of its jobs hasn't started
+  (i.e. forever, because of this), even after the other four jobs have long since finished --
+  worth knowing, since it makes every run in the CLI's list look perpetually stuck even when most
+  of its jobs already completed. Checking jobs individually is the only way to see the real state.
+- **`win64-native`: a real, substantial result.** Build, unit tests, benchmarks, `util` tests, and
+  the `rpcauth` test all pass. The functional test suite now genuinely starts nodes and runs for
+  the first time (closing the loop on the row 29 note above -- "verify the functional suite
+  actually runs on the next real Windows CI run"), reaching 44 of 281 tests before the step failed
+  overall, with 18 distinct test-file failures along the way (`feature_taproot.py`,
+  `feature_block.py`, `feature_dbcrash.py`, `wallet_miniscript.py`, `rpc_psbt.py` both wallet types,
+  `wallet_fundrawtransaction.py`, `feature_segwit.py` all three variants, `wallet_address_types.py`,
+  `wallet_basic.py` both wallet types, `wallet_multiwallet.py` both variants, `wallet_groups.py`,
+  `wallet_taproot.py`, `p2p_headers_sync_with_minchainwork.py`). Important caveat before treating
+  this as the current real state: the specific run checked was triggered by a commit
+  (`57661b6`, "fix wallet_avoidreuse and wallet_signrawtransactionwithwallet") from *before* several
+  later Phase 2 fixes landed -- including `feature_taproot.py`'s own fix, whose commit message this
+  document already covers above. Spot-checked `feature_taproot.py`'s specific failure in that run
+  (`AssertionError: Failed to accept: Crediting txn (response: bad-txns-fee-not-enough)`, inside
+  `gen_test_vectors()` rather than the `test_spenders()` path this document's fee-floor fixes
+  targeted -- a different function in the same file, not yet confirmed whether it was already
+  covered) and confirmed it predates that fix being pushed, so it's very likely stale rather than a
+  currently-real failure. A fresh run triggered by the latest commit was started to get an accurate,
+  current list before investigating each one for real, rather than chasing failures that may already
+  be fixed; not yet complete as of this writing (each `win64-native` run takes roughly 2-3 hours).
+
 ### Real, current CVEs in both Python services, fixed
 
 `pip-audit` found Flask, PyJWT, cryptography, and requests all pinned to versions with disclosed
