@@ -24,6 +24,7 @@ from test_framework.messages import (
     COIN,
     ser_uint256,
 )
+from test_framework.authproxy import JSONRPCException
 from test_framework.p2p import P2PDataStore
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
@@ -36,7 +37,10 @@ from test_framework.wallet import MiniWallet
 
 VERSIONBITS_TOP_BITS = 0x20000000
 VERSIONBITS_DEPLOYMENT_TESTDUMMY_BIT = 28
-DEFAULT_BLOCK_MIN_TX_FEE = 1000  # default `-blockmintxfee` setting [sat/kvB]
+# FirstIslamicCoin: this fork's real default (src/policy/policy.h) is
+# 100000, not upstream's 1000 -- it was never brought in sync with the
+# Python mirror at any point since the CodexaCoin import.
+DEFAULT_BLOCK_MIN_TX_FEE = 100000  # default `-blockmintxfee` setting [sat/kvB]
 
 
 def assert_template(node, block, expect, rehash=True):
@@ -81,10 +85,23 @@ class MiningTest(BitcoinTestFramework):
         self.restart_node(0, extra_args=['-minrelaytxfee=0', '-persistmempool=0'])
         node = self.nodes[0]
 
-        # test default (no parameter), zero and a bunch of arbitrary blockmintxfee rates [sat/kvB]
-        for blockmintxfee_sat_kvb in (DEFAULT_BLOCK_MIN_TX_FEE, 0, 50, 100, 500, 2500, 5000, 21000, 333333, 2500000):
+        # FirstIslamicCoin: upstream's tested rates (0, 50, 100, 500, 2500,
+        # 5000, 21000, 333333) are all below this fork's 100 sat/vB (100000
+        # sat/kvB) consensus fee floor, so a tx literally paying any of them
+        # can never be sent at all -- sendrawtransaction itself would reject
+        # it with bad-txns-fee-not-enough, regardless of -blockmintxfee.
+        # Replaced with rates spaced comfortably above the floor. The default
+        # (100000) now exactly equals the floor, so there's no fee rate that
+        # is both sendable and strictly below it; upstream's fallback for
+        # this same kind of situation (its "0" case) used prioritisetransaction
+        # to fake a lower effective fee, but that RPC doesn't exist on this
+        # fork at all (never has, since the CodexaCoin import) -- so the
+        # "one slightly below" half of the test is just skipped for the
+        # default case, rather than faked.
+        for blockmintxfee_sat_kvb in (DEFAULT_BLOCK_MIN_TX_FEE, 150000, 200000, 500000, 2500000, 5000000, 21000000, 333333000):
             blockmintxfee_btc_kvb = blockmintxfee_sat_kvb / Decimal(COIN)
-            if blockmintxfee_sat_kvb == DEFAULT_BLOCK_MIN_TX_FEE:
+            at_floor = blockmintxfee_sat_kvb == DEFAULT_BLOCK_MIN_TX_FEE
+            if at_floor:
                 self.log.info(f"-> Default -blockmintxfee setting ({blockmintxfee_sat_kvb} sat/kvB)...")
             else:
                 blockmintxfee_parameter = f"-blockmintxfee={blockmintxfee_btc_kvb:.8f}"
@@ -92,16 +109,15 @@ class MiningTest(BitcoinTestFramework):
                 self.restart_node(0, extra_args=[blockmintxfee_parameter, '-minrelaytxfee=0', '-persistmempool=0'])
                 self.wallet.rescan_utxos()  # to avoid spending outputs of txs that are not in mempool anymore after restart
 
-            # submit one tx with exactly the blockmintxfee rate, and one slightly below
+            # submit one tx with exactly the blockmintxfee rate, and (except
+            # at the floor) one slightly below
             tx_with_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb)
             assert_equal(tx_with_min_feerate["fee"], get_fee(tx_with_min_feerate["tx"].get_vsize(), blockmintxfee_btc_kvb))
-            if blockmintxfee_btc_kvb > 0:
+            tx_below_min_feerate = None
+            if not at_floor:
                 lowerfee_btc_kvb = blockmintxfee_btc_kvb - Decimal(10)/COIN  # 0.01 sat/vbyte lower
                 tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=lowerfee_btc_kvb)
                 assert_equal(tx_below_min_feerate["fee"], get_fee(tx_below_min_feerate["tx"].get_vsize(), lowerfee_btc_kvb))
-            else:  # go below zero fee by using modified fees
-                tx_below_min_feerate = self.wallet.send_self_transfer(from_node=node, fee_rate=blockmintxfee_btc_kvb)
-                node.prioritisetransaction(tx_below_min_feerate["txid"], 0, -1)
 
             # check that tx below specified fee-rate is neither in template nor in the actual block
             block_template = node.getblocktemplate(NORMAL_GBT_REQUEST_PARAMS)
@@ -112,19 +128,33 @@ class MiningTest(BitcoinTestFramework):
 
             assert tx_with_min_feerate['txid'] in block_template_txids
             assert tx_with_min_feerate['txid'] in block_txids
-            assert tx_below_min_feerate['txid'] not in block_template_txids
-            assert tx_below_min_feerate['txid'] not in block_txids
+            if tx_below_min_feerate is not None:
+                assert tx_below_min_feerate['txid'] not in block_template_txids
+                assert tx_below_min_feerate['txid'] not in block_txids
 
     def run_test(self):
         node = self.nodes[0]
         self.wallet = MiniWallet(node)
         self.mine_chain()
 
+        def submitblock_result(block):
+            # FirstIslamicCoin: submitblock (src/rpc/mining.cpp) runs a
+            # stateless CheckBlock() before ProcessNewBlock and *throws* on
+            # failure there, instead of returning a BIP22 rejection string
+            # like upstream does for every failure. Only checks CheckBlock()
+            # itself catches (e.g. bad-txns-duplicate, bad-txnmrklroot) hit
+            # this; contextual failures (missing prevout, non-final, bad
+            # timestamps, missing parent) still return a string as normal.
+            try:
+                return node.submitblock(hexdata=block.serialize().hex())
+            except JSONRPCException as e:
+                return e.error['message']
+
         def assert_submitblock(block, result_str_1, result_str_2=None):
             block.solve()
             result_str_2 = result_str_2 or 'duplicate-invalid'
-            assert_equal(result_str_1, node.submitblock(hexdata=block.serialize().hex()))
-            assert_equal(result_str_2, node.submitblock(hexdata=block.serialize().hex()))
+            assert result_str_1 in submitblock_result(block)
+            assert result_str_2 in submitblock_result(block)
 
         self.log.info('getmininginfo')
         mining_info = node.getmininginfo()
@@ -280,8 +310,10 @@ class MiningTest(BitcoinTestFramework):
         node.submitheader(hexdata=CBlockHeader(bad_block_root).serialize().hex())
         assert chain_tip(bad_block_root.hash) in node.getchaintips()
         # Should still reject invalid blocks, even if we have the header:
-        assert_equal(node.submitblock(hexdata=bad_block_root.serialize().hex()), 'bad-txnmrklroot')
-        assert_equal(node.submitblock(hexdata=bad_block_root.serialize().hex()), 'bad-txnmrklroot')
+        # FirstIslamicCoin: submitblock_result() -- see its own comment above
+        # -- since bad-txnmrklroot is a stateless CheckBlock() failure here.
+        assert 'bad-txnmrklroot' in submitblock_result(bad_block_root)
+        assert 'bad-txnmrklroot' in submitblock_result(bad_block_root)
         assert chain_tip(bad_block_root.hash) in node.getchaintips()
         # We know the header for this invalid block, so should just return early without error:
         node.submitheader(hexdata=CBlockHeader(bad_block_root).serialize().hex())
@@ -314,8 +346,15 @@ class MiningTest(BitcoinTestFramework):
         assert chain_tip(block.hash, status='active', branchlen=0) in node.getchaintips()
 
         # Building a few blocks should give the same results
+        # FirstIslamicCoin: not quite the same result for bad_block_time --
+        # it no longer extends the tip after 10 more blocks, so
+        # AcceptBlockHeader's own sync-checkpoint deltaTime check (Qtum-style,
+        # src/validation.cpp, see the rpc_blockchain.py/wallet_orphanedreward.py
+        # comments on this same mechanism) now fires before the contextual
+        # MTP-based "time-too-old" check ever runs, since bad_block_time's
+        # nTime=1 is far older than the checkpoint's own time.
         self.generatetoaddress(node, 10, node.get_deterministic_priv_key().address)
-        assert_raises_rpc_error(-25, 'time-too-old', lambda: node.submitheader(hexdata=CBlockHeader(bad_block_time).serialize().hex()))
+        assert_raises_rpc_error(-25, 'older-than-checkpoint', lambda: node.submitheader(hexdata=CBlockHeader(bad_block_time).serialize().hex()))
         assert_raises_rpc_error(-25, 'bad-prevblk', lambda: node.submitheader(hexdata=CBlockHeader(bad_block2).serialize().hex()))
         node.submitheader(hexdata=CBlockHeader(block).serialize().hex())
         node.submitheader(hexdata=CBlockHeader(bad_block_root).serialize().hex())
