@@ -3233,6 +3233,45 @@ confirms ordinary bulk header-sync still works correctly after the fix; it doesn
 original failure's precise timestamp-ordering trigger (that needed `feature_bip68_sequence.py`'s specific
 `setmocktime` jump pattern), so the authoritative confirmation is still the next real `win64-native` CI run.
 
+### The live testnet had silently stopped staking entirely -- found, root-caused, and fixed
+
+While preparing to run TODO row 8's crash-recovery drill, found something more important first: the live
+testnet (`fic-testnet-node`) had been stuck at height 0 for roughly 18.5 hours, unnoticed, since its container
+was last recreated. Four separate things had to be fixed, layered on top of each other:
+
+1. **The premine key was never imported into the operational wallet.** The `stakingpool` wallet (the one with
+   `getstakinginfo`'s `enabled: true`) held a balance of exactly 0 despite the genesis coinbase carrying the
+   full premine -- the container's data volume only ever had the genesis block written to it, and the
+   `secrets/testnet-genesis-key.txt` key (documented in `chainparams.cpp`'s own comment as living outside the
+   repo for "whoever bootstraps testnet") had never actually been imported into any wallet on this VPS. Fixed
+   by importing it via `importdescriptors` (this wallet is a descriptor wallet, so `importprivkey` doesn't
+   work -- "Only legacy wallets are supported by this command") with `"timestamp": 0` to force a rescan back
+   to genesis (an initial attempt with `"timestamp": "now"` silently skipped scanning history entirely, so
+   the balance still read 0 after that first import).
+2. **`-staking=1` was never part of the container's startup command.** Toggling the `staking` RPC live
+   returned `{"staking": true}` but had no lasting effect -- `getstakinginfo` kept reporting `false`
+   immediately after. Confirmed via the debug log that this genuinely started the mining thread once the
+   container was recreated with `-staking=1` added ("ThreadStakeMiner started", "PoSMiner started for
+   proof-of-stake"), but `"staking"` in `getstakinginfo` (`src/wallet/rpc/staking.cpp`) is specifically
+   `m_enabled_staking && m_last_coin_stake_search_interval && weight` -- the search interval stayed 0, so
+   something was still preventing the loop from ever reaching a real search attempt.
+3. **This is TODO row 3, confirmed as a live, active blocker, not just a theoretical one.**
+   `PoSMiner()`'s loop (`src/node/miner.cpp`) has `while (getNodeCount(...) == 0 ||
+   isInitialBlockDownload()) { ...sleep... }` before it will ever attempt a real block/kernel search, for any
+   non-`MineBlocksOnDemand()` chain (i.e., testnet and mainnet, not regtest). `DEFAULT_MAX_TIP_AGE` is 24
+   hours (`src/kernel/chainstatemanager_opts.h`); this testnet's genesis is about a week old, so
+   `isInitialBlockDownload()` was perpetually true, keeping the node in this wait loop forever regardless of
+   wallet balance or weight. Fixed by adding `-maxtipage=31536000` (1 year) to the startup command.
+4. **Zero peers after that same restart** -- the other half of the same `||` condition. A fresh container has
+   an empty `peers.dat` and needs its one known peer (`fic-testnet-node-2`) to reconnect; nudged with
+   `addnode ... onetry` from the peer side.
+
+Verified fixed for real, not just "should work now": `getstakinginfo` on the `stakingpool` wallet showed
+`"staking": true` with a non-zero `search-interval`, and `getblockcount` climbed from 0 to 3 within about 35
+seconds of the last fix landing. TODO row 3 stays in the table below since the underlying constraint (pick a
+`-maxtipage` comfortably longer than however old genesis will be by the time a node starts) applies to any
+future redeploy or the eventual mainnet launch too, not just this one incident.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
