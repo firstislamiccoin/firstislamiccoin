@@ -7,11 +7,15 @@ from fontTools.pens.transformPen import TransformPen
 import cairosvg
 from PIL import Image
 
-OUT = "/home/claude/fic-brand"
+# FirstIslamicCoin: these three paths were hardcoded to one specific machine
+# (the environment this script was first written in), making it unrunnable
+# anywhere else without editing the source. Overridable via env vars now,
+# defaulting to the original values so behavior there is unchanged.
+OUT = os.environ.get("FIC_BRAND_OUT", "/home/claude/fic-brand")
 GREEN = "#0B6E4F"; GREEN_DEEP = "#08523B"; GOLD = "#D4AF37"; GOLD_DEEP = "#B8962E"; GOLD_LIGHT = "#E9CC6A"
 DARK = "#0A1F17"; LIGHT = "#F7F5EE"; WHITE = "#FFFFFF"
-FONT_BOLD = "/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf"
-FONT_MED = "/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf"
+FONT_BOLD = os.environ.get("FIC_FONT_BOLD", "/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf")
+FONT_MED = os.environ.get("FIC_FONT_MED", "/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf")
 
 for d in ["svg", "png", "android", "ios/AppIcon.appiconset", "favicon", "splash", "social", "tokens"]:
     os.makedirs(f"{OUT}/{d}", exist_ok=True)
