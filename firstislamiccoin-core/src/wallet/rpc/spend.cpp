@@ -1444,6 +1444,18 @@ RPCHelpMan sendall()
                 }
             }
 
+            if (options.exists("fee_rate")) {
+                // FirstIslamicCoin: honour fee_rate (sat/vB), declared above and in
+                // this RPC's own help text but never actually read into coin_control
+                // -- the "Do not, ever, assume..." check a few lines below already
+                // assumed this would be set by a user-provided fee_rate, but nothing
+                // upstream of it ever populated coin_control.m_feerate at all. Same
+                // fix already made for sendtoaddress/send()/walletcreatefundedpsbt in
+                // this file; sendall() has no legacy "feeRate" alias to guard against.
+                coin_control.m_feerate = CFeeRate(AmountFromValue(options["fee_rate"], /*decimals=*/3));
+                coin_control.fOverrideFeeRate = true;
+            }
+
             CFeeRate fee_rate{GetMinimumFeeRate(*pwallet, coin_control, GetAdjustedTimeSeconds())};
             // Do not, ever, assume that it's fine to change the fee rate if the user has explicitly
             // provided one
