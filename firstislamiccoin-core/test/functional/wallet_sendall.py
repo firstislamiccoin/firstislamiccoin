@@ -173,38 +173,36 @@ class SendallTest(BitcoinTestFramework):
         self.nodes[0].createwallet("dustwallet")
         dust_wallet = self.nodes[0].get_wallet_rpc("dustwallet")
 
-        # FirstIslamicCoin: upstream's 400/300 sat amounts are below this
-        # fork's real dust threshold (which scales with the 100 sat/vB
-        # floor), so sendtoaddress itself would reject them before ever
-        # reaching the "negative effective value" scenario below. A first
-        # bump to 4000/3000 sat turned out to still be too low: getnewaddress()
-        # here returns this fork's DEFAULT_ADDRESS_TYPE (LEGACY, P2PKH,
-        # src/wallet/wallet.h), whose real dust threshold at this fork's
-        # DUST_RELAY_TX_FEE (100000 sat/kvB vs upstream's 3000, see
-        # src/policy/policy.h/.cpp's GetDustThreshold -- 182 bytes * rate)
-        # comes to ~18200 sat, not upstream's 546. Bumped again, well clear
-        # of that (~18200) floor but still comfortably below what
-        # fee_rate=300 (300 sat/vB) needs to spend a ~148-vbyte legacy input
-        # economically (~44400 sat), so both amounts remain negative-
-        # effective-value at that higher rate.
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00025000)
-        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), 0.00022000)
+        # FirstIslamicCoin: the previous two rounds' fee_rate bumps here (300, then 1000)
+        # never actually changed anything, because sendall()'s "fee_rate" option is dead:
+        # it's declared and documented in its RPCHelpMan (src/wallet/rpc/spend.cpp) but the
+        # handler never assigns it to CCoinControl.m_feerate, unlike sendtoaddress/sendmany/
+        # send()/walletcreatefundedpsbt, which already carry this exact fix elsewhere in the
+        # same file. sendall() therefore always falls back to GetMinimumFeeRate()'s default,
+        # which floors at exactly this fork's 100 sat/vB consensus minimum
+        # (src/wallet/fees.cpp) -- a fixed, known quantity, not something the test can raise.
+        # The only lever left to reach "UTXO pool too low" (rather than the dust-remainder
+        # boundary next to it) is the funded amount itself, computed against that fixed
+        # rate: spending one ~148-vbyte legacy P2PKH input into one ~34-byte output is
+        # exactly 192 vbytes (4 version + 1 incount + 148 input + 1 outcount + 34 output + 4
+        # locktime), needing exactly 100*192=19200 sat. This fork's real dust threshold
+        # (GetDustThreshold(), src/policy/policy.cpp: 182 bytes * 100000 sat/kvB) is exactly
+        # 18200 sat. A single UTXO between those two -- comfortably not dust when funded,
+        # comfortably short of the fee needed to spend it -- lands unambiguously in the
+        # "too low to pay for transaction" case. Two UTXOs (upstream's shape) can't do
+        # this: each must individually clear the 18200 sat dust floor to fund without
+        # rejection, so their sum is always at least ~36400 sat, comfortably above the
+        # ~34000 sat a 2-input tx of this shape would need -- structurally landing back in
+        # the dust-remainder zone, exactly what the previous two rounds kept observing no
+        # matter the fee_rate requested. Switched to a single 18700 sat UTXO (500 sat clear
+        # of dust on funding, 500 sat short of the 19200 sat needed to spend it).
+        self.def_wallet.sendtoaddress(dust_wallet.getnewaddress(), Decimal("0.000187"))
         self.generate(self.nodes[0], 1)
         assert_greater_than(dust_wallet.getbalances()["mine"]["trusted"], 0)
 
-        # FirstIslamicCoin: fee_rate=300 against this pool's real total (47000 sat)
-        # turned out to land the dynamically-assigned remainder just above this
-        # fork's real dust threshold (~18200 sat, GetDustThreshold(),
-        # src/policy/policy.cpp) rather than clearly negative -- observed
-        # rejected as "Dynamically assigned remainder results in dust output"
-        # instead of the intended "too low to pay for transaction" scenario this
-        # test is actually about. A much higher fee_rate forces the fee to
-        # dwarf the whole 47000 sat pool regardless of the exact vsize, landing
-        # unambiguously in the negative-effective-value case instead of the
-        # dust boundary.
         assert_raises_rpc_error(-6, "Total value of UTXO pool too low to pay for transaction."
                 + " Try using lower feerate or excluding uneconomic UTXOs with 'send_max' option.",
-                dust_wallet.sendall, recipients=[self.remainder_target], fee_rate=1000)
+                dust_wallet.sendall, recipients=[self.remainder_target])
 
         dust_wallet.unloadwallet()
 

@@ -1006,15 +1006,37 @@ class PSBTTest(BitcoinTestFramework):
             self.generate(self.nodes[0], 1)
             self.nodes[0].importdescriptors([{"desc": descsum_create("tr({})".format(privkey)), "timestamp":"now"}])
 
-            # FirstIslamicCoin: same fee-floor category as test_utxo_conversion() and the
-            # bech32m createpsbt() call above -- sendall() with no explicit fee_rate falls
-            # back to this fork's placeholder fee estimation (no real estimator exists,
-            # see CHANGELOG-FIC.md), which returned less than the 100 sat/vB consensus
-            # floor (GetMinFee(), src/consensus/tx_verify.cpp) for this taproot
-            # script-path spend, rejected with bad-txns-fee-not-enough. 200 sat/vB matches
-            # wallet_taproot.py's identical fee_rate bump for the same
-            # wallet-can't-estimate-script-path-fees reason.
-            psbt = watchonly.sendall(recipients=[wallet.getnewaddress(), addr], fee_rate=200)["psbt"]
+            # FirstIslamicCoin: this is NOT a fee_rate-magnitude problem (the previous two
+            # rounds' fee_rate=200 bump here was a no-op, which is why it never actually
+            # fixed anything) -- sendall()'s "fee_rate" option is declared and documented in
+            # its RPCHelpMan (src/wallet/rpc/spend.cpp) but its handler never assigns it to
+            # CCoinControl.m_feerate, unlike sendtoaddress/sendmany/send()/
+            # walletcreatefundedpsbt, which already carry this exact fix elsewhere in this
+            # fork's own spend.cpp (grep m_feerate there). Any fee_rate passed to sendall()
+            # is silently ignored, so it always falls back to GetMinimumFeeRate()'s default,
+            # which floors at exactly this fork's 100 sat/vB consensus minimum with zero
+            # margin (src/wallet/fees.cpp). That zero margin is fatal here specifically
+            # because TRDescriptor::MaxSatisfactionWeight() (src/script/descriptor.cpp) has
+            # its own upstream-inherited "FIXME: We assume keypath spend, which can lead to
+            # very large underestimations" -- it always sizes a taproot input as a 65-byte
+            # key-path signature, even though H_POINT is an unspendable NUMS point here, so
+            # the *only* valid spend is the larger script-path witness (signature + the
+            # pk(pubkey) leaf script + control block). Verified the real numbers for this
+            # exact leaf against the true GetVirtualTransactionSize() formula: the wallet's
+            # funding-time estimate comes to 146 vbytes, the real signed tx comes to 163
+            # vbytes, so at sendall()'s always-100-sat/vB floor the transaction pays
+            # 100*146=14600 sat but the consensus check (on the real, larger vsize) demands
+            # 100*163=16300 sat -- rejected bad-txns-fee-not-enough regardless of what
+            # fee_rate the test requests. Fixed by not going through the broken RPC at all:
+            # use walletcreatefundedpsbt() instead (whose fee_rate genuinely reaches
+            # CCoinControl.m_feerate -- this same file already relies on that at e.g. the
+            # fee-floor-bump tests above), which gives real margin over the 163-vbyte actual
+            # size once fee_rate is actually honored. The second recipient (wallet's own
+            # address) was never asserted on below, so it's dropped; the PSBT's automatic
+            # change output (back to watchonly) takes its place without changing what's
+            # tested. See docs/CHANGELOG-FIC.md for the sendall() bug writeup -- needs a
+            # src/ fix and sign-off, not something patched here.
+            psbt = watchonly.walletcreatefundedpsbt([], {addr: 3}, 0, {"fee_rate": 200})["psbt"]
             processed_psbt = self.nodes[0].walletprocesspsbt(psbt)
             txid = self.nodes[0].sendrawtransaction(processed_psbt["hex"])
             vout = find_vout_for_address(self.nodes[0], txid, addr)

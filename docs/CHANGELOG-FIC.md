@@ -2946,6 +2946,84 @@ consensus/wallet logic touched); 2 confirmed as already-correctly-open (rows 32/
 real C++-adjacent bugs found, root-caused, and added to the open `TODO-HUMAN` table below (rows 34/35) rather
 than guessed at. Not yet verified on a real CI run -- that needs the next `win64-native` round-trip.
 
+### `win64-native` verification run (commit `da5b2af`): the real bug behind three straight "bump the fee_rate" misses -- `sendall()`'s `fee_rate` option does nothing
+
+The `da5b2af` batch was pushed to verify `rpc_psbt.py --descriptors`, `wallet_sendall.py` (both variants), and
+`wallet_taproot.py --descriptors` were actually fixed. The next real run (GitHub Actions run `35403138160`, job
+`105787177514`) showed all three **still failing**, with different tracebacks than before -- proof the earlier
+fee_rate bumps had *some* effect (different failure point) but never addressed the real cause. This was the
+third round on these same four tests (`b850fb2` fixed them once, `da5b2af` re-fixed them once more, both times
+by raising a `fee_rate` number), so this pass root-caused all three from scratch against real numbers instead
+of adjusting the number a third time.
+
+**All three turned out to share one root cause**, found by tracing why `wallet_taproot.py`'s own loop
+(`do_test_sendtoaddress()`) already passes `fee_rate=200` successfully via `send()`, while the "Cleanup" call
+two lines later, using `sendall()` with the same intent, silently fails:
+
+- `src/wallet/rpc/spend.cpp`'s `sendall()` RPC declares and documents a `fee_rate` option in its own
+  `RPCHelpMan` ("Specify a fee rate in sat/vB") but **its handler never assigns it to
+  `CCoinControl.m_feerate`** anywhere in the function body. Grepping the whole file for `m_feerate =` turns up
+  exactly four assignment sites -- inside `sendtoaddress`, `sendmany`, `send()`, and `walletcreatefundedpsbt`
+  -- and two of those four sites carry an explicit FIC comment ("honour fee_rate ... declared but never read")
+  documenting that this exact bug pattern was already found and fixed once for `sendtoaddress`/`sendmany`.
+  `sendall()` simply never got the same fix. Any `fee_rate` value passed to `sendall()` is parsed, validated
+  against the RPC's help schema, and then dropped on the floor -- the RPC always falls back to
+  `GetMinimumFeeRate()`'s default (`src/wallet/fees.cpp`), which this fork's `TX_FEE_PER_KB` /
+  `DEFAULT_MIN_RELAY_TX_FEE` constants (`src/policy/policy.h`, both `100000` sat/kvB) pin at *exactly* the 100
+  sat/vB consensus floor, with zero margin, regardless of node config.
+- That zero margin is harmless for ordinary spends (upstream's own wallet fee-size estimator is accurate for
+  ECDSA/legacy inputs) but fatal for a **forced-script-path Taproot spend** (an `H_POINT`-internal-key
+  descriptor like `tr(H,pk(pubkey))`, where the key path is a provably-unspendable NUMS point). `src/script/
+  descriptor.cpp`'s `TRDescriptor::MaxSatisfactionWeight()` carries its own upstream-inherited comment --
+  `// FIXME: We assume keypath spend, which can lead to very large underestimations` -- and always sizes a
+  taproot input as a single 65-byte key-path signature, never the larger real witness (signature + tapscript
+  leaf + control block) that a script-path-only descriptor must actually use. Verified the real numbers for
+  the exact `tr(H,pk(pubkey))` shape both `rpc_psbt.py` and `wallet_taproot.py`'s `tr(H,XPRV)` case use (single
+  leaf, `pk()` fragment), using the test framework's own `taproot_construct()` against the real
+  `GetVirtualTransactionSize()` formula: the wallet's funding-time estimate for a 1-input tx of this shape
+  comes to 146 vbytes; the real signed transaction comes to 163 vbytes -- about 12% low, worse with more
+  script-path inputs in the same tx (approaches ~29% low in the limit). At a genuinely-zero-margin 100 sat/vB,
+  that gap alone is enough to push the real, broadcast fee below the real consensus minimum computed on the
+  real (larger) vsize -- rejected `bad-txns-fee-not-enough`, or, for `sendall()` specifically (whose
+  `CommitTransaction()` doesn't surface a mempool rejection as an RPC error the way `sendrawtransaction()`
+  does), a transaction that silently never confirms.
+- `wallet_sendall.py`'s `sendall_negative_effective_value()` doesn't touch Taproot at all, but is the same bug
+  from a different angle: since `fee_rate` is a no-op, the amounts round 1 (300) and round 2 (1000) requested
+  never mattered -- the RPC always fee'd the transaction at the same fixed ~100 sat/vB regardless of which
+  number the test passed, which is exactly why bumping it a second time changed nothing (both rounds observed
+  the identical "Dynamically assigned remainder results in dust output" outcome). With the *actual* rate fixed
+  and known, the test's funded UTXO amounts are the only lever left, and they can be computed exactly:
+  spending one real ~148-vbyte legacy P2PKH input into one ~34-byte output is exactly 192 vbytes, needing
+  precisely 100 * 192 = 19200 sat; this fork's real dust threshold (`GetDustThreshold()`,
+  `src/policy/policy.cpp`) is exactly 100000 * 182 / 1000 = 18200 sat. A single UTXO strictly between those two
+  values lands unambiguously in "UTXO pool too low", the scenario this test is actually about -- two UTXOs
+  (upstream's original shape) cannot, structurally, land there: each must individually clear the 18200 sat
+  dust floor to fund without `sendtoaddress` itself rejecting it, so their sum is always at least ~36400 sat,
+  comfortably above the ~34000 sat a 2-input tx of this shape would need, which is exactly the dust-remainder
+  zone both previous rounds kept landing in no matter the `fee_rate` requested.
+
+**Fixed, all Python-only, none relying on a `sendall()` `fee_rate` value that the RPC ignores:**
+
+- **`rpc_psbt.py --descriptors`**: swapped the watch-only wallet's `sendall()` call for
+  `walletcreatefundedpsbt()` (whose `fee_rate` genuinely reaches `CCoinControl.m_feerate` -- this same file's
+  own fee-floor tests already rely on that), which gives real margin over the verified 163-vbyte actual size
+  once `fee_rate=200` is actually honored. The unused second recipient was dropped in favor of the PSBT's own
+  automatic change output, since nothing downstream asserted on it.
+- **`wallet_taproot.py --descriptors`**: switched the "Cleanup" `sendall()` call in `do_test_sendtoaddress()`
+  to `send()` with the wallet's full balance as an explicit amount and `subtract_fee_from_outputs`, mirroring
+  the loop three lines above it, which already uses `send()` (not `sendall()`) for exactly this reason.
+- **`wallet_sendall.py` (both variants)**: `sendall_negative_effective_value()` now funds a single 18700 sat
+  UTXO (500 sat clear of the 18200 sat dust floor on funding, 500 sat short of the 19200 sat this fork's fixed
+  ~100 sat/vB rate needs to spend it) instead of two, and no longer passes a `fee_rate` to `sendall()` at all,
+  since it has no effect.
+
+**Not fixed here, added to the open `TODO-HUMAN` table below as row 36:** the actual `sendall()` bug --
+`src/wallet/rpc/spend.cpp` needs the same one-line fix `sendtoaddress`/`sendmany` already got (parse
+`options["fee_rate"]` into `coin_control.m_feerate`, matching the existing `send()`/`walletcreatefundedpsbt`
+pattern a few hundred lines above it in the same file). This is a real, narrow, well-precedented C++ change,
+not a consensus rule, but it is still a `src/` change, so per the standing rule it is scoped and proposed here
+rather than applied without sign-off.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -2985,3 +3063,4 @@ than guessed at. Not yet verified on a real CI run -- that needs the next `win64
 | 33 | `wallet_fundrawtransaction.py --descriptors`'s `test_locked_wallet` fails on `win64-native` (`fundrawtransaction` doesn't raise the expected "needs a change address" error on a locked, keypool-drained wallet) with no confident root cause found — traced the keypool-drain/encrypt/import logic and found nothing obviously platform-dependent in the C++ path, but that doesn't rule one out. Needs either a live Windows debugging session or another CI round with added diagnostic logging around keypool state at each step | Phase 2 |
 | 34 | **Real crash-recovery bug found on `win64-native`, root cause not yet pinned down.** `feature_dbcrash.py` ran to completion for the first time (75 minutes, after this session's fee-floor fix) and failed its final `verify_utxo_hash()` check: one of the three nodes that had `-dbcrashratio`-simulated crashes and restarts mid-chainstate-write during the run ended up with a UTXO-set hash (`gettxoutsetinfo` `hash_serialized_3`) that didn't match the reference node that never crashed. Confirmed this is *not* a recurrence of the already-fixed genesis-premine `ReplayBlocks()` gap (`46655f1`) — that fix is still in place and covers a different case (an interrupted first flush specifically). This is a real UTXO-set divergence following simulated chainstate-flush crash recovery, consensus-adjacent (`ReplayBlocks()`/`DisconnectBlock()`/`ConnectBlock()`/`CCoinsViewDB` flush correctness) — see the "win64-native verification run" section above. Needs a live, instrumented run (Windows or a reproduced Linux repro) with `-dbcrashratio` and extra per-crash logging to narrow down which crash point actually diverges, since the assertion only fires once, at the very end, after many crash/restart cycles | Phase 2 |
 | 35 | **Real wallet-locking concurrency bug found on `win64-native`, root cause traced but not fixed.** `wallet_transactiontime_rescan.py --legacy-wallet` still fails after this session's earlier fix (bumping the `walletpassphrase` auto-relock timeout 1s→300s) — the identical symptom (`stop_height=263` instead of `803`) recurs, which rules out the auto-relock timer as the actual cause (300 seconds cannot elapse within the ~19-second subtest). Traced further: `walletlock()`/`walletpassphrasechange()` (`src/wallet/rpc/encrypt.cpp`) both correctly refuse to run during an in-progress rescan via `IsScanningWithPassphrase()`, but `walletpassphrase()` itself has no such guard, and the test's own scenario calls it a second time *while* the rescan from the first call is still running — very likely triggering a real race between `CWallet::Unlock()`/`TopUpKeyPool()` and the active rescan reading key material. See the "win64-native verification run" section above. A real fix most likely needs `walletpassphrase()` to gain the same `IsScanningWithPassphrase()` guard its two siblings already have, but the exact internal race should be confirmed with live debugging first, not assumed | Phase 2 |
+| 36 | **Real bug found, fix scoped and proposed, decision still open.** `sendall()`'s (`src/wallet/rpc/spend.cpp`) `fee_rate` option is declared and documented in its own `RPCHelpMan` but the handler never assigns it to `CCoinControl.m_feerate` — unlike `sendtoaddress`/`sendmany`/`send()`/`walletcreatefundedpsbt`, which already carry this exact fix elsewhere in the same file (two of them with a comment noting the fix was made once already). Any `fee_rate` passed to `sendall()` is silently dropped, so it always falls back to `GetMinimumFeeRate()`'s default, which this fork's policy constants pin at exactly the 100 sat/vB consensus floor with zero margin — this was the actual reason three straight rounds of "bump the `sendall()` fee_rate" on `rpc_psbt.py`/`wallet_taproot.py`/`wallet_sendall.py` kept failing regardless of the number tried; see the "win64-native verification run (commit da5b2af)" section above for the full root-cause writeup and all three tests' Python-only workarounds. The proposed fix is a one-line addition mirroring the existing `send()`/`walletcreatefundedpsbt` pattern (`if (options.exists("fee_rate")) { coin_control.m_feerate = CFeeRate(AmountFromValue(options["fee_rate"], /*decimals=*/3)); }`), not a consensus rule, but still a `src/` change needing sign-off per the standing rule | Phase 2 |

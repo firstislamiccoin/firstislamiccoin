@@ -325,7 +325,31 @@ class WalletTaprootTest(BitcoinTestFramework):
             assert rpc_online.gettransaction(res)["confirmations"] > 0
 
         # Cleanup
-        txid = rpc_online.sendall(recipients=[self.boring.getnewaddress()])["txid"]
+        # FirstIslamicCoin: this is the same "wallet can't estimate script-path fees" gap
+        # the loop above already works around (comment a few lines up), but sendall()
+        # cannot be fixed the same way by just adding fee_rate=200 -- its "fee_rate" option
+        # is declared in its RPCHelpMan (src/wallet/rpc/spend.cpp) but the handler never
+        # assigns it to CCoinControl.m_feerate, unlike sendtoaddress/sendmany/send()/
+        # walletcreatefundedpsbt, which already carry this exact fix elsewhere in the same
+        # file. Any fee_rate passed to sendall() is silently dropped, so it always falls
+        # back to GetMinimumFeeRate()'s default, which floors at exactly this fork's 100
+        # sat/vB consensus minimum with zero margin -- not enough once
+        # TRDescriptor::MaxSatisfactionWeight()'s upstream-inherited "assume keypath spend"
+        # FIXME undercounts a forced-script-path tr(H,XPRV) input's real vsize (verified:
+        # ~12% low for a single-leaf spend like this one, worse with more inputs). Because
+        # sendall()'s CommitTransaction() doesn't surface the resulting mempool rejection as
+        # an RPC error, this doesn't fail loudly at the sendall() call -- it fails quietly,
+        # a block later, as a transaction that was never actually accepted. Fixed by
+        # draining through send() instead (whose fee_rate genuinely reaches
+        # CCoinControl.m_feerate), same as the loop above, with the wallet's full balance as
+        # an explicit amount and the fee subtracted from that one output. See
+        # docs/CHANGELOG-FIC.md for the sendall() bug writeup -- needs a src/ fix and
+        # sign-off, not something patched here.
+        balance = int(rpc_online.getbalance() * 100000000)
+        txid = rpc_online.send(
+            [{self.boring.getnewaddress(): Decimal(balance) / 100000000}],
+            {"subtract_fee_from_outputs": [0], "fee_rate": 200, "change_type": address_type},
+        )["txid"]
         self.generatetoaddress(self.nodes[0], 1, self.boring.getnewaddress(), sync_fun=self.no_op)
         assert rpc_online.gettransaction(txid)["confirmations"] > 0
         rpc_online.unloadwallet()
