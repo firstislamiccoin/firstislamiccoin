@@ -1684,13 +1684,19 @@ bool PeerManagerImpl::ProcessNetBlock(const std::shared_ptr<const CBlock> pblock
     {
         LOCK(cs_main);
 
-        // FirstIslamicCoin: same removal as validation.cpp's AcceptBlockHeader() (see
-        // its comment for the full explanation) -- this was a third, redundant
-        // evaluation of the same broken timestamp check. The full block already
-        // passed through AcceptBlockHeader() via ProcessNetBlockHeaders() above, which
-        // already ran both the buggy timestamp check (now removed there too) and the
-        // correct height-based one. This copy additionally called Misbehaving() on
-        // false positives, penalizing honest peers' ban scores during ordinary sync.
+        // Check for the checkpoint
+        CBlockIndex* tip = m_chainman.ActiveChain().Tip();
+        if (tip && pblock->hashPrevBlock != tip->GetBlockHash())
+        {
+            // Extra checks to prevent "fill up memory by spamming with bogus blocks"
+            const CBlockIndex* pcheckpoint = m_chainman.m_blockman.AutoSelectSyncCheckpoint(tip);
+            int64_t deltaTime = pblock->GetBlockTime() - pcheckpoint->nTime;
+            if (deltaTime < 0)
+            {
+                if (peer) Misbehaving(*peer, 1, "Block with timestamp before last checkpoint");
+                return error("%s: block with timestamp before last checkpoint", __func__);
+            }
+        }
 
         // Check if block signature is canonical
         if (!CheckCanonicalBlockSignature(pblock)) 
