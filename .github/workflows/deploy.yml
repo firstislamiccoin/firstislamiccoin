@@ -36,6 +36,15 @@ jobs:
           missing=0
           for f in *.html legal/*.html; do
             grep -oE '(href|src)="/[^"#]+"' "$f" | sed -E 's/^(href|src)="//; s/"$//' | while read -r p; do
+              # FirstIslamicCoin: /downloads/ holds large binary artifacts (e.g. the
+              # mobile debug APK) uploaded directly to the deployed server, not
+              # committed to this git repo -- a 174MB APK has no business in git
+              # history. Checking those against the local checkout always failed,
+              # silently blocking every website deploy since the APK link was
+              # added to wallets.html.
+              case "$p" in
+                /downloads/*) continue ;;
+              esac
               [ -f ".${p}" ] || { echo "MISSING: $p (referenced from $f)"; exit 1; }
             done || missing=1
           done
