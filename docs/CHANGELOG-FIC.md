@@ -3024,6 +3024,86 @@ pattern a few hundred lines above it in the same file). This is a real, narrow, 
 not a consensus rule, but it is still a `src/` change, so per the standing rule it is scoped and proposed here
 rather than applied without sign-off.
 
+### `win64-native` verification run (round 4): the previous three rounds each fixed one line, not the file -- this round swept whole files instead
+
+The `b850fb2` → `da5b2af` → `8a470bb` sequence had the same shape three times running: a real CI run reported
+one failing function in `rpc_psbt.py`, `wallet_taproot.py`, or `wallet_sendall.py`; that one function got a
+correct, well-reasoned fix; the very next real run then failed on a **different function in the same file**,
+with the **same underlying bug class** the previous round had already root-caused and fixed once, just never
+checked for anywhere else in the file. Concretely: `8a470bb` fixed `sendall_negative_effective_value()`'s dust
+math but left `sendall_with_send_max()`'s literal `0.00000400`/`0.00000300` untouched two functions below it;
+it fixed `do_test_sendtoaddress()`'s Cleanup `sendall()` call in `wallet_taproot.py` but left the near-identical
+Cleanup `sendall()` call in `do_test_psbt()` (same file, same pattern, ~90 lines down) untouched; and the
+DEFAULT_ADDRESS_TYPE=legacy change-address gap fixed at one `walletcreatefundedpsbt()` call in `rpc_psbt.py`
+was never grepped for at the file's other `walletcreatefundedpsbt()`/`send()`/`sendall()` call sites. This round
+was scoped explicitly to stop that pattern: grep each of the three files for every instance of its bug class,
+not just the one line in the latest traceback, before touching anything.
+
+**`rpc_psbt.py`**: grepped every `walletcreatefundedpsbt`/`.send(`/`sendall(` call site (37 matches) for the
+DEFAULT_ADDRESS_TYPE=legacy change-address gap. Exactly one more instance existed: the `watchonly` wallet's
+`walletcreatefundedpsbt([], {addr: 3}, 0, {"fee_rate": 200})` call a few lines below the already-fixed
+`sendall()`-to-`walletcreatefundedpsbt()` swap. By that point in the test `watchonly` has only ever imported
+`wsh(pkh(...))` and `tr(...)` descriptors -- no legacy key at all -- so funding a payment smaller than its full
+balance (which needs a change output) fails with "No legacy addresses available", the exact same failure class
+as the already-fixed call two rounds ago. Fixed with an explicit `"change_type": "bech32m"`, matching the
+wallet's actual (taproot) holdings at that point, same pattern as `wallet_signer.py`'s already-fixed
+`mock_wallet.walletcreatefundedpsbt(..., "change_type": "bech32m")` call. Every other
+`walletcreatefundedpsbt`/`send`/`sendall` call site in the file was checked and uses either a full default
+wallet (which owns legacy addresses) or an explicit `changeAddress`/`change_type` already.
+
+**`wallet_taproot.py`**: grepped every `H_POINT` pattern (14 lambdas in `run_test()`'s matrix) and every
+`sendrawtransaction` call site (2, both inside `do_test_psbt()`). The main funding loop already carries the
+`fee_rate=200`/`change_type` fix from a previous round and was never the problem. The Cleanup section right
+below it, however, still called `psbt_online.sendall(recipients=[self.boring.getnewaddress()], psbt=True)` --
+the same dead-`fee_rate` `sendall()` RPC documented in TODO row 36, so it always drained at the fork's
+zero-margin 100 sat/vB floor regardless of the pattern being tested. For an `H_POINT`-forced-script-path
+pattern (e.g. `tr(H,XPRV)`), `TRDescriptor::MaxSatisfactionWeight()`'s upstream "assume keypath spend" FIXME
+undercounts the real vsize enough to push the real fee below the real consensus minimum once broadcast --
+`bad-txns-fee-not-enough`, which is exactly what the reported failure was. Because `do_test_psbt()` is one
+shared function called once per pattern by `do_test()` (17 patterns total in `run_test()`, several of them
+`H_POINT`-based), this single Cleanup path is what every one of those patterns exercises -- fixing it here
+covers all of them, not just whichever pattern happened to fail on this particular run. Fixed the same way as
+the sibling `do_test_sendtoaddress()` Cleanup fixed two rounds ago: drain through `walletcreatefundedpsbt()`
+(whose `fee_rate` genuinely reaches `CCoinControl.m_feerate`) instead of `sendall()`, with the wallet's full
+balance as an explicit amount, `subtractFeeFromOutputs`, and an explicit `change_type` matching the pattern.
+
+**`wallet_sendall.py`**: grepped every literal small-sat amount and every `sendtoaddress`/`add_utxos([...])`
+call in the file. Two more instances of the dust-floor gap existed beyond the already-fixed
+`sendall_negative_effective_value()`:
+
+- `sendall_with_send_max()` still used upstream's literal `0.00000400`/`0.00000300` (400/300 sat), both far
+  below this fork's real ~18200 sat P2PKH dust floor, so `add_utxos()`'s `sendtoaddress()` call rejected them
+  outright with "Transaction amount too small" before the test's actual `send_max` scenario was ever reached.
+  This one needed more than a number bump: `GetDustThreshold()`'s 182-byte assumption for a plain P2PKH output
+  (34-byte output + 148-byte spend) is *always* larger than the real 148-byte P2PKH spend cost `send_max`
+  compares against (`fee_rate.GetFee(output.input_bytes) > output.txout.nValue` in `src/wallet/rpc/spend.cpp`)
+  -- the gap is exactly the output's own ~34-byte cost (~3400 sat at this fork's floor). Any amount that clears
+  the dust floor for a plain P2PKH output therefore *always* has positive effective value at that same floor,
+  so `send_max` can never exclude it -- "fundable" and "uneconomical" are mutually exclusive for a plain P2PKH
+  UTXO in this fork specifically, because (unlike upstream, where `sendall()`'s `fee_rate` genuinely reaches a
+  much higher requested rate than its separate, much lower dust-relay default) this fork's dead `sendall()`
+  `fee_rate` (TODO row 36) pins both the dust threshold and the real spend-cost comparison to the identical 100
+  sat/vB floor. Since a `src/` fix is out of scope here, the fix instead gives the two small UTXOs a script
+  that is genuinely more expensive to satisfy than `GetDustThreshold()`'s flat, type-blind 148-byte assumption
+  for any non-witness output: a self-controlled 3-of-3 P2SH multisig, dust-checked as a generic 148-byte spend
+  (18000 sat) but really costing ~370 vbytes (37000 sat, three real signatures plus the 105-byte redeemScript)
+  to actually spend. A 20000 sat UTXO clears the dust floor with 2000 sat to spare while sitting 17000 sat
+  short of its own real spend cost -- comfortably, unambiguously excluded by `send_max`, exercising the same
+  property the original 400/300 sat amounts were meant to under upstream's very different fee/dust relationship.
+- `sendall_fails_with_transaction_too_large()` funded 1600 outputs at upstream's literal `0.000025` (2500 sat)
+  each, also below the ~18200 sat dust floor -- `sendmany()` would have rejected the whole batch before the
+  "transaction too large" scenario the test actually targets was ever reached. Bumped to 20000 sat per output;
+  the exact value doesn't matter to what's under test (size driven by output count, not amount), and the total
+  funding (0.32 BTC) is trivial against the wallet's already-generated coinbase balance.
+
+**`feature_bip68_sequence.py` and `feature_dbcrash.py`**: left untouched, per the standing scope for TODO rows
+32/34 -- not part of this round's three files. Worth recording here since it's new information: the most
+recent real run had `feature_dbcrash.py` **pass**, contradicting the failure TODO row 34 documents from the
+run before it. That's consistent with row 34 being a genuine but timing-sensitive crash-recovery race (it only
+diverges after many `-dbcrashratio` crash/restart cycles), not a permanent regression -- it is left open and
+unresolved in the TODO table rather than marked fixed, since a single passing run doesn't confirm the
+underlying UTXO-divergence race is gone, only that it didn't reproduce this time.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |

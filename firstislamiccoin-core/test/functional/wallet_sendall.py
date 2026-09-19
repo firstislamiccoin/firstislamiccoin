@@ -209,7 +209,56 @@ class SendallTest(BitcoinTestFramework):
     @cleanup
     def sendall_with_send_max(self):
         self.log.info("Check that `send_max` option causes negative value UTXOs to be left behind")
-        self.add_utxos([0.00000400, 0.00000300, 1])
+        # FirstIslamicCoin: upstream's 400/300 sat UTXOs are far below this fork's real
+        # ~18200 sat dust threshold (GetDustThreshold(), src/policy/policy.cpp -- 182
+        # bytes * this fork's 100 sat/vB DUST_RELAY_TX_FEE; same number already
+        # established for sendall_negative_effective_value() above), so funding them via
+        # a plain sendtoaddress to one of self.wallet's own addresses is rejected outright
+        # with "Transaction amount too small" before this test's actual send_max scenario
+        # is ever reached.
+        #
+        # Simply raising the two small amounts above the dust floor is not enough on its
+        # own, unlike sendall_negative_effective_value() above: for a plain P2PKH output,
+        # GetDustThreshold()'s 182-byte assumption (34-byte output + 148-byte P2PKH spend)
+        # is *always* bigger than the real 148-byte P2PKH spend cost send_max compares
+        # against (src/wallet/rpc/spend.cpp: `fee_rate.GetFee(output.input_bytes) >
+        # output.txout.nValue`) -- the gap is exactly the output's own ~34-byte cost
+        # (~3400 sat at this fork's floor). Any amount that clears the dust floor for a
+        # plain P2PKH output therefore *always* has positive effective value at that same
+        # floor, so send_max could never exclude it: "fundable" and "uneconomical" are
+        # mutually exclusive for a plain P2PKH UTXO here. Upstream doesn't hit this
+        # because its sendall() actually honours the requested fee_rate=300 (a much
+        # higher rate than its separate, much lower default dust-relay rate); this fork's
+        # sendall() "fee_rate" option is dead code (see docs/CHANGELOG-FIC.md's sendall()
+        # writeup -- a src/ fix needing sign-off, not something patched here), so its real
+        # spend-cost comparison is always pinned to the same fixed 100 sat/vB floor that
+        # also drives the dust threshold.
+        #
+        # The only way left to make a UTXO genuinely cost more to spend than
+        # GetDustThreshold() assumes, without touching src/, is to give it a script that
+        # is actually more expensive to satisfy than the dust formula's flat, type-blind
+        # 148-byte assumption for any non-witness output (GetDustThreshold() never looks
+        # past "not a witness program" -- it doesn't know or care whether the real script
+        # is a simple P2PKH or a multi-signature redeem script). A self-controlled 3-of-3
+        # P2SH multisig does exactly that: GetDustThreshold() still only charges it for a
+        # generic 148-byte spend (dust threshold = (32-byte P2SH output + 148) * 100
+        # sat/vB = 18000 sat exactly), but its real CalculateMaximumSignedInputSize() --
+        # three real signatures plus the 105-byte redeemScript -- comes to 370 vbytes,
+        # i.e. exactly 37000 sat at the fee floor. A 20000 sat UTXO clears the 18000 sat
+        # P2SH dust floor to fund (2000 sat of margin) while still being 17000 sat short
+        # of its own real 37000 sat spend cost (comfortably negative effective value, well
+        # clear of any low-R/low-S signature-size rounding). This preserves the original
+        # test's shape -- two small, individually-uneconomical UTXOs excluded by
+        # send_max, one large economical UTXO included -- with a UTXO amount and script
+        # type that actually behave that way under this fork's real numbers.
+        multisig_utxo_amount = Decimal("0.00020000")  # 20000 sat
+        for _ in range(2):
+            pubkeys = [self.wallet.getaddressinfo(self.wallet.getnewaddress())["pubkey"] for _ in range(3)]
+            multisig_addr = self.wallet.addmultisigaddress(3, pubkeys, "", "legacy")["address"]
+            self.def_wallet.sendtoaddress(multisig_addr, multisig_utxo_amount)
+        self.def_wallet.sendtoaddress(self.wallet.getnewaddress(), 1)
+        self.generate(self.nodes[0], 1)
+        assert_greater_than(self.wallet.getbalances()["mine"]["trusted"], 0)
 
         # sendall with send_max
         sendall_tx_receipt = self.wallet.sendall(recipients=[self.remainder_target], fee_rate=300, send_max=True)
@@ -217,7 +266,7 @@ class SendallTest(BitcoinTestFramework):
 
         assert_equal(len(tx_from_wallet["decoded"]["vin"]), 1)
         self.assert_tx_has_outputs(tx_from_wallet, [{"address": self.remainder_target, "value": 1 + tx_from_wallet["fee"]}])
-        assert_equal(self.wallet.getbalances()["mine"]["trusted"], Decimal("0.00000700"))
+        assert_equal(self.wallet.getbalances()["mine"]["trusted"], multisig_utxo_amount * 2)
 
         self.def_wallet.sendtoaddress(self.wallet.getnewaddress(), 1)
         self.generate(self.nodes[0], 1)
@@ -409,7 +458,16 @@ class SendallTest(BitcoinTestFramework):
         self.wallet.keypoolrefill(1600)
 
         # create many inputs
-        outputs = {self.wallet.getnewaddress(): 0.000025 for _ in range(1600)}
+        # FirstIslamicCoin: upstream's 2500 sat (0.000025) per output is below this
+        # fork's real ~18200 sat P2PKH dust threshold (see sendall_negative_effective_value()
+        # and sendall_with_send_max() above for the full derivation), so sendmany would
+        # reject the whole batch with "Transaction amount too small" long before the
+        # "too large" scenario this test actually targets is reached. The exact per-output
+        # amount doesn't matter to what's being tested here (transaction *size*, driven by
+        # output count, not value), so it's simply bumped above the dust floor with
+        # comfortable margin; total funding (1600 * 20000 sat = 0.32 BTC) is trivially
+        # covered by the wallet's already-generated coinbase balance.
+        outputs = {self.wallet.getnewaddress(): 0.00020000 for _ in range(1600)}
         self.def_wallet.sendmany(amounts=outputs)
         self.generate(self.nodes[0], 1)
 

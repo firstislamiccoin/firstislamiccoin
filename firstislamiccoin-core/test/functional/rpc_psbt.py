@@ -1036,7 +1036,17 @@ class PSBTTest(BitcoinTestFramework):
             # change output (back to watchonly) takes its place without changing what's
             # tested. See docs/CHANGELOG-FIC.md for the sendall() bug writeup -- needs a
             # src/ fix and sign-off, not something patched here.
-            psbt = watchonly.walletcreatefundedpsbt([], {addr: 3}, 0, {"fee_rate": 200})["psbt"]
+            #
+            # FirstIslamicCoin: this call needs a change output (payment of 3 BTC is less
+            # than watchonly's full balance), and this fork's DEFAULT_ADDRESS_TYPE is
+            # legacy. watchonly only ever imported wsh(pkh(...)) and tr(...) descriptors
+            # (see above) -- it holds no legacy keys at all, so the wallet cannot generate
+            # a legacy change address ("No legacy addresses available"). Pass an explicit
+            # change_type matching what this wallet actually holds at this point (taproot,
+            # from the tr(H,pk(pubkey))/tr(privkey) imports just above), same fix pattern
+            # as wallet_signer.py's mock_wallet.walletcreatefundedpsbt(..., "change_type":
+            # "bech32m") call.
+            psbt = watchonly.walletcreatefundedpsbt([], {addr: 3}, 0, {"fee_rate": 200, "change_type": "bech32m"})["psbt"]
             processed_psbt = self.nodes[0].walletprocesspsbt(psbt)
             txid = self.nodes[0].sendrawtransaction(processed_psbt["hex"])
             vout = find_vout_for_address(self.nodes[0], txid, addr)
