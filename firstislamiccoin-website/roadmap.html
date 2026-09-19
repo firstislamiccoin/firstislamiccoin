@@ -60,9 +60,9 @@
         <p>A multi-node public testnet is live and staking now: reward and block-spacing correctness are being checked block by block, alongside stress testing (high transaction volume, reindexing, reorg handling) and the functional test suite.</p>
       </div>
 
-      <div class="roadmap-item built">
-        <h3>Phase 3 — Desktop wallets, CI and release pipeline <span class="roadmap-tag tag-built">Built, not deployed</span></h3>
-        <p>A release CI workflow for macOS, Windows and Linux installers is written and now confirmed running for real: a test run built genuine Linux (tarball + .deb) and Windows (NSIS installer) artifacts successfully on GitHub's own runners. macOS still doesn't build (a runner-availability gap, not a code problem). No release has actually been tagged or published yet, and none of this is code-signed — no certificates exist for that.</p>
+      <div class="roadmap-item active">
+        <h3>Phase 3 — Desktop wallets, CI and release pipeline <span class="roadmap-tag tag-active">Tagged, draft release pending publish</span></h3>
+        <p>The release CI workflow has now built a real tagged version, <code>v0.1.0-testnet</code>, producing genuine Linux (tarball + .deb) and Windows (NSIS installer) installers, attached to a draft GitHub Release awaiting a final human review before it's published. macOS still doesn't build (a runner-availability gap, not a code problem). None of this is code-signed yet — no Windows Authenticode certificate or Apple Developer ID exists — so these installers will trigger OS warnings on first run; that's expected for now, not a sign anything is broken.</p>
       </div>
 
       <div class="roadmap-item done">
