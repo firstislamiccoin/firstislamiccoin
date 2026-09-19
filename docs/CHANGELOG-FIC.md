@@ -3104,6 +3104,33 @@ diverges after many `-dbcrashratio` crash/restart cycles), not a permanent regre
 unresolved in the TODO table rather than marked fixed, since a single passing run doesn't confirm the
 underlying UTXO-divergence race is gone, only that it didn't reproduce this time.
 
+### Phase 3 deployed for real: v0.1.0-testnet tagged, a real (draft) GitHub Release published, and a genuine version-number bug found along the way
+
+Phase 3 had been "built, not deployed" since `release.yml` had only ever been exercised via
+`workflow_dispatch` (deliberately, to avoid creating a public release before the build jobs were even
+confirmed working). With those confirmed and the win64-native functional suite well into cleanup, tagged and
+pushed a real `v0.1.0-testnet` -- this actually triggered the tag-gated `publish-release` job for the first
+time. Result: a real draft GitHub Release now exists at
+`github.com/firstislamiccoin/firstislamiccoin/releases`, with genuine Linux (tarball + `.deb`) and Windows
+(NSIS installer) artifacts attached, left as a draft for a human to review before publishing (exactly as
+`release.yml`'s own `draft: true` was written to do). macOS is absent from this release, same known
+`macos-13` runner issue as everywhere else (TODO row 31) -- not a new problem.
+
+Checking the resulting artifacts surfaced a real, previously-unnoticed bug: the Windows installer built as
+`firstislamiccoin-26.2.0-win64-setup.exe`, while the Linux tarball/`.deb` correctly used `0.1.0-testnet` (the
+Linux job explicitly names its package from `${GITHUB_REF_NAME#v}`, the git tag; the Windows job's `make
+deploy` instead names the installer from the build's own internal version). `configure.ac`'s
+`_CLIENT_VERSION_MAJOR`/`_MINOR`/`_BUILD` were `26`/`2`/`0` -- Bitcoin Core's own upstream version number,
+inherited completely unmodified through the CodexaCoin import and never updated for this project's own
+release history. This wasn't just a filename issue: `CLIENT_VERSION` (`src/clientversion.h`) feeds the
+binary's own `--version` output, `getnetworkinfo`'s `version` field, and the P2P subversion string every
+peer sees -- every build of this software has been reporting itself as "Bitcoin Core 26.2.0" internally the
+entire time, not tied to any consensus/protocol comparison (checked: nothing in `src/` branches on the exact
+`CLIENT_VERSION` value, and `build_msvc/bitcoin_config.h.in`'s copy is template-substituted from this same
+source at generation time, so this is the one place that needed fixing) but a real, visible identity gap
+nonetheless. Fixed by setting `_CLIENT_VERSION_MAJOR`/`_MINOR`/`_BUILD` to `0`/`1`/`0`, matching this actual
+release's own version rather than an unrelated upstream number.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |

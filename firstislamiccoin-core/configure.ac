@@ -1,6 +1,12 @@
 AC_PREREQ([2.69])
-define(_CLIENT_VERSION_MAJOR, 26)
-define(_CLIENT_VERSION_MINOR, 2)
+# FirstIslamicCoin: these three carried Bitcoin Core's own upstream version
+# number (26.2.0) unmodified, inherited unchanged through the CodexaCoin
+# import. That's misleading for a project with its own release history --
+# v0.1.0-testnet (docs/CHANGELOG-FIC.md) is this project's own first tagged
+# release, so its version numbers should say so, not imply a relationship to
+# any specific Bitcoin Core release.
+define(_CLIENT_VERSION_MAJOR, 0)
+define(_CLIENT_VERSION_MINOR, 1)
 define(_CLIENT_VERSION_BUILD, 0)
 define(_CLIENT_VERSION_RC, 0)
 define(_CLIENT_VERSION_IS_RELEASE, true)
