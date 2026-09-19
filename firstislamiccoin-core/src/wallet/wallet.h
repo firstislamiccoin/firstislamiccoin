@@ -128,7 +128,13 @@ static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
 static const bool DEFAULT_WALLETCROSSCHAIN = false;
 //! -maxtxfee default
-constexpr CAmount DEFAULT_TRANSACTION_MAXFEE{1 * COIN};
+// FirstIslamicCoin: this was 1 * COIN, ten times more permissive than real
+// Bitcoin Core's actual default (COIN / 10) -- confirmed via git diff
+// 3df79ad0 that this was already wrong at the pre-fork CodexaCoin baseline,
+// not something FIC introduced. A wallet-safety-only cap on how large an
+// unintentional fee a user can pay without an explicit -maxtxfee override,
+// not a consensus rule; restored to match real upstream.
+constexpr CAmount DEFAULT_TRANSACTION_MAXFEE{COIN / 10};
 //! Discourage users to set fees higher than this amount (in satoshis) per kB
 constexpr CAmount HIGH_TX_FEE_PER_KB{COIN / 10};
 //! -maxtxfee will warn if called with a higher fee than this amount (in satoshis)
