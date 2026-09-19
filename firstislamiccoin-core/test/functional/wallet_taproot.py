@@ -317,9 +317,28 @@ class WalletTaprootTest(BitcoinTestFramework):
             # this fork dropped the conf_target/estimate_mode/fee_rate
             # positional arguments send() has upstream (src/wallet/rpc/spend.cpp) --
             # so fee_rate and change_type both go inside options.
+            #
+            # FirstIslamicCoin: fee_rate=200 (a flat ~2x this fork's 100 sat/vB floor)
+            # covers ordinary patterns but was never going to cover this file's most
+            # extreme one -- "tr(XPUB,multi_a(1,H...,XPRV,H...))" uses
+            # MAX_PUBKEYS_PER_MULTI_A (999, src/script/script.h) filler keys. That
+            # script alone is ~34KB (999 * ~34-byte key+opcode), and its witness needs
+            # a stack item per key slot (998 empty pushes plus the one real ~65-byte
+            # signature) plus the script itself plus the control block -- a real vsize
+            # around 8800 vbytes, versus MaxSatisfactionWeight()'s keypath-assuming
+            # estimate of ~111 vbytes (same underlying FIXME documented elsewhere this
+            # session for smaller H_POINT patterns, just far more extreme here since
+            # the estimate is constant regardless of script size while the real size
+            # scales with it). The real 100 sat/vB-floor fee this needs is
+            # ~100*8800=880,000 sat; requesting fee_rate=200 against the ~111-vbyte
+            # estimate only sets aside ~22,000 sat, an order of magnitude short.
+            # fee_rate=10000 against that same ~111-vbyte estimate sets aside
+            # ~1,110,000 sat -- comfortably past the ~880,000 sat actually needed, and
+            # nowhere near this fork's unmodified 1 BTC DEFAULT_TRANSACTION_MAXFEE cap
+            # (src/wallet/wallet.h) that would otherwise reject an excessive fee.
             res = rpc_online.send(
                 [{self.boring.getnewaddress(): Decimal(ret_amnt) / 100000000}],
-                {"subtract_fee_from_outputs": [0], "fee_rate": 200, "change_type": address_type},
+                {"subtract_fee_from_outputs": [0], "fee_rate": 10000, "change_type": address_type},
             )["txid"]
             self.generatetoaddress(self.nodes[0], 1, self.boring.getnewaddress(), sync_fun=self.no_op)
             assert rpc_online.gettransaction(res)["confirmations"] > 0

@@ -3131,6 +3131,60 @@ source at generation time, so this is the one place that needed fixing) but a re
 nonetheless. Fixed by setting `_CLIENT_VERSION_MAJOR`/`_MINOR`/`_BUILD` to `0`/`1`/`0`, matching this actual
 release's own version rather than an unrelated upstream number.
 
+### win64-native round 5: two real fixes verified by hand, one confirmed-inherited platform quirk left honestly unresolved, and a third confirmed sighting of the sendall() bug
+
+After round 4 still left `rpc_psbt.py`, `wallet_taproot.py`, `wallet_sendall.py` (both variants), and
+`wallet_balance.py --legacy-wallet` failing -- despite round 4's own full-file sweeps -- this pass was done
+directly rather than delegated again, fetching each failure's real, current traceback first rather than
+re-guessing.
+
+**`rpc_psbt.py --descriptors`**: round 4's `"change_type": "bech32m"` fix was well-reasoned but solved the
+wrong problem -- the error changed from "No legacy addresses available" to "No bech32m addresses available."
+Traced why: `watchonly` (the wallet this call runs against) was created with `disable_private_keys=True`, and
+the only descriptor ever imported *into `watchonly` itself* is `tr(H_POINT,pk(pubkey))` -- a single **fixed**
+address, not a ranged/HD descriptor (the actual private key, a separate `tr(privkey)` descriptor, gets
+imported into `self.nodes[0]`'s own wallet a few lines above, never into `watchonly`). A watch-only wallet
+with no private keys and no ranged descriptor cannot derive a **new** address of any type, no matter what
+`change_type` is requested. Fixed by pointing `change_address` at `addr` itself (the one address this wallet
+already holds and watches), which needs no new-address derivation at all.
+
+**`wallet_taproot.py --descriptors`**: the failing pattern turned out to be the single most extreme one in the
+whole file's matrix -- `tr(XPUB,multi_a(1,H...,XPRV,H...))`, using `MAX_PUBKEYS_PER_MULTI_A` (999,
+`src/script/script.h`) filler keys. That script alone is roughly 34KB, and its real signed witness (998 empty
+stack items, one real ~65-byte signature, the ~34KB script itself, plus the control block) comes to roughly
+8800 real vbytes -- against `MaxSatisfactionWeight()`'s constant, keypath-assuming estimate of only ~111
+vbytes (the same underlying upstream FIXME already documented for smaller `H_POINT` patterns elsewhere this
+session, just far more extreme here since the real size scales with script size while the estimate doesn't
+track it at all). The existing `fee_rate=200` was off by roughly two orders of magnitude for this one pattern
+specifically (needed: ~100 sat/vB on the *real* ~8800 vbyte size, ≈880,000 sat, against only ~22,000 sat that
+`fee_rate=200` sets aside on the ~111-vbyte estimate). Bumped to `fee_rate=10000`, computed to clear the
+worst case with margin while staying nowhere near this fork's unmodified 1 BTC `DEFAULT_TRANSACTION_MAXFEE`
+safety cap.
+
+**`wallet_sendall.py` -- a third sendall() function hit by the same TODO-row-36 bug**: `sendall_fails_on_high_fee()`
+expects `fee_rate=100000` to trigger a "fee too high" rejection, but no exception was raised at all. This is
+the same dead-`fee_rate` bug already found (`sendall_negative_effective_value()`, `sendall_with_send_max()`)
+-- except this time there is **no possible test-side workaround**: the scenario is specifically testing that
+requesting an extreme `fee_rate` gets rejected, which cannot happen while the parameter is silently ignored
+regardless of what amounts or scripts the test constructs. Left unfixed and undocumented as a fourth
+sendall() casualty in TODO row 36's writeup below -- this is now the strongest signal yet that the one-line
+`sendall()` C++ fix (already proposed, unapplied, pending sign-off) is worth doing rather than continuing to
+work around its symptoms one test function at a time.
+
+**`wallet_balance.py --legacy-wallet` -- investigated, genuinely not root-caused, left open rather than
+guessed at.** Real failure: `getbalances()['watchonly']` raises `KeyError` -- the key is entirely absent, not
+just zero. Traced the RPC handler (`src/wallet/rpc/coins.cpp`): the `watchonly` object is only emitted when
+`spk_man->HaveWatchOnly()` is true, and `LegacyScriptPubKeyMan::HaveWatchOnly()` (`src/wallet/scriptpubkeyman.cpp`)
+just checks whether `setWatchOnly` is non-empty -- confirmed via `git diff 3df79ad0` that neither this
+function nor the surrounding blank-wallet-creation path were touched by the CodexaCoin/FirstIslamicCoin fork
+at all (the only diff anywhere near this file is the unrelated BIP44-coin-type line). That rules out an
+FIC-introduced C++ bug, which is exactly why this is being left open rather than patched: whatever's actually
+happening here would need to reproduce in vanilla upstream Bitcoin Core too, which seems very unlikely for
+such a basic, presumably long-CI-tested scenario (`importaddress` then `importprivkey` on the same address,
+checking `getbalances()` after each) -- strongly suggesting a Windows-specific platform quirk instead (this
+failure has never once occurred on Linux across any of the five rounds), which can't be diagnosed further
+from a log traceback alone. Needs a live Windows debugging session, not another guess.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -3170,4 +3224,5 @@ release's own version rather than an unrelated upstream number.
 | 33 | `wallet_fundrawtransaction.py --descriptors`'s `test_locked_wallet` fails on `win64-native` (`fundrawtransaction` doesn't raise the expected "needs a change address" error on a locked, keypool-drained wallet) with no confident root cause found — traced the keypool-drain/encrypt/import logic and found nothing obviously platform-dependent in the C++ path, but that doesn't rule one out. Needs either a live Windows debugging session or another CI round with added diagnostic logging around keypool state at each step | Phase 2 |
 | 34 | **Real crash-recovery bug found on `win64-native`, root cause not yet pinned down.** `feature_dbcrash.py` ran to completion for the first time (75 minutes, after this session's fee-floor fix) and failed its final `verify_utxo_hash()` check: one of the three nodes that had `-dbcrashratio`-simulated crashes and restarts mid-chainstate-write during the run ended up with a UTXO-set hash (`gettxoutsetinfo` `hash_serialized_3`) that didn't match the reference node that never crashed. Confirmed this is *not* a recurrence of the already-fixed genesis-premine `ReplayBlocks()` gap (`46655f1`) — that fix is still in place and covers a different case (an interrupted first flush specifically). This is a real UTXO-set divergence following simulated chainstate-flush crash recovery, consensus-adjacent (`ReplayBlocks()`/`DisconnectBlock()`/`ConnectBlock()`/`CCoinsViewDB` flush correctness) — see the "win64-native verification run" section above. Needs a live, instrumented run (Windows or a reproduced Linux repro) with `-dbcrashratio` and extra per-crash logging to narrow down which crash point actually diverges, since the assertion only fires once, at the very end, after many crash/restart cycles | Phase 2 |
 | 35 | **Real wallet-locking concurrency bug found on `win64-native`, root cause traced but not fixed.** `wallet_transactiontime_rescan.py --legacy-wallet` still fails after this session's earlier fix (bumping the `walletpassphrase` auto-relock timeout 1s→300s) — the identical symptom (`stop_height=263` instead of `803`) recurs, which rules out the auto-relock timer as the actual cause (300 seconds cannot elapse within the ~19-second subtest). Traced further: `walletlock()`/`walletpassphrasechange()` (`src/wallet/rpc/encrypt.cpp`) both correctly refuse to run during an in-progress rescan via `IsScanningWithPassphrase()`, but `walletpassphrase()` itself has no such guard, and the test's own scenario calls it a second time *while* the rescan from the first call is still running — very likely triggering a real race between `CWallet::Unlock()`/`TopUpKeyPool()` and the active rescan reading key material. See the "win64-native verification run" section above. A real fix most likely needs `walletpassphrase()` to gain the same `IsScanningWithPassphrase()` guard its two siblings already have, but the exact internal race should be confirmed with live debugging first, not assumed | Phase 2 |
-| 36 | **Real bug found, fix scoped and proposed, decision still open.** `sendall()`'s (`src/wallet/rpc/spend.cpp`) `fee_rate` option is declared and documented in its own `RPCHelpMan` but the handler never assigns it to `CCoinControl.m_feerate` — unlike `sendtoaddress`/`sendmany`/`send()`/`walletcreatefundedpsbt`, which already carry this exact fix elsewhere in the same file (two of them with a comment noting the fix was made once already). Any `fee_rate` passed to `sendall()` is silently dropped, so it always falls back to `GetMinimumFeeRate()`'s default, which this fork's policy constants pin at exactly the 100 sat/vB consensus floor with zero margin — this was the actual reason three straight rounds of "bump the `sendall()` fee_rate" on `rpc_psbt.py`/`wallet_taproot.py`/`wallet_sendall.py` kept failing regardless of the number tried; see the "win64-native verification run (commit da5b2af)" section above for the full root-cause writeup and all three tests' Python-only workarounds. The proposed fix is a one-line addition mirroring the existing `send()`/`walletcreatefundedpsbt` pattern (`if (options.exists("fee_rate")) { coin_control.m_feerate = CFeeRate(AmountFromValue(options["fee_rate"], /*decimals=*/3)); }`), not a consensus rule, but still a `src/` change needing sign-off per the standing rule | Phase 2 |
+| 36 | **Real bug found, fix scoped and proposed, decision still open, now confirmed a fourth time.** `sendall()`'s (`src/wallet/rpc/spend.cpp`) `fee_rate` option is declared and documented in its own `RPCHelpMan` but the handler never assigns it to `CCoinControl.m_feerate` — unlike `sendtoaddress`/`sendmany`/`send()`/`walletcreatefundedpsbt`, which already carry this exact fix elsewhere in the same file. Any `fee_rate` passed to `sendall()` is silently dropped, so it always falls back to `GetMinimumFeeRate()`'s default, pinned at exactly this fork's 100 sat/vB consensus floor with zero margin. Confirmed hitting this from four separate angles now: `rpc_psbt.py`/`wallet_taproot.py`/`wallet_sendall.py`'s `sendall_negative_effective_value`/`sendall_with_send_max` (all worked around Python-side) and, newly, `wallet_sendall.py`'s `sendall_fails_on_high_fee()` — which has **no possible test-side workaround**, since it specifically tests that an extreme requested `fee_rate` gets rejected, impossible while the parameter is silently ignored. The proposed fix is a one-line addition mirroring the existing `send()`/`walletcreatefundedpsbt` pattern (`if (options.exists("fee_rate")) { coin_control.m_feerate = CFeeRate(AmountFromValue(options["fee_rate"], /*decimals=*/3)); }`), not a consensus rule, but still a `src/` change needing sign-off per the standing rule — see the "win64-native round 5" section above for the latest confirmation | Phase 2 |
+| 37 | `wallet_balance.py --legacy-wallet` fails on `win64-native` only (never Linux): `getbalances()['watchonly']` raises `KeyError` — the key is entirely absent after `importaddress()` then `importprivkey()` on the same address, where the test expects it present (zeroed). Traced `HaveWatchOnly()`/the RPC handler's gating logic (`src/wallet/scriptpubkeyman.cpp`/`src/wallet/rpc/coins.cpp`) and confirmed via `git diff 3df79ad0` that neither is touched by this fork at all — ruling out an FIC-introduced C++ bug, which is exactly why this looks like a genuine Windows-specific platform quirk rather than something guessable from a log traceback. Needs a live Windows debugging session | Phase 2 |
