@@ -4064,16 +4064,20 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             return true;
         }
 
-        // Qtum
-        // Check for the checkpoint
-        if (chainstate.m_chain.Tip() && block.hashPrevBlock != chainstate.m_chain.Tip()->GetBlockHash())
-        {
-            // Extra checks to prevent "fill up memory by spamming with bogus blocks"
-            const CBlockIndex* pcheckpoint = m_blockman.AutoSelectSyncCheckpoint(chainstate.m_chain.Tip());
-            int64_t deltaTime = block.GetBlockTime() - pcheckpoint->nTime;
-            if (deltaTime < 0)
-                return state.Invalid(BlockValidationResult::BLOCK_HEADER_SYNC, "older-than-checkpoint");
-        }
+        // FirstIslamicCoin: a Qtum-inherited timestamp-based checkpoint check used to
+        // live here. Removed: it fired on ordinary header-first sync (any header whose
+        // parent isn't yet the receiving node's *connected* tip, not just genuine
+        // competing/reorg branches -- header acceptance and full block connection
+        // happen at different paces), and it derived its checkpoint from the receiving
+        // node's own lagging tip rather than anything about the incoming header's own
+        // ancestry, so its timestamp comparison could reject perfectly honest headers
+        // (confirmed root cause of feature_bip68_sequence.py's win64-native timeout,
+        // see docs/CHANGELOG-FIC.md TODO row 32). The real anti-deep-reorg protection
+        // is height-based and still runs a few lines below, via
+        // ContextualCheckBlockHeader() -> the nMaxReorganizationDepth check and
+        // CheckSyncCheckpoint() -- both anchored to the new header's own claimed
+        // height rather than how far behind the locally-connected chain happens to be,
+        // which is exactly the distinction this timestamp check got wrong.
 
         // peercoin: Don't reject in case of old clients. Change our assumption instead.
         // ppcTODO: Maybe add restrictions until when this is allowed? We don't want new clients to pretend to be old clients and try to abuse this.
