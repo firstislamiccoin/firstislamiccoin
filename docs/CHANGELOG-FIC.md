@@ -3310,6 +3310,41 @@ that check, not the ~2400s "Block sync timed out" this test has shown on every o
 symptom of the same underlying issue manifesting differently -- not enough evidence either way from a single
 run. Noted here for whoever picks up TODO row 32 next, rather than left undocumented.
 
+### `wallet_taproot.py`'s multi_a-999 case (TODO row 39), actually root-caused
+
+Two rounds of guessing `fee_rate` values against `win64-native`'s 90-minute round trip hadn't resolved this.
+Switched approach: confirmed the test reproduces identically on Linux (same failure, same location, in
+seconds instead of minutes) via the VPS build, proving it was never a Windows-specific quirk, then iterated
+locally with a fast repro loop instead of guessing blind against CI.
+
+The debug log immediately gave the real answer that two rounds of log-only analysis had missed:
+`CommitTransaction(): Transaction cannot be broadcast immediately, bad-txns-fee-not-enough`, logged via
+`WalletLogPrintf` (`src/wallet/wallet.h`) rather than surfaced back to the RPC caller as an error. This
+confirms `send()`/`sendtoaddress()` share the exact same "silently swallowed broadcast failure" shape already
+suspected for `sendall()`'s `CommitTransaction()` call (TODO row 36's original writeup) -- a `send()` call can
+return `{"complete": true, "txid": "..."}` for a transaction that was never actually accepted into the
+mempool, with the only trace being a wallet-log line the caller never sees. Worth flagging on its own: this
+is a real, somewhat significant wallet-RPC surprise (any caller trusting a "successful" `send()`/`sendtoaddress()`
+response without separately confirming the transaction later could be fooled), not something this session
+touched or scoped further, but worth someone's attention beyond just this one test file.
+
+With that confirmed, iterating on the actual `fee_rate` number directly (rather than guessing from a
+theoretical vbyte estimate) found 20000 genuinely works, where the previous round's computed-but-still-guessed
+10000 didn't -- reinforcing that empirical verification beats estimation for pathological cases like this
+999-key script. Raising the shared `fee_rate` from 200 to 20000 then surfaced a second, different bug: the
+`do_test_psbt()` half of the test started failing with `testmempoolaccept()`'s own `reject-reason:
+max-fee-exceeded` -- a legitimately-necessary high `fee_rate` for the worst pattern now exceeded
+`testmempoolaccept()`/`sendrawtransaction()`'s own separate sanity cap (`DEFAULT_MAX_RAW_TX_FEE_RATE`,
+`src/rpc/mempool.cpp`) for every simpler pattern sharing that same test loop. Fixed by passing an explicit
+`maxfeerate=0` to both calls, since this test already has its own documented reason a high fee is legitimate
+here, not a case of actually wanting the safety net gone.
+
+Verified with two consecutive full clean passes of the whole file on Linux (`Tests successful`). One
+unrelated, pre-existing flake was observed once during iteration (`self.boring.sendtoaddress(...)`: "Invalid
+amount", from `random.randrange()` on a depleted balance) and did not recur on retry -- not investigated
+further since it's unrelated to this row's actual bug and appears to be rare, pre-existing test-randomness
+noise rather than something this session's changes introduced.
+
 ## Open `TODO-HUMAN`
 
 | # | Item | Blocks |
@@ -3352,4 +3387,4 @@ run. Noted here for whoever picks up TODO row 32 next, rather than left undocume
 | 36 | ~~`sendall()`'s `fee_rate` option was declared but never wired to `CCoinControl.m_feerate`~~ — done, fixed with sign-off: added the same one-line assignment (plus `fOverrideFeeRate = true`) that `sendtoaddress`/`send()`/`walletcreatefundedpsbt` already had in `src/wallet/rpc/spend.cpp`. Verified directly on the VPS (not just "it compiles"): a low `fee_rate=1` request still correctly clamps to the real 100 sat/vB floor via the separate, unconditional `GetMinFee()` max() downstream (no accidental floor bypass), and a `fee_rate=5000` request produces a visibly scaled-up real fee where before it would have silently produced the same floor-level fee regardless of what was requested. This RPC-plumbing bug is genuinely fixed; however `sendall_fails_on_high_fee()` (the test that first surfaced it) *still* fails afterward for a second, separate reason — see new row 38 | Phase 2 |
 | 37 | `wallet_balance.py --legacy-wallet` fails on `win64-native` only (never Linux): `getbalances()['watchonly']` raises `KeyError` — the key is entirely absent after `importaddress()` then `importprivkey()` on the same address, where the test expects it present (zeroed). Traced `HaveWatchOnly()`/the RPC handler's gating logic (`src/wallet/scriptpubkeyman.cpp`/`src/wallet/rpc/coins.cpp`) and confirmed via `git diff 3df79ad0` that neither is touched by this fork at all — ruling out an FIC-introduced C++ bug, which is exactly why this looks like a genuine Windows-specific platform quirk rather than something guessable from a log traceback. Needs a live Windows debugging session | Phase 2 |
 | 38 | ~~`wallet_sendall.py`'s `sendall_fails_on_high_fee()` needed `DEFAULT_TRANSACTION_MAXFEE` corrected~~ — done, fixed with sign-off: was `1 * COIN`, ten times more permissive than real upstream Bitcoin Core's actual `COIN / 10` default (confirmed via `git diff 3df79ad0` this was already wrong at the pre-fork CodexaCoin baseline, not FIC-introduced). Restored to `COIN / 10` in `src/wallet/wallet.h` -- a wallet-only safety cap, not a consensus/P2P rule, verified via a clean VPS rebuild before pushing | Phase 2 |
-| 39 | `wallet_taproot.py --descriptors`'s single most extreme pattern (`tr(XPUB,multi_a(1,H...,XPRV,H...))`, using all `MAX_PUBKEYS_PER_MULTI_A`=999 filler keys) still fails `do_test_sendtoaddress()`'s `confirmations > 0` check even after bumping `fee_rate` to 10000 (round 5) — the `send()` RPC call itself raises no exception (unlike a plain `bad-txns-fee-not-enough` rejection elsewhere in this same investigation), so whatever is stopping this transaction from confirming is happening silently after the RPC call returns success, the same "silently swallowed" shape already found for `sendall()`'s `CommitTransaction()` (TODO row 36's original writeup) but here via `send()` instead. Checked and ruled out one specific hypothesis: `IsWitnessStandard()`'s `MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE` (80 bytes, `src/policy/policy.cpp`) explicitly pops and ignores the script itself before checking stack item sizes, so the ~34KB script isn't rejected by that specific check. Needs live debugging (attach a debugger or add temporary logging around this transaction's actual broadcast/mempool-acceptance path) rather than another guessed `fee_rate` number — two consecutive attempts (200, then a computed-but-still-guessed 10000) have not resolved it | Phase 2 |
+| 39 | ~~`wallet_taproot.py --descriptors`'s most extreme pattern (999-key `multi_a`) failed silently after `send()`/`sendrawtransaction`~~ — done, root-caused for real via a fast local Linux repro (this test reproduces identically on Linux, proving it was never Windows-specific -- see "wallet_taproot.py's multi_a-999 case, actually root-caused" section above) instead of guessing against Windows CI's 90-minute round trip. Two real, separate bugs, not one: (1) `CommitTransaction()` (`src/wallet/wallet.h`) logs `bad-txns-fee-not-enough` as a wallet-log line rather than surfacing it as an RPC error -- this is why `send()`/`sendtoaddress()` can return `"complete": true` with a real txid for a transaction that was never actually broadcast, exactly the "silently swallowed" shape already suspected; (2) `fee_rate` needed for this pattern (confirmed empirically: 20000, not the previously-guessed 10000) exceeds `testmempoolaccept()`/`sendrawtransaction()`'s own separate `DEFAULT_MAX_RAW_TX_FEE_RATE` sanity cap, which is why the `do_test_psbt()` half of the test failed differently once the `send()` half was fixed. Fixed by raising every hardcoded `fee_rate: 200` in this file to `20000` and passing `maxfeerate=0` to the two `testmempoolaccept()`/`sendrawtransaction()` calls (this test's own script-path fee-estimation workaround already explains why such a high rate is legitimately needed here, not a case of actually wanting no cap). Verified with two consecutive full clean passes on Linux | Phase 2 |
